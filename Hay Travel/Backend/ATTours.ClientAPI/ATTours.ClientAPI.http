@@ -1,0 +1,6 @@
+@ATTours.ClientAPI_HostAddress = http://localhost:5253
+
+GET {{ATTours.ClientAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

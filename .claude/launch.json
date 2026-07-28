@@ -1,0 +1,26 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "hay-travel-frontend",
+      "runtimeExecutable": "C:\\PROGRA~1\\nodejs\\node.exe",
+      "runtimeArgs": [
+        "D:\\Davo\\Claude AI Agent\\Hay Travel\\Frontend\\node_modules\\vite\\bin\\vite.js",
+        "D:\\Davo\\Claude AI Agent\\Hay Travel\\Frontend"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "hay-travel-backend",
+      "runtimeExecutable": "C:\\Program Files\\dotnet\\dotnet.exe",
+      "runtimeArgs": [
+        "run",
+        "--project",
+        "D:\\Davo\\Claude AI Agent\\Hay Travel\\Backend\\ATTours.ClientAPI\\ATTours.ClientAPI.csproj",
+        "--urls",
+        "http://localhost:5254"
+      ],
+      "port": 5254
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Tells the browser this page implements both colour schemes itself. Without this, some
+      mobile browsers (notably Chrome for Android's "force dark" / "darken web pages" setting)
+      may invert what they consider an unthemed light page even after our own toggle sets it to
+      light, which reads as "the switch does nothing". `color-scheme` is also declared per theme
+      in index.css (`[data-theme] { color-scheme: ... }`); this meta tag is the document-level
+      signal that applies before any CSS is parsed.
+    -->
+    <meta name="color-scheme" content="light dark" />
+    <!-- Kept in sync with the active theme by `applyTheme` (src/shared/lib/theme.ts) on every
+         toggle — colours the Android/iOS browser chrome (address bar, task switcher card) to
+         match instead of leaving it on this default. -->
+    <meta name="theme-color" content="#0f0c08" />
+    <title>Hay Travel</title>
+    <script>
+      // Pre-paint theme: sets `data-theme` on <html> before the first frame, straight from
+      // localStorage. Without this, the app rendered dark-by-default until React mounted and
+      // ThemeToggle's effect ran — a visible flash to the wrong skin for anyone who had chosen
+      // light, worse on slower mobile hardware. Deliberately plain, dependency-free JS (no
+      // module import): it has to run synchronously, before the stylesheet/app bundle loads.
+      // Values are duplicated from `src/shared/lib/theme.ts` (THEME_STORAGE_KEY, THEME_COLORS)
+      // because that module cannot be imported here — keep both in sync if either changes.
+      ;(function () {
+        try {
+          var stored = localStorage.getItem('hay-travel-theme')
+          var theme = stored === 'light' ? 'light' : 'dark'
+          document.documentElement.dataset.theme = theme
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', theme === 'light' ? '#f7f1e6' : '#0f0c08')
+        } catch (e) {
+          document.documentElement.dataset.theme = 'dark'
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

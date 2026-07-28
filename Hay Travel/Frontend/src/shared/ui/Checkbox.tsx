@@ -1,0 +1,36 @@
+import { forwardRef, useId } from 'react'
+import type { InputHTMLAttributes } from 'react'
+
+export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
+  /** Visible text next to the box. Checkbox always renders with a label — there is no bare variant. */
+  label: string
+}
+
+/**
+ * Labelled checkbox. `id` is auto-generated (via `useId`) when not provided, so `label` and
+ * `input` stay associated without the consumer having to invent unique ids.
+ */
+export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Checkbox(
+  { label, id, className = '', disabled, ...props },
+  ref,
+) {
+  const generatedId = useId()
+  const inputId = id ?? generatedId
+
+  return (
+    <label
+      htmlFor={inputId}
+      className={`inline-flex min-h-[28px] cursor-pointer items-center gap-2 ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+    >
+      <input
+        ref={ref}
+        id={inputId}
+        type="checkbox"
+        disabled={disabled}
+        className={`h-[18px] w-[18px] shrink-0 rounded border-neutral-300 text-brand-700 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-600/30 focus:ring-offset-0 disabled:cursor-not-allowed ${className}`}
+        {...props}
+      />
+      <span className="text-sm text-neutral-800">{label}</span>
+    </label>
+  )
+})

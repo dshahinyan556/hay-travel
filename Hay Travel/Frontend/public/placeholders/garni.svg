@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900">
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stop-color="#1a150f"/><stop offset="55%" stop-color="#a87e2e"/><stop offset="100%" stop-color="#f0d9a0"/>
+</linearGradient>
+<radialGradient id="glow" cx="50%" cy="58%" r="42%">
+<stop offset="0%" stop-color="#fffdf8" stop-opacity="0.55"/><stop offset="100%" stop-color="#fffdf8" stop-opacity="0"/>
+</radialGradient>
+</defs>
+<rect width="1200" height="900" fill="url(#sky)"/>
+<circle cx="600" cy="522" r="450" fill="url(#glow)"/>
+<circle cx="600" cy="522" r="46" fill="#fffdf8" opacity="0.85"/>
+<path d="M0 900 L0 457 L0 457 L133 550 L267 518 L400 549 L533 369 L667 538 L800 518 L933 366 L1067 410 L1200 517 L1200 900 Z" fill="#241608"/>
+<path d="M0 900 L0 666 L0 666 L133 607 L267 516 L400 487 L533 627 L667 497 L800 625 L933 563 L1067 643 L1200 665 L1200 900 Z" fill="#3a2e1c"/>
+<path d="M0 900 L0 749 L0 749 L133 708 L267 768 L400 697 L533 693 L667 788 L800 721 L933 698 L1067 718 L1200 731 L1200 900 Z" fill="#6b5426"/>
+</svg>

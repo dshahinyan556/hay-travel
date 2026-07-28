@@ -1,0 +1,106 @@
+import { useEffect, useState } from 'react'
+import { Outlet, ScrollRestoration, useLocation } from 'react-router'
+import { AdminSidebar } from './AdminSidebar'
+
+/**
+ * Shell for the whole `/admin` tree.
+ *
+ * Desktop (`md+`): a two-pane layout — a persistent dark `AdminSidebar` rail on the left, the
+ * light work area (`<Outlet />`) on the right.
+ *
+ * Mobile: the rail would crush the work area, so instead there's a slim top bar with a
+ * hamburger button that slides the same `AdminSidebar` in as an overlay drawer. The drawer
+ * closes on backdrop click, on nav, and whenever the route changes. Body scroll is locked while
+ * it's open. Deliberately has NO public Header/Footer — the panel is a self-contained tool.
+ */
+export function AdminLayout() {
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const location = useLocation()
+
+  // Close the drawer on any navigation (covers links that keep the same pathname pattern).
+  useEffect(() => {
+    setDrawerOpen(false)
+  }, [location.key])
+
+  // Lock background scroll while the drawer is open.
+  useEffect(() => {
+    if (!drawerOpen) return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previous
+    }
+  }, [drawerOpen])
+
+  return (
+    <div className="flex min-h-screen flex-col bg-neutral-50 text-neutral-800 md:flex-row">
+      {/* Desktop rail */}
+      <aside className="hidden w-60 shrink-0 md:block">
+        <div className="sticky top-0 h-screen overflow-y-auto">
+          <AdminSidebar />
+        </div>
+      </aside>
+
+      {/* Mobile top bar with hamburger */}
+      <header className="flex items-center gap-3 bg-[#0b1220] px-4 py-3 text-white md:hidden">
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(true)}
+          aria-label="Открыть меню"
+          aria-expanded={drawerOpen}
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-200 transition-colors hover:bg-white/10"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </button>
+        <div className="flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-brand-600 to-brand-800 text-xs font-bold text-white"
+          >
+            H
+          </span>
+          <span className="text-sm font-bold">Hay Travel</span>
+        </div>
+      </header>
+
+      {/* Mobile drawer (always mounted so it can slide; inert when closed) */}
+      <div className={`fixed inset-0 z-40 md:hidden ${drawerOpen ? '' : 'pointer-events-none'}`}>
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(false)}
+          aria-label="Закрыть меню"
+          tabIndex={drawerOpen ? 0 : -1}
+          className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${
+            drawerOpen ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Меню панели"
+          className="absolute inset-y-0 left-0 w-72 max-w-[82%] shadow-2xl transition-transform duration-200"
+          style={{ transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)' }}
+        >
+          <AdminSidebar onNavigate={() => setDrawerOpen(false)} />
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(false)}
+            aria-label="Закрыть меню"
+            className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 sm:py-6">
+        <Outlet />
+      </main>
+      <ScrollRestoration />
+    </div>
+  )
+}

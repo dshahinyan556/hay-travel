@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="ATTours.ContextRepository/ATTours.ContextRepository.csproj" Id="7d583ff9-3bb4-4b71-9331-4264e1b052ae" />
+  <Project Path="ATTours.ClientAPI/ATTours.ClientAPI.csproj" />
+  <Project Path="ATTours.Common/ATTours.Common.csproj" />
+  <Project Path="ATTours.DataLayer/ATTours.DataLayer.csproj" />
+  <Project Path="ATTours.Helper/ATTours.Helper.csproj" Id="97464d66-43e3-4008-9a24-0d0579fa7c47" />
+  <Project Path="ATTours.Service/ATTours.BusinessServices.csproj" />
+</Solution>

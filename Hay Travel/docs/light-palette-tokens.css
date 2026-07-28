@@ -1,0 +1,320 @@
+/* ============================================================================
+ * Hay Travel — LIGHT SKIN v2 «тёплый пергамент + бордо/золото»
+ * Предложение дизайнера. Готово к вставке в src/index.css.
+ * НЕ применено в коде — ждёт утверждения Давидом.
+ *
+ * Принцип пары со светлой/тёмной темой:
+ *   dark : фон тёмный  -> глубина через ОСВЕТЛЕНИЕ поверхности, акцент = ЗОЛОТО (светится)
+ *   light: фон светлый -> глубина через ТЕНЬ + белую поверхность, акцент = БОРДО (читается)
+ * Золото в светлой теме остаётся, но меняет роль: не текст, а материал
+ * (заливка, штрих, орнамент) + отдельный «бронзовый» токен для текста.
+ *
+ * Все контрасты посчитаны по WCAG 2.1 (relative luminance), значения в комментариях.
+ * ==========================================================================*/
+
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * 1. НОВЫЕ ГЛОБАЛЬНЫЕ ТОКЕНЫ — добавить в блок @theme рядом с существующими
+ *    (нужны, чтобы Tailwind v4 сгенерировал утилиты bg-*/text-*/ring-*).
+ * ──────────────────────────────────────────────────────────────────────────*/
+@theme {
+  /* --- уже есть, не трогаем: --color-page/panel/panel-raised/edge/ink*/accent* --- */
+
+  /* Новые тема-зависимые алиасы */
+  --color-edge-strong: var(--surface-edge-strong);   /* функциональная граница (инпуты, контролы) */
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-active: var(--accent-active);
+  --color-accent-soft: var(--accent-soft);           /* подложка акцента (выбранный чип, hover-строка) */
+  --color-accent-on: var(--accent-on);               /* текст ПО акценту */
+
+  --color-gold-ink: var(--gold-ink);                 /* «золотой» ТЕКСТ (в light — бронза) */
+  --color-gold-line: var(--gold-line);               /* золотой штрих/бордер */
+  --color-gold-fill: var(--gold-fill);               /* золотая ЗАЛИВКА */
+  --color-gold-fill-hover: var(--gold-fill-hover);
+  --color-gold-soft: var(--gold-soft);               /* золотая подложка */
+  --color-gold-on: var(--gold-on);                   /* текст ПО золотой заливке */
+
+  --color-success: var(--sem-success);
+  --color-success-soft: var(--sem-success-soft);
+  --color-danger: var(--sem-danger);
+  --color-danger-soft: var(--sem-danger-soft);
+  --color-warning: var(--sem-warning);
+  --color-warning-soft: var(--sem-warning-soft);
+
+  --color-disabled-bg: var(--state-disabled-bg);
+  --color-disabled-ink: var(--state-disabled-ink);
+  --color-disabled-edge: var(--state-disabled-edge);
+
+  --color-focus: var(--focus-ring);
+
+  /* Hero — одинаково «кинематографичен» в обеих темах (фото всегда тёмное) */
+  --color-hero-ink: var(--hero-ink);
+  --color-hero-ink-dim: var(--hero-ink-dim);
+
+  /* Карта регионов — выносим 8 hex-литералов из ArmeniaMap.tsx сюда */
+  --color-map-sea: var(--map-sea);
+  --color-map-region: var(--map-region-fill);
+  --color-map-region-muted: var(--map-region-muted-fill);
+  --color-map-region-hover: var(--map-region-hover-fill);
+  --color-map-region-selected: var(--map-region-selected-fill);
+  --color-map-stroke: var(--map-region-stroke);
+  --color-map-stroke-hover: var(--map-region-stroke-hover);
+  --color-map-stroke-selected: var(--map-region-stroke-selected);
+  --color-map-label: var(--map-label);
+  --color-map-label-halo: var(--map-label-halo);
+}
+
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * 2. ТЁМНАЯ ТЕМА — эталон не меняем, только ДОБАВЛЯЕМ парные переменные,
+ *    чтобы у светлой было чему соответствовать один-в-один.
+ * ──────────────────────────────────────────────────────────────────────────*/
+:root {
+  /* --- существующие 9, без изменений --- */
+  --surface-page: #0f0c08;
+  --surface-panel: #1a150f;
+  --surface-panel-raised: #201a12;
+  --surface-edge: #3a2e1c;
+  --ink-primary: #f4ebd7;
+  --ink-secondary: #c9b896;
+  --ink-muted: #8e7e63;
+  --accent-base: #d9b45a;
+  --accent-strong: #f0d9a0;
+  color-scheme: dark;
+
+  /* --- добавленные пары --- */
+  --surface-edge-strong: #6b5426;
+
+  --accent-hover: #f0d9a0;      /* в тёмной теме hover ОСВЕТЛЯЕТ */
+  --accent-active: #c39c3f;
+  --accent-soft: #2a0f17;       /* wine-tint */
+  --accent-on: #0f0c08;
+
+  --gold-ink: #d9b45a;
+  --gold-line: #6b5426;
+  --gold-fill: #d9b45a;
+  --gold-fill-hover: #f0d9a0;
+  --gold-soft: rgba(217, 180, 90, 0.14);
+  --gold-on: #0f0c08;
+
+  --sem-success: #5fbf8a;
+  --sem-success-soft: #12291d;
+  --sem-danger: #ef6a63;
+  --sem-danger-soft: #2c1210;
+  --sem-warning: #e0a94a;
+  --sem-warning-soft: #2b1f0b;
+
+  --state-disabled-bg: #201a12;
+  --state-disabled-ink: #6b5f4c;
+  --state-disabled-edge: #3a2e1c;
+
+  --focus-ring: #f0d9a0;
+
+  --hero-ink: #fff7e6;
+  --hero-ink-dim: #e3d3b4;
+  --hero-scrim-from: rgba(15, 12, 8, 0.94);
+  --hero-scrim-via: rgba(15, 12, 8, 0.62);
+  --hero-scrim-to: rgba(15, 12, 8, 0.18);
+
+  --map-sea: #0f0c08;
+  --map-region-fill: #17120c;
+  --map-region-muted-fill: #14100a;
+  --map-region-hover-fill: rgba(217, 180, 90, 0.18);
+  --map-region-selected-fill: #8e1b38;
+  --map-region-stroke: #6b5426;
+  --map-region-stroke-hover: #d9b45a;
+  --map-region-stroke-selected: #f0d9a0;
+  --map-label: #c9b896;
+  --map-label-halo: #0f0c08;
+
+  /* В тёмной теме тени почти не читаются — глубину даёт светлеющая поверхность.
+     Оставляем очень слабые, чтобы утилита работала одинаково в обеих темах. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 6px 16px -4px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 18px 40px -12px rgba(0, 0, 0, 0.65);
+  --shadow-sheet: 0 -14px 40px -12px rgba(0, 0, 0, 0.7);
+}
+
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * 3. СВЕТЛАЯ ТЕМА v2 — «тёплый пергамент + бордо/золото»
+ * ──────────────────────────────────────────────────────────────────────────*/
+[data-theme='light'] {
+  color-scheme: light;
+
+  /* ---------- Поверхности ---------- */
+  --surface-page: #f4ede0;          /* пергамент (туф/абрикосовая пыль) */
+  --surface-panel: #fdf9f1;         /* карточка */
+  --surface-panel-raised: #ffffff;  /* приподнятый слой: белый + тень */
+
+  /* ---------- Границы ---------- */
+  --surface-edge: #e3d7c2;          /* декоративный хайрлайн. 1.22:1 к page — ТОЛЬКО разделители */
+  --surface-edge-strong: #9c8460;   /* функциональная граница. 3.07:1 к page, 3.40:1 к panel — OK для UI (3:1) */
+
+  /* ---------- Текст ---------- */
+  --ink-primary: #241a12;           /* 14.65:1 к page | 16.24:1 к panel */
+  --ink-secondary: #4e4234;         /*  8.38:1 к page |  9.29:1 к panel */
+  --ink-muted: #756450;             /*  4.88:1 к page |  5.41:1 к panel — AA для мелкого текста */
+
+  /* ---------- Акцент №1: БОРДО (главный интерактивный) ---------- */
+  --accent-base: #8e1b38;           /* 7.63:1 к page | 8.46:1 к panel */
+  --accent-strong: #7a162f;         /* совместимость со старым именем = hover */
+  --accent-hover: #7a162f;          /* в светлой теме hover ЗАТЕМНЯЕТ (зеркально тёмной) */
+  --accent-active: #5e1024;
+  --accent-soft: #f7e6e9;           /* accent-base на нём: 7.38:1 */
+  --accent-on: #fff7e6;             /* по accent-base: 8.33:1 | по accent-hover: 9.93:1 */
+
+  /* ---------- Акцент №2: ЗОЛОТО (материал, не текст) ---------- */
+  --gold-ink: #6b4a15;              /* «золотой» текст = бронза. 6.90:1 к page | 7.65:1 к panel */
+  --gold-line: #a87a22;             /* штрих/бордер. 3.30:1 к page | 3.66:1 к panel */
+  --gold-fill: #d9a93c;             /* заливка. ink-primary по ней: 7.87:1 */
+  --gold-fill-hover: #c9971f;       /* ink-primary по ней: 6.44:1 */
+  --gold-soft: #fbf0d6;             /* gold-ink на нём: 7.09:1 */
+  --gold-on: #241a12;               /* текст по золотой заливке */
+
+  /* ---------- Семантика ---------- */
+  --sem-success: #1f6b45;           /* 5.55:1 к page | белый по нему 6.47:1 */
+  --sem-success-soft: #e4f0e7;      /* success на нём: 5.52:1 */
+  --sem-danger: #a3211c;            /* 6.46:1 к page | белый по нему 7.52:1 */
+  --sem-danger-soft: #fbe6e3;       /* danger на нём: 6.28:1 */
+  --sem-warning: #8a5a08;           /* 5.09:1 к page */
+  --sem-warning-soft: #fbeedc;      /* warning на нём: 5.18:1 */
+
+  /* ---------- Disabled (WCAG 1.4.3 не требует контраста для inactive) ---------- */
+  --state-disabled-bg: #efe8da;
+  --state-disabled-ink: #a2947e;
+  --state-disabled-edge: #d6c9b0;
+
+  /* ---------- Фокус ---------- */
+  --focus-ring: #8e1b38;            /* работает и по пергаменту (7.63:1), и по золотой заливке (4.10:1) */
+
+  /* ---------- Hero ---------- */
+  /* Ключевое решение: фото в hero остаётся ТЁМНЫМ и в светлой теме.
+     Пергаментная маска поверх фото выцвечивает снимок и убивает «кинематографичность». */
+  --hero-ink: #fff7e6;              /* 16.24:1 по скриму */
+  --hero-ink-dim: #e3d3b4;          /* 11.74:1 по скриму */
+  --hero-scrim-from: rgba(28, 20, 12, 0.92);
+  --hero-scrim-via: rgba(28, 20, 12, 0.55);
+  --hero-scrim-to: rgba(28, 20, 12, 0.15);
+  --hero-fade: #f4ede0;             /* нижние ~12% высоты уводим в цвет страницы — hero «врастает» в контент */
+
+  /* ---------- Карта регионов ---------- */
+  --map-sea: #ebe0cc;                          /* фон/зазоры карты */
+  --map-region-fill: #e7dbc1;                  /* обычный регион */
+  --map-region-muted-fill: #efe7d6;            /* регион без туров (вместо opacity 0.55) */
+  --map-region-hover-fill: #ebd49a;            /* hover — золотая заливка */
+  --map-region-selected-fill: #8e1b38;         /* выбран — бордо. 6.47:1 к обычной заливке */
+  --map-region-stroke: #8e7444;                /* 3.23:1 к заливке региона — граница читается */
+  --map-region-stroke-hover: #a87a22;
+  --map-region-stroke-selected: #d9a93c;       /* 4.10:1 по бордо */
+  --map-label: #3a2a18;                        /* 10.04:1 к заливке региона */
+  --map-label-halo: #fdf9f1;                   /* paint-order:stroke — подпись читается над ЛЮБОЙ заливкой */
+  --map-tooltip-bg: #ffffff;
+  --map-tooltip-edge: #a87a22;
+
+  /* ---------- Тени (в светлой теме это ОСНОВНОЙ носитель глубины) ---------- */
+  /* Тень тёплая (коричневая), не серая: серая тень на пергаменте читается как грязь. */
+  --shadow-sm: 0 1px 2px rgba(74, 52, 28, 0.06), 0 1px 3px rgba(74, 52, 28, 0.05);
+  --shadow-md: 0 4px 10px -2px rgba(74, 52, 28, 0.09), 0 2px 4px -2px rgba(74, 52, 28, 0.06);
+  --shadow-lg: 0 14px 30px -8px rgba(74, 52, 28, 0.14), 0 6px 12px -6px rgba(74, 52, 28, 0.08);
+  --shadow-sheet: 0 -12px 34px -10px rgba(74, 52, 28, 0.18);
+}
+
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * 4. Металлический градиент заголовков в светлой теме
+ *    (существующее правило оставляем — оно уже правильное, просто фиксируем)
+ * ──────────────────────────────────────────────────────────────────────────*/
+[data-theme='light'] .text-gold-sheen {
+  background-image: linear-gradient(100deg, #6b4a15 0%, #b8892f 45%, #8a6520 70%, #6b4a15 100%);
+}
+/* На hero градиент НЕ переопределяем: там фон тёмный в обеих темах. */
+[data-theme='light'] .hero .text-gold-sheen {
+  background-image: linear-gradient(100deg, #a87e2e 0%, #f0d9a0 45%, #d9b45a 70%, #a87e2e 100%);
+}
+
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * 5. ШКАЛЫ (не цвет, но входит в дизайн-решение)
+ * ──────────────────────────────────────────────────────────────────────────*/
+/*
+ * Типографика — 2 шрифта, как сейчас: Cormorant Garamond (display) + Inter (text).
+ *   hero h1   : 48 / 60 / 76 px  (mobile / sm / lg), line-height 1.05, display
+ *   section h2: 30 / 36 / 44 px, line-height 1.15, display
+ *   card h3   : 20 px, line-height 1.35, display
+ *   body      : 16 px, line-height 1.6, Inter 400
+ *   small     : 14 px, line-height 1.55
+ *   caption   : 12 px, line-height 1.5
+ *   eyebrow   : 11 px, letter-spacing 0.16em, UPPERCASE, Inter 500
+ *
+ * Отступы — шкала, кратная 4:
+ *   4 · 8 · 12 · 16 · 24 · 32 · 48 · 64 · 96
+ *   внутри карточки 16, между карточками 24, между секциями 64 (mobile) / 96 (desktop)
+ *
+ * Радиусы: 8 (чип/инпут) · 12 (строка списка) · 16 (карточка) · 24 (шторка сверху) · 999 (пилюля)
+ *
+ * Кликабельная зона: минимум 44×44 px для любой кнопки/иконки (сейчас в коде h-10 w-10 = 40px —
+ *   рекомендую поднять до h-11 w-11).
+ */
+
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * 6. АНИМАЦИИ — длительности и easing, чтобы фронт не додумывал
+ * ──────────────────────────────────────────────────────────────────────────*/
+:root {
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);   /* появления, шторка */
+  --ease-in-out-soft: cubic-bezier(0.4, 0, 0.2, 1);  /* смена цвета, переключатели */
+
+  --dur-micro: 150ms;   /* цвет кнопки, чипа, ссылки */
+  --dur-fast: 220ms;    /* hover карточки, заливка региона */
+  --dur-base: 340ms;    /* шторка, модалка, раскрытие карты */
+  --dur-reveal: 700ms;  /* scroll-reveal блока */
+  --dur-kenburns: 18s;  /* медленный зум hero */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-micro: 1ms;
+    --dur-fast: 1ms;
+    --dur-base: 1ms;
+    --dur-reveal: 1ms;
+    --dur-kenburns: 1ms;
+  }
+  /* Ken-burns, параллакс и подъём карточек ОТКЛЮЧАЮТСЯ ПОЛНОСТЬЮ (не ускоряются):
+     это движение, а не смена состояния. Смена цвета/непрозрачности остаётся. */
+  .ken-burns,
+  .parallax,
+  .card-lift {
+    animation: none !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * 7. МИГРАЦИЯ — что нужно поменять в коде, чтобы палитра управлялась одним местом
+ * ──────────────────────────────────────────────────────────────────────────*/
+/*
+ * (a) 44 использования `ring-hairline` / `border-hairline`  ->  `ring-edge` / `border-edge`
+ *     Сейчас #3a2e1c (тёмно-коричневый) остаётся и в светлой теме — это главный источник
+ *     «грязи». Для инпутов и контролов — `border-edge-strong`.
+ *
+ * (b) 131 использование `gold*` разложить по РОЛИ:
+ *       текст (цена, eyebrow, «Маршрут», ссылки)  -> `text-gold-ink`
+ *       бордер/штрих/подчёркивание                -> `ring-gold-line` / `border-gold-line`
+ *       заливка (CTA, бейдж, маркер)              -> `bg-gold-fill` + `text-gold-on`
+ *     ИСКЛЮЧЕНИЕ: элементы поверх гарантированно тёмного фона (чипы на фото, hero, тултип)
+ *     остаются на литералах `gold`/`cream` — там фон не меняется вместе с темой.
+ *
+ * (c) 22 использования `wine*`:
+ *       заливка/акцент  -> `bg-accent` / `text-accent`
+ *       подложка        -> `bg-accent-soft`  (в тёмной теме = wine-tint, в светлой = #f7e6e9)
+ *
+ * (d) ArmeniaMap.tsx — 8 hex-литералов (#8e1b38, #17120c, #f0d9a0, #d9b45a, #6b5426,
+ *     #0f0c08, #c9b896, rgba(217,180,90,0.18)) заменить на var(--map-*).
+ *     Без этого карта в светлой теме останется тёмной.
+ *
+ * (e) Hero: скрим `from-page via-page/70 to-page/25` заменить на var(--hero-scrim-*),
+ *     текст — на `text-hero-ink` / `text-hero-ink-dim` вместо `text-cream` / `text-cream-dim`.
+ */

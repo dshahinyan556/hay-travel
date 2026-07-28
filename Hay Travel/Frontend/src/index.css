@@ -1,0 +1,614 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+/**
+ * Design tokens (Tailwind v4 `@theme`).
+ *
+ * Direction: "dark luxury" — obsidian base, champagne gold as the single bright accent,
+ * deep wine as the second. Dark is the primary theme; light is a deliberate second skin,
+ * not an afterthought (see `[data-theme='light']` below).
+ *
+ * Only two typefaces: Cormorant Garamond for headings (`font-display`), Inter for text.
+ *
+ * Gradients: two sanctioned uses, and nothing else. (1) the metallic sheen on gold display type
+ * (`.text-gold-sheen`) — unchanged. (2) as of 2.3 (approved by David — this replaces the older
+ * "surfaces stay flat" rule that used to live here), a low-opacity radial "veil" wash is allowed
+ * as a background LAYER on section surfaces — `--veil`/`--veil-strong` below, applied via
+ * `.veil-top`/`.ribbon-veil`/`.band-veil`. The veil sits BEHIND content as depth, never as a text
+ * fill and never above ~14% opacity — it must not touch text contrast. The two remain unrelated:
+ * sheen is a type/material effect, veil is a surface wash.
+ *
+ * Colour tokens are declared twice: as `--color-*` (so Tailwind generates `bg-*`/`text-*`
+ * utilities) pointing at semantic `--surface`/`--ink` vars that flip per theme. That
+ * indirection is what lets one utility class work in both themes without `dark:` prefixes
+ * everywhere — the admin panel keeps its own light styling untouched.
+ */
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+
+  /**
+   * ── FIXED-DARK LITERALS ───────────────────────────────────────────────────────────────────
+   * These do NOT flip with the theme. After the role-token migration they survive for exactly
+   * one purpose: elements that sit on a guaranteed-dark backdrop in BOTH themes — the hero, the
+   * pills/chips over tour photography, the map tooltip, the sheet backdrop. Theme-aware tokens
+   * there would go dark-on-dark in the light skin. Everything on a theme surface uses the role
+   * tokens below instead (`gold-ink`/`gold-line`/`gold-fill`, `edge`, `accent*`).
+   */
+
+  /* Gold */
+  --color-gold-light: #f0d9a0;
+  --color-gold: #d9b45a;
+  --color-gold-deep: #a87e2e;
+
+  /* Wine — kept as a literal on purpose: it reads on the dark page AND on parchment, so the
+     filled "selected" pills and the discount badge use one value in both skins. */
+  --color-wine: #8e1b38;
+  --color-wine-tint: #2a0f17;
+
+  /* Obsidian neutral scale */
+  --color-obsidian: #0f0c08;
+  --color-surface-1: #1a150f;
+  --color-surface-2: #201a12;
+  --color-cream: #f4ebd7;
+  --color-cream-dim: #c9b896;
+  --color-cream-muted: #8e7e63;
+
+  /**
+   * Teal `brand-*` — the ADMIN PANEL's palette, kept as-is.
+   * The public site uses gold/wine above; these stay because `/admin` relies on them in
+   * ~20 places. Do not use `brand-*` in public-site code, and do not delete it either.
+   */
+  --color-brand-50: #f0fdfa;
+  --color-brand-100: #ccfbf1;
+  --color-brand-600: #0d9488;
+  --color-brand-700: #0f766e;
+  --color-brand-800: #115e59;
+
+  /* Theme-aware aliases — these are what components should use */
+  --color-page: var(--surface-page);
+  --color-panel: var(--surface-panel);
+  --color-panel-raised: var(--surface-panel-raised);
+  --color-edge: var(--surface-edge);
+  --color-ink: var(--ink-primary);
+  --color-ink-dim: var(--ink-secondary);
+  --color-ink-muted: var(--ink-muted);
+  --color-accent: var(--accent-base);
+  --color-accent-strong: var(--accent-strong);
+
+  /**
+   * Role tokens (added for the light-skin rework, see docs/light-palette-tokens.css §7).
+   * Same indirection as above: each resolves to a theme-flipping `--*` var below, so a single
+   * utility class (`border-edge-strong`, `text-gold-ink`, `bg-accent-soft`, ...) works in both
+   * themes without `dark:`/`light:` prefixes.
+   *
+   * These are the DEFAULT choice for public-site code. Reach for the fixed-dark literals above
+   * only when the element's backdrop is dark in both skins (see the note there).
+   *   text          -> `text-gold-ink`   (bronze in light — gold text fails contrast on parchment)
+   *   stroke/border -> `ring-gold-line` / `border-gold-line`
+   *   filled CTA    -> `bg-gold-fill` + `text-gold-on` (+ `hover:bg-gold-fill-hover`)
+   *   dividers      -> `border-edge`;  inputs/controls -> `border-edge-strong`
+   *   focus ring    -> `ring-focus`
+   */
+  --color-edge-strong: var(--surface-edge-strong);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-active: var(--accent-active);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-on: var(--accent-on);
+
+  --color-gold-ink: var(--gold-ink);
+  --color-gold-line: var(--gold-line);
+  --color-gold-fill: var(--gold-fill);
+  --color-gold-fill-hover: var(--gold-fill-hover);
+  --color-gold-soft: var(--gold-soft);
+  --color-gold-on: var(--gold-on);
+
+  --color-success: var(--sem-success);
+  --color-success-soft: var(--sem-success-soft);
+  --color-danger: var(--sem-danger);
+  --color-danger-soft: var(--sem-danger-soft);
+  --color-warning: var(--sem-warning);
+  --color-warning-soft: var(--sem-warning-soft);
+
+  --color-disabled-bg: var(--state-disabled-bg);
+  --color-disabled-ink: var(--state-disabled-ink);
+  --color-disabled-edge: var(--state-disabled-edge);
+
+  --color-focus: var(--focus-ring);
+
+  /* Hero stays cinematic (dark photo + scrim) in BOTH themes — these do not flip. */
+  --color-hero-ink: var(--hero-ink);
+  --color-hero-ink-dim: var(--hero-ink-dim);
+
+  /* Armenia map — theme-aware replacements for the hex literals in ArmeniaMap.tsx */
+  --color-map-sea: var(--map-sea);
+  --color-map-region: var(--map-region-fill);
+  --color-map-region-muted: var(--map-region-muted-fill);
+  --color-map-region-hover: var(--map-region-hover-fill);
+  --color-map-region-selected: var(--map-region-selected-fill);
+  --color-map-stroke: var(--map-region-stroke);
+  --color-map-stroke-hover: var(--map-region-stroke-hover);
+  --color-map-stroke-selected: var(--map-region-stroke-selected);
+  --color-map-label: var(--map-label);
+  --color-map-label-halo: var(--map-label-halo);
+  --color-map-water: var(--map-water-fill);
+  --color-map-water-stroke: var(--map-water-stroke);
+  --color-map-tooltip-bg: var(--map-tooltip-bg);
+  --color-map-tooltip-edge: var(--map-tooltip-edge);
+  --color-map-tooltip-text: var(--map-tooltip-text);
+  --color-map-tooltip-text-muted: var(--map-tooltip-text-muted);
+}
+
+/* Dark is the default skin. */
+:root {
+  --surface-page: #0f0c08;
+  --surface-panel: #1a150f;
+  --surface-panel-raised: #201a12;
+  --surface-edge: #3a2e1c;
+  --ink-primary: #f4ebd7;
+  --ink-secondary: #c9b896;
+  --ink-muted: #8e7e63;
+  --accent-base: #d9b45a;
+  --accent-strong: #f0d9a0;
+  color-scheme: dark;
+
+  /**
+   * Paired role vars for the dark skin (docs/light-palette-tokens.css §2). The 9 vars above are
+   * the untouched dark-theme baseline; these are additions only — dark must look unchanged.
+   */
+  --surface-edge-strong: #6b5426;
+
+  --accent-hover: #f0d9a0; /* dark hover LIGHTENS */
+  --accent-active: #c39c3f;
+  --accent-soft: #2a0f17; /* == --color-wine-tint */
+  --accent-on: #0f0c08;
+
+  --gold-ink: #d9b45a;
+  --gold-line: #6b5426;
+  --gold-fill: #d9b45a;
+  --gold-fill-hover: #f0d9a0;
+  --gold-soft: rgba(217, 180, 90, 0.14);
+  --gold-on: #0f0c08;
+
+  /**
+   * Veils & seams (2.3). Veil is the radial wash on section surfaces, in the theme's accent
+   * colour at a deliberately low, capped opacity (see the `@theme` comment above). Seam is the
+   * opacity of the hairline divider between home-page sections (`.seam`) — dark can sit a touch
+   * brighter than light because gold reads brighter on obsidian than bronze does on parchment.
+   */
+  --veil: rgba(217, 180, 90, 0.085);
+  --veil-strong: rgba(217, 180, 90, 0.14);
+  --seam-op: 0.55;
+
+  --sem-success: #5fbf8a;
+  --sem-success-soft: #12291d;
+  --sem-danger: #ef6a63;
+  --sem-danger-soft: #2c1210;
+  --sem-warning: #e0a94a;
+  --sem-warning-soft: #2b1f0b;
+
+  --state-disabled-bg: #201a12;
+  --state-disabled-ink: #6b5f4c;
+  --state-disabled-edge: #3a2e1c;
+
+  --focus-ring: #f0d9a0;
+
+  /* Hero stays dark in both themes; these are identical to the page's own dark literals. */
+  --hero-ink: #fff7e6;
+  --hero-ink-dim: #e3d3b4;
+  --hero-scrim-from: rgba(15, 12, 8, 0.94);
+  --hero-scrim-via: rgba(15, 12, 8, 0.62);
+  --hero-scrim-to: rgba(15, 12, 8, 0.18);
+  --hero-fade: #0f0c08; /* == --surface-page; derived, not in docs/light-palette-tokens.css (dark had no fade role there) */
+
+  /* Armenia map — mirrors the literals currently hardcoded in ArmeniaMap.tsx one-to-one */
+  --map-sea: #0f0c08;
+  --map-region-fill: #17120c;
+  --map-region-muted-fill: #14100a;
+  --map-region-hover-fill: rgba(217, 180, 90, 0.18);
+  --map-region-selected-fill: #8e1b38;
+  --map-region-stroke: #6b5426;
+  --map-region-stroke-hover: #d9b45a;
+  --map-region-stroke-selected: #f0d9a0;
+  --map-label: #c9b896;
+  --map-label-halo: #0f0c08;
+  /* Lake Sevan — decorative water body inside Gegharkunik. Muted teal so it reads as water
+     without fighting the gold/wine palette. */
+  --map-water-fill: #21424a;
+  --map-water-stroke: #4f8288;
+  /* Mirrors the tooltip's current fixed-dark literals one-to-one (bg-obsidian/92, ring-gold-deep/50,
+     text-gold-light, text-cream-dim) so introducing theme-aware tokens does not change dark at all. */
+  --map-tooltip-bg: rgba(15, 12, 8, 0.92);
+  --map-tooltip-edge: rgba(168, 126, 46, 0.5);
+  --map-tooltip-text: #f4ebd7; /* == --color-cream */
+  --map-tooltip-text-muted: #c9b896; /* == --color-cream-dim */
+
+  /* Dark reads depth mostly through lightening surfaces, not shadow — keep these faint. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 6px 16px -4px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 18px 40px -12px rgba(0, 0, 0, 0.65);
+  --shadow-sheet: 0 -14px 40px -12px rgba(0, 0, 0, 0.7);
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1); /* reveals, sheet */
+  --ease-in-out-soft: cubic-bezier(0.4, 0, 0.2, 1); /* colour swap, toggles */
+
+  --dur-micro: 150ms; /* button/chip/link colour */
+  --dur-fast: 220ms; /* card hover, region fill */
+  --dur-base: 340ms; /* sheet, modal, map reveal */
+  --dur-reveal: 700ms; /* scroll-reveal */
+  --dur-kenburns: 18s; /* hero slow zoom */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-micro: 1ms;
+    --dur-fast: 1ms;
+    --dur-base: 1ms;
+    --dur-reveal: 1ms;
+    --dur-kenburns: 1ms;
+  }
+  /* Motion (not state-change) is fully disabled rather than sped up. */
+  .ken-burns,
+  .parallax,
+  .card-lift,
+  .skeleton-shimmer {
+    animation: none !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+/**
+ * Light skin v2: "warm parchment + wine/gold" — approved by David (docs/light-palette-tokens.css).
+ * Pairs with dark by SWAPPING roles: dark's accent is gold (glows on a dark surface), light's
+ * accent is wine (reads on a pale one); gold in light demotes to a material (fill/stroke), with
+ * its own bronze token for text — gold text at light-theme luminance fails contrast.
+ * Every value below carries a WCAG contrast ratio in the original doc; not re-derived here.
+ */
+[data-theme='light'] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --surface-page: #f4ede0; /* parchment */
+  --surface-panel: #fdf9f1; /* card */
+  --surface-panel-raised: #ffffff; /* raised layer: white + shadow */
+
+  /* Edges */
+  --surface-edge: #e3d7c2; /* decorative hairline — dividers only, 1.22:1 */
+  --surface-edge-strong: #9c8460; /* functional border — inputs/controls, 3.07:1+ */
+
+  /* Text */
+  --ink-primary: #241a12; /* 14.65:1 on page */
+  --ink-secondary: #4e4234; /* 8.38:1 on page */
+  --ink-muted: #756450; /* 4.88:1 on page — AA for small text */
+
+  /* Accent #1: WINE (primary interactive) */
+  --accent-base: #8e1b38; /* 7.63:1 on page */
+  --accent-strong: #7a162f; /* kept for the old alias == hover */
+  --accent-hover: #7a162f; /* light hover DARKENS (mirror of dark) */
+  --accent-active: #5e1024;
+  --accent-soft: #f7e6e9;
+  --accent-on: #fff7e6;
+
+  /* Accent #2: GOLD (material, not text) */
+  --gold-ink: #6b4a15; /* "gold" text = bronze, 6.90:1 on page */
+  --gold-line: #a87a22; /* stroke/border, 3.30:1 on page */
+  --gold-fill: #d9a93c; /* fill; ink-primary on it: 7.87:1 */
+  --gold-fill-hover: #c9971f;
+  --gold-soft: #fbf0d6;
+  --gold-on: #241a12;
+
+  /* Veils & seams (2.3) — wine, the light skin's own accent, at the same capped opacities. */
+  --veil: rgba(142, 27, 56, 0.075);
+  --veil-strong: rgba(142, 27, 56, 0.13);
+  --seam-op: 0.45;
+
+  /* Semantic */
+  --sem-success: #1f6b45;
+  --sem-success-soft: #e4f0e7;
+  --sem-danger: #a3211c;
+  --sem-danger-soft: #fbe6e3;
+  --sem-warning: #8a5a08;
+  --sem-warning-soft: #fbeedc;
+
+  /* Disabled */
+  --state-disabled-bg: #efe8da;
+  --state-disabled-ink: #a2947e;
+  --state-disabled-edge: #d6c9b0;
+
+  /* Focus */
+  --focus-ring: #8e1b38;
+
+  /* Hero — stays cinematic/dark in BOTH themes; a parchment mask over the photo would wash it out. */
+  --hero-ink: #fff7e6;
+  --hero-ink-dim: #e3d3b4;
+  --hero-scrim-from: rgba(28, 20, 12, 0.92);
+  --hero-scrim-via: rgba(28, 20, 12, 0.55);
+  --hero-scrim-to: rgba(28, 20, 12, 0.15);
+  --hero-fade: #f4ede0; /* bottom ~12% of hero eases into the page colour == surface-page */
+
+  /* Armenia map */
+  --map-sea: #ebe0cc;
+  --map-region-fill: #e7dbc1;
+  --map-region-muted-fill: #efe7d6; /* no-tour region, replaces the current opacity:0.55 trick */
+  --map-region-hover-fill: #ebd49a;
+  --map-region-selected-fill: #8e1b38;
+  --map-region-stroke: #8e7444;
+  --map-region-stroke-hover: #a87a22;
+  --map-region-stroke-selected: #d9a93c;
+  --map-label: #3a2a18;
+  --map-label-halo: #fdf9f1;
+  --map-water-fill: #a9cbd0;
+  --map-water-stroke: #5f9298;
+  --map-tooltip-bg: #ffffff;
+  --map-tooltip-edge: #a87a22;
+  --map-tooltip-text: #241a12; /* == light --ink-primary; 14.65:1 to the page, higher still on white */
+  --map-tooltip-text-muted: #4e4234; /* == light --ink-secondary; 8.38:1 to the page, higher still on white */
+
+  /* Depth in light comes mostly from shadow, not surface tone — warm brown, not grey (grey on
+     parchment reads as dirt). */
+  --shadow-sm: 0 1px 2px rgba(74, 52, 28, 0.06), 0 1px 3px rgba(74, 52, 28, 0.05);
+  --shadow-md: 0 4px 10px -2px rgba(74, 52, 28, 0.09), 0 2px 4px -2px rgba(74, 52, 28, 0.06);
+  --shadow-lg: 0 14px 30px -8px rgba(74, 52, 28, 0.14), 0 6px 12px -6px rgba(74, 52, 28, 0.08);
+  --shadow-sheet: 0 -12px 34px -10px rgba(74, 52, 28, 0.18);
+}
+
+/**
+ * `body` carries ONLY typography — deliberately no colours.
+ *
+ * The public site's dark palette is applied by `RootLayout`, and the admin panel keeps its own
+ * light shell (`AdminLayout`). Putting `bg-page`/`text-ink` on `body` leaked cream text into
+ * `/admin`, where it sat invisibly on a near-white background. Each shell owns its own skin.
+ */
+body {
+  @apply font-sans antialiased;
+  background: var(--surface-page);
+}
+
+/**
+ * Gradient #1 — metallic sweep for gold display type. Used on the wordmark and section headings
+ * only. (Gradient #2, the surface veil, is the separate `.veil-top`/`.ribbon-veil`/`.band-veil`
+ * family below — see the `@theme` comment at the top of this file for why both are allowed.)
+ */
+.text-gold-sheen {
+  background-image: linear-gradient(100deg, #a87e2e 0%, #f0d9a0 45%, #d9b45a 70%, #a87e2e 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/**
+ * Light theme needs a DARKER sheen. The dark-theme ramp peaks at #f0d9a0, which on the
+ * parchment background washes out to near-invisible — headings looked faded rather than gilded.
+ * These stops keep the same metallic sweep while staying legible on a pale surface.
+ */
+[data-theme='light'] .text-gold-sheen {
+  background-image: linear-gradient(100deg, #6b4a15 0%, #b8892f 45%, #8a6520 70%, #6b4a15 100%);
+}
+
+/**
+ * Hero is dark in BOTH themes (see [data-theme='light'] --hero-* above), so gold text sitting
+ * inside it must keep using the vivid dark-theme ramp even when the rest of the page is light —
+ * the darkened light-skin ramp above would wash out against the still-dark hero photo.
+ */
+[data-theme='light'] .hero .text-gold-sheen {
+  background-image: linear-gradient(100deg, #a87e2e 0%, #f0d9a0 45%, #d9b45a 70%, #a87e2e 100%);
+}
+
+/**
+ * Section heading system (2.3) — fixed sizes shared by every post-hero section, replacing
+ * one-off `text-3xl sm:text-4xl`-style declarations per component. The desktop size kicks in at
+ * `lg` (>=1024px, the breakpoint the spec measures against) rather than `sm`: at 640px the phone
+ * layout hasn't gained real width yet, so a 44px/56px heading there would crowd the line.
+ * `max-w-[…ch]` is what makes a big heading break onto two lines instead of stretching edge to
+ * edge on wide viewports.
+ */
+.h1-page {
+  @apply max-w-[20ch] font-display text-[48px] leading-[1.08] lg:text-[56px];
+}
+.h2-section {
+  @apply max-w-[17ch] font-display text-[36px] leading-tight lg:text-[44px];
+}
+.h3-sub {
+  @apply font-display text-[32px] leading-snug lg:text-[28px];
+}
+.card-title {
+  @apply font-display text-[20px] leading-snug lg:text-[21px];
+}
+
+/**
+ * Section eyebrow (the label above H1/H2) — unified with the hero's own label treatment
+ * (`tracking-[0.22em]`), but with a 28×1px hairline in place of the hero's `StarIcon`: the hero
+ * keeps its icon, every other section gets this instead, as one consistent "signature" mark.
+ */
+.section-eyebrow {
+  @apply inline-flex items-center gap-2 text-[11px] tracking-[0.22em] text-gold-ink uppercase;
+}
+.section-eyebrow::before {
+  content: '';
+  display: block;
+  width: 28px;
+  height: 1px;
+  flex: none;
+  background: var(--gold-line);
+}
+
+/**
+ * Seam — a hairline replacement for `border-t` between home-page sections. Fades out at both
+ * ends so it reads as a signature mark rather than a ruled line; opacity comes from `--seam-op`
+ * (theme-specific, see the token comment above).
+ */
+.seam {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--gold-line) 18%,
+    var(--gold-line) 82%,
+    transparent
+  );
+  opacity: var(--seam-op);
+}
+
+/**
+ * Veil backgrounds (2.3). `.veil-top` is the bare radial wash, for smaller UI blocks (empty/error
+ * states) that already sit on a themed surface. `.ribbon-veil` and `.band-veil` add the veil on
+ * top of a surface-tone gradient, for full-bleed section strips:
+ *  - `.ribbon-veil` fades in AND out — a strip stitched between two page-coloured sections (the
+ *    home region-map band, sandwiched between other sections).
+ *  - `.band-veil` only fades out at the bottom — a page-OPENING strip (catalog/detail header),
+ *    which starts right under the sticky header and has nothing above it to blend into.
+ * All three are backgrounds only — they sit behind content, never as a text fill, and are capped
+ * low enough (see the `--veil` tokens) to never threaten text contrast.
+ */
+.veil-top {
+  background-image: radial-gradient(120% 70% at 50% 0%, var(--veil), transparent 62%);
+}
+.ribbon-veil {
+  background-image:
+    linear-gradient(
+      180deg,
+      var(--surface-page) 0%,
+      var(--surface-panel) 9%,
+      var(--surface-panel) 91%,
+      var(--surface-page) 100%
+    ),
+    radial-gradient(120% 70% at 50% 0%, var(--veil), transparent 62%);
+}
+.band-veil {
+  background-image:
+    linear-gradient(180deg, var(--surface-panel) 0%, var(--surface-panel) 72%, var(--surface-page) 100%),
+    radial-gradient(120% 70% at 50% 0%, var(--veil), transparent 62%);
+}
+
+/**
+ * Card-grid loading skeleton (2.3). Same shape/height as `TourCard` (`TourCardSkeleton` in
+ * `TourCard.tsx`), so a loading grid never jumps layout when the real cards land. The shimmer is
+ * a moving highlight in `--gold-soft` rather than a flat pulse, sweeping over ~1.8s.
+ * Reduced-motion handling follows the same pattern as `.ken-burns`/`.parallax`/`.card-lift`
+ * below, rather than duplicating a second media query.
+ */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -150% 0;
+  }
+  100% {
+    background-position: 150% 0;
+  }
+}
+.skeleton-shimmer {
+  background-image: linear-gradient(100deg, transparent 30%, var(--gold-soft) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+}
+
+/**
+ * Mobile bottom sheet (region panel) entry animation.
+ *
+ * Deliberately CSS keyframes rather than framer-motion: inside `AnimatePresence` the sheet's
+ * enter animation would not run — framer applied the initial state and stopped, leaving the
+ * panel parked off-screen at `translateY(100%)`. A keyframe animation fires on mount
+ * unconditionally, so it cannot get stuck in the initial frame.
+ *
+ * (Same class of problem the admin drawer hit, solved there with an inline `transform` +
+ * transition — see CHANGELOG. A transition needs the element to already be mounted in its
+ * closed state; the sheet mounts on selection, so keyframes are the right tool here.)
+ */
+@keyframes sheet-rise {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes backdrop-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.sheet-rise {
+  animation: sheet-rise 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.backdrop-fade {
+  animation: backdrop-fade 240ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-rise,
+  .backdrop-fade {
+    animation-duration: 1ms;
+  }
+}
+
+/**
+ * Clickable SVG regions on the Armenia map.
+ *
+ * The browser's default focus ring is a RECTANGLE drawn around the path's bounding box —
+ * on an irregular shape like a province that reads as a stray box on the map (the client
+ * flagged it explicitly). We drop `outline` and re-express focus as a gold stroke on the
+ * shape itself, so keyboard users still get a clearly visible focus state.
+ * Removing the outline without this replacement would break keyboard accessibility.
+ */
+.region-path {
+  outline: none;
+  transition: fill 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    stroke 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    stroke-width 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.region-path:focus-visible {
+  stroke: var(--accent-strong);
+  stroke-width: 3.5;
+}
+
+/**
+ * Hide the OS scrollbar on horizontally-scrollable strips (tab rows, mobile nav) while keeping
+ * them scrollable. On Windows the native scrollbar also renders arrow buttons; hiding it removes
+ * both the bar and those arrows. Scrollability is signalled visually with an edge gradient
+ * instead (see `Tabs`), so nothing is lost for the user.
+ */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/**
+ * Pointer cursor for interactive controls.
+ *
+ * Tailwind v4's preflight dropped `button { cursor: pointer }` (the only `cursor` rule left in
+ * `preflight.css` is the Safari spinner fix) — every native `<button>` in the app showed the
+ * default arrow unless it got `cursor-pointer` by hand. That drifted immediately (9 of ~30
+ * interactive elements had it, the rest didn't), so this is one rule instead of a class chased
+ * onto every component: it covers anything semantically or ARIA-marked as clickable.
+ *
+ * `select`/`input[type=checkbox|radio|range]` are included because the platform default for
+ * them is also the arrow in most browsers. Plain text-field `<label>`s are deliberately NOT
+ * matched — clicking one only moves focus into a text box, which is not a "button" affordance;
+ * only labels wrapping a checkbox/radio get the hand, matching `Checkbox.tsx`'s own styling.
+ * Disabled controls are excluded on purpose so they don't look clickable.
+ */
+button:not(:disabled):not([aria-disabled='true']),
+[role='button']:not([aria-disabled='true']),
+summary,
+select:not(:disabled),
+input[type='checkbox']:not(:disabled),
+input[type='radio']:not(:disabled),
+input[type='range']:not(:disabled),
+label:has(> input[type='checkbox']:not(:disabled)),
+label:has(> input[type='radio']:not(:disabled)) {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled='true'],
+select:disabled,
+input[type='checkbox']:disabled,
+input[type='radio']:disabled,
+input[type='range']:disabled {
+  cursor: not-allowed;
+}
