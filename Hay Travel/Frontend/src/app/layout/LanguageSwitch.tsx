@@ -1,19 +1,17 @@
-import { useState } from 'react'
-import { LOCALES, DEFAULT_LOCALE, type Locale } from '@/shared/lib/locale'
+import { LOCALES } from '@/shared/lib/locale'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 
 /**
- * Language switch — UI only for now.
- *
- * The site ships Russian copy; EN is visible so the layout is designed for it from the start
- * (a switch bolted on later tends to break the header). Selecting a language changes only the
- * active pill: real string localisation comes with the i18n pass, and the backend already
- * speaks `languageCode` (see `docs/backend-api.md`) so the data side is ready.
+ * Language switch — drives the real `LocaleProvider` (2026-08 i18n pass). Selecting a pill
+ * updates every UI string on the public site immediately, and re-runs the active route's loader
+ * (`useRevalidateOnLocaleChange`, in `RootLayout`) so backend content — tour titles/descriptions,
+ * fetched already resolved to one `languageCode` — catches up too.
  *
  * The pills are rendered from `LOCALES` (`shared/lib/locale`), so a new language appears here
- * automatically once it is added to that list.
+ * automatically once it is added to that list (and to `shared/i18n/dictionary.ts`).
  */
 export function LanguageSwitch() {
-  const [active, setActive] = useState<Locale>(DEFAULT_LOCALE)
+  const { locale: active, setLocale } = useLocale()
 
   return (
     <div className="flex items-center rounded-full p-0.5 ring-1 ring-edge">
@@ -21,14 +19,17 @@ export function LanguageSwitch() {
         <button
           key={locale.code}
           type="button"
-          onClick={() => setActive(locale.code)}
+          onClick={() => setLocale(locale.code)}
           aria-pressed={active === locale.code}
           aria-label={locale.name}
           // `min-h-9` keeps the pill visually compact; the actual tap target is grown to the
           // 44x44 CSS px minimum by the invisible `before:` expander below (outward + vertical
           // only, never toward the neighbouring pill, so the two never fight over a click).
           className={[
-            'relative inline-flex min-h-9 items-center rounded-full px-2.5 text-[11px] font-medium tracking-wide transition-colors',
+            // A segment control switches STATE, so it stays a pure colour cross-fade on
+            // `--dur-micro` (2.4 §5) — no lift, no press: the pill must not appear to move
+            // relative to the one next to it.
+            'relative inline-flex min-h-9 items-center rounded-full px-2.5 text-[11px] font-medium tracking-wide transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)]',
             'before:absolute before:-top-1 before:-bottom-1 before:content-[\'\'] first:before:-left-3 first:before:right-0 last:before:left-0 last:before:-right-3',
             active === locale.code ? 'bg-wine-tint text-gold-light' : 'text-ink-muted hover:text-gold',
           ].join(' ')}

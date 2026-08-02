@@ -9,12 +9,16 @@ interface NavItem {
   end?: boolean
 }
 
-/** Flat navigation — two top-level sections. No group captions: with only a couple of items
- * the "Обзор"/"Создание" headers read as noise, not structure. Creating a product lives on the
- * Products page itself, not as a separate nav entry. */
+/** Flat navigation — a handful of top-level sections. No group captions: with only a couple of
+ * items the "Обзор"/"Создание" headers read as noise, not structure. Creating a product lives on
+ * the Products page itself, not as a separate nav entry.
+ *
+ * Order is "daily work → rare configuration", which is why "Настройки" sits last. */
 const navItems: NavItem[] = [
   { to: '/admin', label: 'Дашборд', icon: '▦', end: true },
   { to: '/admin/products', label: 'Продукты', icon: '🧳' },
+  { to: '/admin/catalog', label: 'Справочники', icon: '📚' },
+  { to: '/admin/settings', label: 'Настройки', icon: '⚙' },
 ]
 
 const linkClass = ({ isActive }: { isActive: boolean }): string =>

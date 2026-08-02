@@ -17,6 +17,12 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
 
             builder.Property(x => x.Amount)
                 .HasPrecision(18, 2);
+
+            // Ссылка на каталог (3.4). Restrict — см. RoutePointConfiguration.
+            builder.HasOne(x => x.ExpenseTemplate)
+                .WithMany(x => x.AdditionalExpenses)
+                .HasForeignKey(x => x.ExpenseTemplateId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

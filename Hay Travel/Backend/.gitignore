@@ -3,3 +3,4 @@ obj/
 bin_local/
 .vs/
 *.user
+_db-backup/

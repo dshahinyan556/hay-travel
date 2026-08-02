@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Card, Tabs } from '@/shared/ui'
+import { Card, Tabs, UnsavedChangesModal } from '@/shared/ui'
 import type { TabItem } from '@/shared/ui'
 import { TourType } from '@/features/admin/lib/enums'
-import type { TourFormState } from '@/features/admin/types/form'
+import type { CatalogSuggestions, TourFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
 import type { TourFormValidation } from '@/features/admin/tour-form/lib/validation'
+import type { RegionInfoModel } from '@/shared/types/attours'
 import { TourFormHeader } from './TourFormHeader'
 import { TourDaysEditor } from './TourDaysEditor'
 import { LocalizedListEditor } from './LocalizedListEditor'
@@ -19,12 +20,18 @@ interface TourFormProps {
   hasAttemptedSubmit: boolean
   isSubmitting: boolean
   submitError: string | null
+  /** True once the form differs from its initial state — gates the tab-switch confirm modal. */
+  isDirty: boolean
   /** True in edit mode — locks the tour/excursion type toggle (type is immutable after creation). */
   typeLocked?: boolean
+  /** Existing catalog entries offered as autocomplete — see `CatalogSuggestions`. */
+  catalogSuggestions: CatalogSuggestions
+  /** The fixed 11-region reference list, for the region picker (4.4). */
+  regions: RegionInfoModel[]
   onSubmit: () => void
 }
 
-type TabId = 'days' | 'org' | 'restrictions' | 'expenses'
+type TabId = 'days' | 'org' | 'restrictions' | 'included' | 'notIncluded' | 'expenses'
 
 /**
  * Presentational orchestrator. Always shows `TourFormHeader` (type, image, price, the tour's
@@ -45,7 +52,10 @@ export function TourForm({
   hasAttemptedSubmit,
   isSubmitting,
   submitError,
+  isDirty,
   typeLocked,
+  catalogSuggestions,
+  regions,
   onSubmit,
 }: TourFormProps) {
   const isExcursion = state.type === TourType.Excursion
@@ -55,6 +65,8 @@ export function TourForm({
     ...(isExcursion ? [] : [{ id: 'days', label: 'Дни', badge: state.days.length } as TabItem]),
     { id: 'org', label: 'Организационные детали' },
     { id: 'restrictions', label: 'Ограничения' },
+    { id: 'included', label: 'Включено' },
+    { id: 'notIncluded', label: 'Не включено' },
     { id: 'expenses', label: 'Доп. расходы' },
   ]
 
@@ -62,6 +74,19 @@ export function TourForm({
   // The "days" tab disappears for an excursion; if the current selection no longer exists
   // (e.g. after flipping the type on create), fall back to the first available tab.
   const effectiveTab = tabs.some((t) => t.id === activeTab) ? activeTab : (tabs[0].id as TabId)
+
+  // Switching tabs never loses anything — every tab reads from the same `state` — but the admin
+  // asked for a confirmation anyway so a mid-edit field doesn't silently scroll out of view.
+  // Held here (not routed through a guard) because it's not a navigation, just a local tab click.
+  const [pendingTab, setPendingTab] = useState<TabId | null>(null)
+
+  function requestTabChange(id: string): void {
+    if (isDirty && id !== effectiveTab) {
+      setPendingTab(id as TabId)
+    } else {
+      setActiveTab(id as TabId)
+    }
+  }
 
   return (
     <form
@@ -89,6 +114,7 @@ export function TourForm({
         titleRuError={validation.titleRu}
         excursionPriceError={singleDay ? validation.dayPriceErrors[singleDay.key] : undefined}
         typeLocked={typeLocked}
+        regions={regions}
       />
 
       {isExcursion && singleDay && (
@@ -100,11 +126,15 @@ export function TourForm({
               emptyText="Точек маршрута пока нет."
               addLabel="Добавить точку"
               itemNoun="точку"
+              itemLabel="Точка маршрута"
               error={validation.dayRoutePointErrors[singleDay.key]}
               items={singleDay.routePoints}
+              suggestions={catalogSuggestions.routePoints}
               onAdd={() => actions.addRoutePoint(singleDay.key)}
               onRemove={(key) => actions.removeRoutePoint(singleDay.key, key)}
-              onMove={(key, direction) => actions.moveRoutePoint(singleDay.key, key, direction)}
+              onReorder={(fromIndex, toIndex) =>
+                actions.moveRoutePoint(singleDay.key, fromIndex, toIndex)
+              }
               onChangeText={(key, lang, value) =>
                 actions.setRoutePointText(singleDay.key, key, lang, value)
               }
@@ -116,7 +146,9 @@ export function TourForm({
                 items={singleDay.gallery}
                 onAdd={() => actions.addGallery(singleDay.key)}
                 onRemove={(key) => actions.removeGallery(singleDay.key, key)}
-                onMove={(key, direction) => actions.moveGallery(singleDay.key, key, direction)}
+                onReorder={(fromIndex, toIndex) =>
+                  actions.moveGallery(singleDay.key, fromIndex, toIndex)
+                }
                 onChangeUrl={(key, value) => actions.setGalleryUrl(singleDay.key, key, value)}
               />
             </div>
@@ -125,12 +157,7 @@ export function TourForm({
       )}
 
       <Card className="!p-0">
-        <Tabs
-          tabs={tabs}
-          activeId={effectiveTab}
-          onChange={(id) => setActiveTab(id as TabId)}
-          label="Разделы тура"
-        />
+        <Tabs tabs={tabs} activeId={effectiveTab} onChange={requestTabChange} label="Разделы тура" />
 
         <div className="p-6">
           {effectiveTab === 'days' && !isExcursion && (
@@ -142,6 +169,7 @@ export function TourForm({
               dayRoutePointErrors={validation.dayRoutePointErrors}
               daysError={validation.days}
               actions={actions}
+              routePointSuggestions={catalogSuggestions.routePoints}
             />
           )}
 
@@ -152,10 +180,12 @@ export function TourForm({
               emptyText="Организационных деталей пока нет."
               addLabel="Добавить деталь"
               itemNoun="деталь"
+              itemLabel="Организационная деталь"
               items={state.organizationalDetails}
+              suggestions={catalogSuggestions.orgDetails}
               onAdd={actions.addOrgDetail}
               onRemove={actions.removeOrgDetail}
-              onMove={actions.moveOrgDetail}
+              onReorder={actions.moveOrgDetail}
               onChangeText={actions.setOrgDetailText}
             />
           )}
@@ -167,17 +197,54 @@ export function TourForm({
               emptyText="Ограничений пока нет."
               addLabel="Добавить ограничение"
               itemNoun="ограничение"
+              itemLabel="Ограничение"
               items={state.restrictions}
+              suggestions={catalogSuggestions.restrictions}
               onAdd={actions.addRestriction}
               onRemove={actions.removeRestriction}
-              onMove={actions.moveRestriction}
+              onReorder={actions.moveRestriction}
               onChangeText={actions.setRestrictionText}
+            />
+          )}
+
+          {effectiveTab === 'included' && (
+            <LocalizedListEditor
+              title="Включено"
+              hint="Например: «Проживание», «Завтраки», «Входные билеты»."
+              emptyText="Пунктов «Включено» пока нет."
+              addLabel="Добавить пункт"
+              itemNoun="пункт"
+              itemLabel="Пункт"
+              items={state.included}
+              suggestions={catalogSuggestions.included}
+              onAdd={actions.addIncluded}
+              onRemove={actions.removeIncluded}
+              onReorder={actions.moveIncluded}
+              onChangeText={actions.setIncludedText}
+            />
+          )}
+
+          {effectiveTab === 'notIncluded' && (
+            <LocalizedListEditor
+              title="Не включено"
+              hint="Например: «Авиаперелёт», «Личные расходы», «Страховка»."
+              emptyText="Пунктов «Не включено» пока нет."
+              addLabel="Добавить пункт"
+              itemNoun="пункт"
+              itemLabel="Пункт"
+              items={state.notIncluded}
+              suggestions={catalogSuggestions.notIncluded}
+              onAdd={actions.addNotIncluded}
+              onRemove={actions.removeNotIncluded}
+              onReorder={actions.moveNotIncluded}
+              onChangeText={actions.setNotIncludedText}
             />
           )}
 
           {effectiveTab === 'expenses' && (
             <AdditionalExpensesEditor
               items={state.additionalExpenses}
+              suggestions={catalogSuggestions.expenses}
               onAdd={actions.addExpense}
               onRemove={actions.removeExpense}
               onChangeAmount={actions.setExpenseAmount}
@@ -193,6 +260,18 @@ export function TourForm({
         hasAttemptedSubmit={hasAttemptedSubmit}
         submitError={submitError}
         onSubmit={onSubmit}
+      />
+
+      <UnsavedChangesModal
+        open={pendingTab !== null}
+        onCancel={() => setPendingTab(null)}
+        onConfirm={() => {
+          if (pendingTab) setActiveTab(pendingTab)
+          setPendingTab(null)
+        }}
+        title="Перейти в другой раздел?"
+        message="В этом разделе есть несохранённые изменения. Они не потеряются при переходе — не забудьте нажать «Сохранить», прежде чем уйти со страницы."
+        confirmLabel="Перейти"
       />
     </form>
   )

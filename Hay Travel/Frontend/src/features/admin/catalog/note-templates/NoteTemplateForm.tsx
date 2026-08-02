@@ -1,0 +1,113 @@
+import { useState } from 'react'
+import { Button, buttonClassName, Field, Select, Spinner } from '@/shared/ui'
+import { TourNoteType } from '@/features/admin/lib/enums'
+import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
+import type { Localized } from '@/features/admin/types/localized'
+import { readLocalized } from '@/features/admin/catalog/lib/catalogMapper'
+import type { TourNoteTemplateInfoModel } from '@/shared/types/attours'
+
+/** No `sortOrder` on purpose: position is set by dragging rows in the list (see
+ * `lib/useCatalogReorder.ts`), not by typing a number here. */
+export interface NoteTemplateFormValues {
+  type: string
+  name: Localized
+}
+
+const typeOptions = [
+  { value: String(TourNoteType.OrganizationalDetail), label: 'Организационная деталь' },
+  { value: String(TourNoteType.Restriction), label: 'Ограничение' },
+  { value: String(TourNoteType.Included), label: 'Включено' },
+  { value: String(TourNoteType.NotIncluded), label: 'Не включено' },
+]
+
+function initialValues(item: TourNoteTemplateInfoModel | null): NoteTemplateFormValues {
+  if (!item) {
+    return {
+      type: String(TourNoteType.OrganizationalDetail),
+      name: { ru: '', en: '' },
+    }
+  }
+  return { type: String(item.type), name: readLocalized(item.translations) }
+}
+
+interface FormErrors {
+  nameRu?: string
+  nameEn?: string
+}
+
+function validate(values: NoteTemplateFormValues): FormErrors {
+  const errors: FormErrors = {}
+  if (values.name.ru.trim() === '') errors.nameRu = 'Обязательное поле.'
+  if (values.name.en.trim() === '') errors.nameEn = 'Обязательное поле.'
+  return errors
+}
+
+interface NoteTemplateFormProps {
+  item: TourNoteTemplateInfoModel | null
+  isSubmitting: boolean
+  error: string | null
+  onSubmit: (values: NoteTemplateFormValues) => void
+  onCancel: () => void
+}
+
+export function NoteTemplateForm({ item, isSubmitting, error, onSubmit, onCancel }: NoteTemplateFormProps) {
+  const [values, setValues] = useState<NoteTemplateFormValues>(() => initialValues(item))
+  const [attempted, setAttempted] = useState(false)
+
+  const errors = validate(values)
+  const shown = attempted ? errors : {}
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setAttempted(true)
+    if (Object.keys(validate(values)).length > 0) return
+    onSubmit(values)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      {error && (
+        <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
+
+      <Field label="Тип" htmlFor="note-type" required>
+        <Select
+          id="note-type"
+          surface="admin"
+          value={values.type}
+          onChange={(value) => setValues((v) => ({ ...v, type: value }))}
+          options={typeOptions}
+        />
+      </Field>
+
+      <TranslationGroup
+        label="Название"
+        value={values.name}
+        onChange={(lang, value) => setValues((v) => ({ ...v, name: { ...v.name, [lang]: value } }))}
+        required
+        error={shown.nameRu}
+        errorEn={shown.nameEn}
+      />
+
+      <div className="mt-2 flex justify-end gap-2.5 border-t border-neutral-200 pt-4">
+        <button type="button" onClick={onCancel} disabled={isSubmitting} className={buttonClassName('ghost', 'md')}>
+          Отмена
+        </button>
+        <Button type="submit" disabled={isSubmitting} className="min-w-28">
+          {isSubmitting ? (
+            <span className="inline-flex items-center gap-2">
+              <Spinner size="sm" />
+              Сохранение…
+            </span>
+          ) : item ? (
+            'Сохранить'
+          ) : (
+            'Добавить'
+          )}
+        </Button>
+      </div>
+    </form>
+  )
+}

@@ -8,7 +8,8 @@
         "D:\\Davo\\Claude AI Agent\\Hay Travel\\Frontend\\node_modules\\vite\\bin\\vite.js",
         "D:\\Davo\\Claude AI Agent\\Hay Travel\\Frontend"
       ],
-      "port": 5173
+      "port": 5173,
+      "autoPort": true
     },
     {
       "name": "hay-travel-backend",
@@ -20,7 +21,8 @@
         "--urls",
         "http://localhost:5254"
       ],
-      "port": 5254
+      "port": 5254,
+      "autoPort": true
     }
   ]
 }

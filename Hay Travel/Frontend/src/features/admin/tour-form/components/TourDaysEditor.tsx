@@ -1,5 +1,6 @@
+import { SortableList } from '@/shared/ui'
 import { TourType } from '@/features/admin/lib/enums'
-import type { TourDayFormState } from '@/features/admin/types/form'
+import type { Localized, TourDayFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
 import { minDaysFor } from '@/features/admin/tour-form/reducer/tourFormReducer'
 import { TourDayCard } from './TourDayCard'
@@ -17,13 +18,21 @@ interface TourDaysEditorProps {
   /** Day-count error (a Tour needs at least two days). */
   daysError?: string
   actions: TourFormActions
+  /** Existing route-point catalog entries offered as autocomplete. */
+  routePointSuggestions: Localized[]
 }
+
+/** Stable identity for the drag list — days are addressed by their form key, never by index. */
+const dayId = (day: TourDayFormState): string => day.key
 
 /**
  * The "Дни" tab content — used for Tours only (a multi-day accordion of collapsible
  * `TourDayCard`s plus the add-day button). An Excursion has no "Дни" tab at all: its single day
  * IS the tour, so its price lives in the header and its route points / gallery render as flat
  * sections under the header (see `TourForm`).
+ *
+ * Owns the day-level drag context: `SortableList` renders no wrapper of its own, so it sits
+ * directly inside the accordion column and hands each `TourDayCard` its drag mechanics.
  */
 export function TourDaysEditor({
   type,
@@ -33,6 +42,7 @@ export function TourDaysEditor({
   dayRoutePointErrors,
   daysError,
   actions,
+  routePointSuggestions,
 }: TourDaysEditorProps) {
   const canRemove = days.length > minDaysFor(type)
 
@@ -45,20 +55,21 @@ export function TourDaysEditor({
       )}
 
       <div className="flex flex-col gap-3">
-        {days.map((day, index) => (
-          <TourDayCard
-            key={day.key}
-            day={day}
-            index={index}
-            canRemove={canRemove}
-            canMoveUp={index > 0}
-            canMoveDown={index < days.length - 1}
-            titleError={dayTitleErrors[day.key]}
-            priceError={dayPriceErrors[day.key]}
-            routePointError={dayRoutePointErrors[day.key]}
-            actions={actions}
-          />
-        ))}
+        <SortableList items={days} getId={dayId} onReorder={actions.moveDay} itemLabel="День">
+          {(day, index, sortable) => (
+            <TourDayCard
+              day={day}
+              index={index}
+              canRemove={canRemove}
+              sortable={sortable}
+              titleError={dayTitleErrors[day.key]}
+              priceError={dayPriceErrors[day.key]}
+              routePointError={dayRoutePointErrors[day.key]}
+              actions={actions}
+              routePointSuggestions={routePointSuggestions}
+            />
+          )}
+        </SortableList>
       </div>
 
       <AddButton onClick={actions.addDay}>Добавить день</AddButton>

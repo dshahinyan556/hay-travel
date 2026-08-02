@@ -1,7 +1,7 @@
-import { Input } from '@/shared/ui'
-import type { LocalizedListItem } from '@/features/admin/types/form'
-import type { LangKey, MoveDirection } from '@/features/admin/tour-form/reducer/tourFormReducer'
-import { AddButton, RemoveButton, ReorderButtons } from './RepeaterControls'
+import { DragHandle, SortableList, SuggestInput } from '@/shared/ui'
+import type { Localized, LocalizedListItem } from '@/features/admin/types/form'
+import type { LangKey } from '@/features/admin/tour-form/reducer/tourFormReducer'
+import { AddButton, RemoveButton } from './RepeaterControls'
 
 interface LocalizedListEditorProps {
   /** Section heading, e.g. "Точки маршрута". */
@@ -12,22 +12,35 @@ interface LocalizedListEditorProps {
   emptyText: string
   /** Text for the add button, e.g. "Добавить точку". */
   addLabel: string
-  /** Singular noun for a11y labels, e.g. "точку". */
+  /** Singular noun (accusative) for a11y labels, e.g. "точку" → "Удалить точку". */
   itemNoun: string
+  /**
+   * Singular noun (nominative) for the drag `aria-live` announcements, e.g. "Точка маршрута".
+   * Falls back to `itemNoun` when the two forms coincide.
+   */
+  itemLabel?: string
   /** Blocking error for the whole list (e.g. "add at least one route point"). */
   error?: string
   items: LocalizedListItem[]
+  /** Existing catalog entries offered as autocomplete while typing RU/EN — picking one fills
+   * both languages at once, the text stays freely editable afterwards. Omit to show no suggestions. */
+  suggestions?: Localized[]
   onAdd: () => void
   onRemove: (key: string) => void
-  onMove: (key: string, direction: MoveDirection) => void
+  /** Drag-and-drop reorder: move the item at `fromIndex` to `toIndex`. */
+  onReorder: (fromIndex: number, toIndex: number) => void
   onChangeText: (key: string, lang: LangKey, value: string) => void
 }
+
+/** Stable identity for the drag list — rows are addressed by their form key, never by index. */
+const itemId = (item: LocalizedListItem): string => item.key
 
 /**
  * Shared repeater for any ordered list of a single bilingual text — route points,
  * organizational details and restrictions all use it. One implementation, three call sites:
- * a compact RU | EN row per item with reorder/remove controls, plus an add button. Order is
- * meaningful (mapped to the backend `sortOrder`), hence the ▲▼ controls.
+ * a compact RU | EN row per item with a drag handle and a remove button, plus an add button.
+ * Order is meaningful (mapped to the backend `sortOrder`), hence the drag-to-reorder handle —
+ * dragging is bound to the handle only, since the rest of the row is text inputs.
  */
 export function LocalizedListEditor({
   title,
@@ -35,13 +48,23 @@ export function LocalizedListEditor({
   emptyText,
   addLabel,
   itemNoun,
+  itemLabel,
   error,
   items,
+  suggestions,
   onAdd,
   onRemove,
-  onMove,
+  onReorder,
   onChangeText,
 }: LocalizedListEditorProps) {
+  const ruSuggestions = suggestions?.map((s) => s.ru).filter(Boolean) ?? []
+  const enSuggestions = suggestions?.map((s) => s.en).filter(Boolean) ?? []
+  const pickSuggestion = (key: string, label: string, lang: LangKey) => {
+    const match = suggestions?.find((s) => s[lang] === label)
+    if (!match) return
+    onChangeText(key, 'ru', match.ru)
+    onChangeText(key, 'en', match.en)
+  }
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex flex-col gap-0.5">
@@ -61,43 +84,57 @@ export function LocalizedListEditor({
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {items.map((item, index) => (
-            <li
-              key={item.key}
-              className="flex items-start gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-2"
-            >
-              <div className="pt-1.5">
-                <ReorderButtons
-                  onMove={(direction) => onMove(item.key, direction)}
-                  canMoveUp={index > 0}
-                  canMoveDown={index < items.length - 1}
-                  itemNoun={itemNoun}
-                />
-              </div>
-              <span className="w-4 shrink-0 pt-2 text-center text-xs tabular-nums text-neutral-400">
-                {index + 1}
-              </span>
-              <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
-                <Input
-                  value={item.text.ru}
-                  onChange={(e) => onChangeText(item.key, 'ru', e.target.value)}
-                  aria-label={`${title} ${index + 1} — Русский`}
-                  placeholder="Русский"
-                  className="text-sm"
-                />
-                <Input
-                  value={item.text.en}
-                  onChange={(e) => onChangeText(item.key, 'en', e.target.value)}
-                  aria-label={`${title} ${index + 1} — English`}
-                  placeholder="English"
-                  className="text-sm"
-                />
-              </div>
-              <div className="pt-0.5">
-                <RemoveButton onClick={() => onRemove(item.key)} label={`Удалить ${itemNoun}`} />
-              </div>
-            </li>
-          ))}
+          <SortableList
+            items={items}
+            getId={itemId}
+            onReorder={onReorder}
+            itemLabel={itemLabel ?? itemNoun}
+          >
+            {(item, index, sortable) => (
+              <li
+                ref={sortable.setNodeRef}
+                style={sortable.style}
+                className={`relative flex items-start gap-2 rounded-lg border bg-neutral-50 p-2 ${
+                  sortable.isDragging ? 'z-10 border-brand-300 shadow-md' : 'border-neutral-200'
+                }`}
+              >
+                <div className="pt-0.5">
+                  <DragHandle
+                    ref={sortable.setActivatorNodeRef}
+                    {...sortable.attributes}
+                    {...sortable.listeners}
+                    label={`Перетащить ${itemNoun} ${index + 1}, чтобы изменить порядок`}
+                  />
+                </div>
+                <span className="w-4 shrink-0 pt-2 text-center text-xs tabular-nums text-neutral-400">
+                  {index + 1}
+                </span>
+                <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
+                  <SuggestInput
+                    value={item.text.ru}
+                    onChange={(value) => onChangeText(item.key, 'ru', value)}
+                    onPick={(label) => pickSuggestion(item.key, label, 'ru')}
+                    suggestions={ruSuggestions}
+                    aria-label={`${title} ${index + 1} — Русский`}
+                    placeholder="Русский"
+                    className="text-sm"
+                  />
+                  <SuggestInput
+                    value={item.text.en}
+                    onChange={(value) => onChangeText(item.key, 'en', value)}
+                    onPick={(label) => pickSuggestion(item.key, label, 'en')}
+                    suggestions={enSuggestions}
+                    aria-label={`${title} ${index + 1} — English`}
+                    placeholder="English"
+                    className="text-sm"
+                  />
+                </div>
+                <div className="pt-0.5">
+                  <RemoveButton onClick={() => onRemove(item.key)} label={`Удалить ${itemNoun}`} />
+                </div>
+              </li>
+            )}
+          </SortableList>
         </ul>
       )}
 

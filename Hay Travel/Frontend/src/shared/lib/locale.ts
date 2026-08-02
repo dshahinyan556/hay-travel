@@ -40,3 +40,22 @@ export function isLocale(value: unknown): value is Locale {
 export function normalizeLocale(value: unknown): Locale {
   return isLocale(value) ? value : DEFAULT_LOCALE
 }
+
+const STORAGE_KEY = 'hay-travel-locale'
+
+/**
+ * Synchronous locale read, safe outside React (route loaders run before any component mounts).
+ * Backed by the same `localStorage` key `LocaleProvider` writes to, so a loader always sees
+ * whatever the visitor last chose — including on a cold load, before the provider itself runs.
+ */
+export function getStoredLocale(): Locale {
+  if (typeof window === 'undefined') return DEFAULT_LOCALE
+  return normalizeLocale(window.localStorage.getItem(STORAGE_KEY))
+}
+
+export function setStoredLocale(locale: Locale): void {
+  window.localStorage.setItem(STORAGE_KEY, locale)
+}
+
+/** `LanguageCode` on the backend (`ATTours.Common/Enums/LanguageCode.cs`) — `Russian = 1`. */
+export const LANGUAGE_CODE_BY_LOCALE: Record<Locale, number> = { ru: 1, en: 2 }

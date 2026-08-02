@@ -5,8 +5,12 @@
  * panel) and features must not import from one another — only through `shared`.
  *
  * This is the PUBLIC shape, deliberately separate from the admin/backend wire model in
- * `shared/types/attours.ts`. The site currently runs on mocks (`shared/api/tours.ts`); when
- * the real API lands, only that module changes — this type is the contract components rely on.
+ * `shared/types/attours.ts` — `shared/api/tours.ts` is the one module that maps between them.
+ *
+ * Two shapes, not one, because the backend itself serves two different projections (stage 5):
+ * `GetToursClient` returns a lightweight card (no itinerary/gallery/notes), `GetTourInfo` returns
+ * the full graph. `TourDetail` extends `Tour` rather than duplicating its fields, so every place
+ * that only needs the card shape (grids, the region panel, the "related" strip) accepts either.
  */
 
 import type { RegionSlug } from '@/shared/data/armeniaRegions'
@@ -18,14 +22,6 @@ import type { RegionSlug } from '@/shared/data/armeniaRegions'
  */
 export type TourKind = 'tour' | 'excursion'
 
-/** Trust/USP signals rendered on the card itself — there is no separate "why choose us" block. */
-export type TourBadgeType = 'popular' | 'discount' | 'lastSeats' | 'guide'
-
-export interface TourBadge {
-  type: TourBadgeType
-  label: string
-}
-
 export interface ItineraryDay {
   day: number
   title: string
@@ -34,10 +30,14 @@ export interface ItineraryDay {
   routePoints: string[]
 }
 
+/** One line item under "Дополнительные расходы" — a cost not folded into `priceFrom`. */
+export interface TourExpense {
+  label: string
+  amount: number | null
+}
+
 export interface Tour {
   id: string
-  /** URL-friendly identifier, used in the `/tours/:slug` route. */
-  slug: string
   title: string
   kind: TourKind
   /**
@@ -49,15 +49,21 @@ export interface Tour {
   /** 0 for an excursion by definition. */
   durationNights: number
   priceFrom: number
-  currency: 'USD' | 'AMD'
   coverImage: string
-  gallery: readonly string[]
   shortDescription: string
-  /** Rating out of 5, and how many reviews it came from. */
-  rating: number
-  reviewCount: number
-  badges: readonly TourBadge[]
+}
+
+export interface TourDetail extends Tour {
+  gallery: readonly string[]
   itinerary: readonly ItineraryDay[]
+  /** Organizational notes (`TourNoteType.OrganizationalDetail` on the backend) — practical
+   * things worth knowing, shown under "Организационные детали". */
+  organizationalDetails: readonly string[]
+  /** Restriction notes (`TourNoteType.Restriction`) — shown under "Ограничения". */
+  restrictions: readonly string[]
+  /** What the price covers (`TourNoteType.Included`) — shown under "Включено". */
   included: readonly string[]
-  excluded: readonly string[]
+  /** What the price does not cover (`TourNoteType.NotIncluded`) — shown under "Не включено". */
+  notIncluded: readonly string[]
+  expenses: readonly TourExpense[]
 }

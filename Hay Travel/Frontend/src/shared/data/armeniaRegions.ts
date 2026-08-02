@@ -45,6 +45,7 @@ export interface Region {
   isEnclave?: boolean
   /** One-line teaser of what the region is known for. */
   blurb: string
+  blurbEn: string
 }
 
 export const REGIONS: readonly Region[] = [
@@ -55,6 +56,7 @@ export const REGIONS: readonly Region[] = [
     labelAt: [339, 473],
     isEnclave: true,
     blurb: 'Каскад, Вернисаж, площадь Республики',
+    blurbEn: 'Cascade Complex, Vernissage market, Republic Square',
   },
   {
     slug: 'aragatsotn',
@@ -62,6 +64,7 @@ export const REGIONS: readonly Region[] = [
     en: 'Aragatsotn',
     labelAt: [209, 359],
     blurb: 'Амберд, Сагмосаванк, склоны Арагаца',
+    blurbEn: 'Amberd, Saghmosavank, the slopes of Mount Aragats',
   },
   {
     slug: 'ararat',
@@ -69,6 +72,7 @@ export const REGIONS: readonly Region[] = [
     en: 'Ararat',
     labelAt: [405, 541],
     blurb: 'Хор Вирап на фоне Арарата',
+    blurbEn: 'Khor Virap against Mount Ararat',
   },
   {
     slug: 'armavir',
@@ -76,6 +80,7 @@ export const REGIONS: readonly Region[] = [
     en: 'Armavir',
     labelAt: [193, 468],
     blurb: 'Эчмиадзин, Звартноц, виноградники',
+    blurbEn: 'Echmiadzin, Zvartnots, vineyards',
   },
   {
     slug: 'gegharkunik',
@@ -83,6 +88,7 @@ export const REGIONS: readonly Region[] = [
     en: 'Gegharkunik',
     labelAt: [567, 411],
     blurb: 'Севан, Севанаванк, горные пляжи',
+    blurbEn: 'Lake Sevan, Sevanavank, mountain beaches',
   },
   {
     slug: 'kotayk',
@@ -90,6 +96,7 @@ export const REGIONS: readonly Region[] = [
     en: 'Kotayk',
     labelAt: [376, 371],
     blurb: 'Гарни, Гегард, Цахкадзор',
+    blurbEn: 'Garni, Geghard, Tsaghkadzor',
   },
   {
     slug: 'lori',
@@ -97,6 +104,7 @@ export const REGIONS: readonly Region[] = [
     en: 'Lori',
     labelAt: [313, 139],
     blurb: 'Санаин, Ахпат, ущелье Дебед',
+    blurbEn: 'Sanahin, Haghpat, the Debed gorge',
   },
   {
     slug: 'shirak',
@@ -104,6 +112,7 @@ export const REGIONS: readonly Region[] = [
     en: 'Shirak',
     labelAt: [137, 216],
     blurb: 'Гюмри, Мармашен, чёрный туф',
+    blurbEn: 'Gyumri, Marmashen, black tuff',
   },
   {
     slug: 'syunik',
@@ -111,6 +120,7 @@ export const REGIONS: readonly Region[] = [
     en: 'Syunik',
     labelAt: [852, 786],
     blurb: 'Татев, Крылья Татева, Хндзореск',
+    blurbEn: 'Tatev, the Wings of Tatev, Khndzoresk',
   },
   {
     slug: 'vayots-dzor',
@@ -118,6 +128,7 @@ export const REGIONS: readonly Region[] = [
     en: 'Vayots Dzor',
     labelAt: [623, 622],
     blurb: 'Нораванк, Арени, пещера птиц',
+    blurbEn: 'Noravank, Areni, the Bird Cave',
   },
   {
     slug: 'tavush',
@@ -125,6 +136,7 @@ export const REGIONS: readonly Region[] = [
     en: 'Tavush',
     labelAt: [503, 144],
     blurb: 'Дилижан, Агарцин, Гошаванк',
+    blurbEn: 'Dilijan, Haghartsin, Goshavank',
   },
 ]
 

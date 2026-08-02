@@ -62,6 +62,24 @@ export function setTourArchived(id: number, isArchived: boolean): Promise<void> 
   })
 }
 
+/** PATCH the featured flag of a tour (show / hide in the public "избранное" section). Rejects
+ * with `ApiError` carrying `errorCode: TooManyFeaturedTours` (2011) when 6 are already featured. */
+export function setTourFeatured(id: number, isFeatured: boolean): Promise<void> {
+  return apiFetch<void>('api/Tour/SetFeatured', {
+    method: 'PATCH',
+    body: JSON.stringify({ id, isFeatured }),
+  })
+}
+
+/** PATCH the display order of the currently featured tours. `orderedIds` must contain exactly
+ * the ids that are currently featured, in the desired order — anything else 400s. */
+export function reorderFeaturedTours(orderedIds: number[]): Promise<void> {
+  return apiFetch<void>('api/Tour/ReorderFeatured', {
+    method: 'PATCH',
+    body: JSON.stringify({ orderedIds }),
+  })
+}
+
 /** DELETE a tour and its whole graph (days, translations, images, …) via server cascade.
  * Irreversible — used to permanently remove a tour from the archive. */
 export function deleteTour(id: number): Promise<void> {

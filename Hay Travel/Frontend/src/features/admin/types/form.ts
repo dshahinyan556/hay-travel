@@ -10,12 +10,12 @@
  */
 
 import type { TourType } from '@/features/admin/lib/enums'
+import type { Localized } from '@/features/admin/types/localized'
 
-/** A single translatable field held as its two language values. */
-export interface Localized {
-  ru: string
-  en: string
-}
+/** `Localized` now lives in `types/localized.ts` — it is shared with the settings screen
+ * (ADR 004). Re-exported here so every existing `from '@/features/admin/types/form'` import
+ * keeps working. */
+export type { Localized }
 
 /** One gallery image of a day. `sortOrder` on the wire is derived from array index. */
 export interface GalleryItemFormState {
@@ -61,6 +61,26 @@ export interface TourDayFormState {
   gallery: GalleryItemFormState[]
 }
 
+/** Existing catalog entries offered as autocomplete while typing route points, organizational
+ * details, restrictions, included/not-included items and additional expenses — loader-provided
+ * reference data, not part of the form's own state (nothing here is submitted). */
+export interface CatalogSuggestions {
+  routePoints: Localized[]
+  orgDetails: Localized[]
+  restrictions: Localized[]
+  included: Localized[]
+  notIncluded: Localized[]
+  expenses: Localized[]
+}
+
+/** One region checked on the tour (4.4). `serverId` is the join row's own id (`TourRegion.Id`,
+ * distinct from `regionId`) — present when it came from `InitUpdate`, absent for a region the
+ * admin just checked. Order in the array is the display/submit order; there is no reorder UI. */
+export interface TourRegionFormState {
+  serverId?: number
+  regionId: number
+}
+
 /** The whole create/edit form. */
 export interface TourFormState {
   type: TourType
@@ -76,6 +96,13 @@ export interface TourFormState {
   /** Restrictions — an ordered list of bilingual notes (formerly the single "Restriction"
    * field; now multi-value). */
   restrictions: LocalizedListItem[]
+  /** "Включено" — items the price covers. Same `TourNote` entity as the two lists above,
+   * discriminated by `TourNoteType.Included` (2026-08). */
+  included: LocalizedListItem[]
+  /** "Не включено" — items the price does not cover (`TourNoteType.NotIncluded`, 2026-08). */
+  notIncluded: LocalizedListItem[]
   days: TourDayFormState[]
   additionalExpenses: ExpenseFormState[]
+  /** Regions the tour covers (4.4). Optional — a tour without a region is valid (backend D-2). */
+  regions: TourRegionFormState[]
 }

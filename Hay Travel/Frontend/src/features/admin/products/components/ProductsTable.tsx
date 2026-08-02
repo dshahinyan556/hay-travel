@@ -1,7 +1,7 @@
 import type { TourInfoModel } from '@/shared/types/attours'
 import { TourThumb, TypeBadge, tourTitleRu } from '@/features/admin/ui/TourTableParts'
 
-export type ProductsView = 'active' | 'archived'
+export type ProductsView = 'active' | 'featured' | 'archived'
 
 interface ProductsTableProps {
   tours: TourInfoModel[]
@@ -10,10 +10,17 @@ interface ProductsTableProps {
   pendingId: number | null
   /** True while any mutation or revalidation is running — disables all actions. */
   isBusy: boolean
+  /** Active view only: false once 6 tours are already featured — disables the heart button on
+   * tours that aren't featured yet (removing an already-featured one is always allowed). */
+  canFeatureMore: boolean
   /** Open a product for editing (row click / title click). */
   onOpen: (tour: TourInfoModel) => void
   /** Active view: toggle publication. */
   onTogglePublish: (tour: TourInfoModel) => void
+  /** Active + Featured views: toggle the featured flag. */
+  onToggleFeatured: (tour: TourInfoModel) => void
+  /** Featured view: move one position up/down within the featured order. */
+  onMoveFeatured: (tour: TourInfoModel, direction: 'up' | 'down') => void
   /** Active view: move to archive (soft-delete). */
   onArchive: (tour: TourInfoModel) => void
   /** Archive view: restore back to the active list. */
@@ -88,10 +95,42 @@ function RowAction({
   )
 }
 
+/** Heart toggle for the featured flag — ♥/♡ rather than a custom SVG, matching the admin's
+ * existing emoji-based icon language (🗄/↩/🔍/⚠️/🧳), which is deliberately separate from the
+ * public site's line-icon set (see `shared/ui/icons.tsx`'s own doc comment). */
+function FeaturedToggle({
+  isFeatured,
+  disabled,
+  onToggle,
+}: {
+  isFeatured: boolean
+  disabled: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation()
+        onToggle()
+      }}
+      disabled={disabled}
+      aria-pressed={isFeatured}
+      title={isFeatured ? 'Убрать из избранного' : 'Добавить в избранное'}
+      className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
+        isFeatured ? 'text-rose-600 hover:bg-rose-50' : 'text-neutral-400 hover:bg-neutral-100'
+      }`}
+    >
+      {isFeatured ? '♥' : '♡'}
+    </button>
+  )
+}
+
 /**
  * The products list table. Rows are clickable (mouse) and carry a keyboard-focusable title
  * button — both open the product for editing. Per-row actions depend on `view`:
- *  - active: publish toggle + "В архив",
+ *  - active: publish toggle + featured heart (capped at 6) + "В архив",
+ *  - featured: reorder (▲▼) + "✕ Убрать из избранного",
  *  - archived: "Восстановить" + "Удалить" (permanent).
  * Mutations are owned by the parent (`ProductsPage`); this component only renders and delegates.
  */
@@ -100,13 +139,17 @@ export function ProductsTable({
   view,
   pendingId,
   isBusy,
+  canFeatureMore,
   onOpen,
   onTogglePublish,
+  onToggleFeatured,
+  onMoveFeatured,
   onArchive,
   onRestore,
   onDelete,
 }: ProductsTableProps) {
   const isActiveView = view === 'active'
+  const isFeaturedView = view === 'featured'
 
   return (
     <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
@@ -118,11 +161,12 @@ export function ProductsTable({
             <th className="w-[130px] px-4 py-2.5 font-semibold">Тип</th>
             <th className="w-20 px-4 py-2.5 text-right font-semibold">Дней</th>
             {isActiveView && <th className="w-[130px] px-4 py-2.5 font-semibold">Публикация</th>}
+            {isFeaturedView && <th className="w-24 px-4 py-2.5 font-semibold">Порядок</th>}
             <th className="w-[190px] px-4 py-2.5 text-right font-semibold">Действия</th>
           </tr>
         </thead>
         <tbody>
-          {tours.map((tour) => {
+          {tours.map((tour, index) => {
             const { text: title, empty } = tourTitleRu(tour)
             const rowPending = pendingId === tour.id
             return (
@@ -174,15 +218,47 @@ export function ProductsTable({
                     </div>
                   </td>
                 )}
+                {isFeaturedView && (
+                  <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-0.5">
+                      <RowAction
+                        onClick={() => onMoveFeatured(tour, 'up')}
+                        disabled={isBusy || index === 0}
+                        label="▲"
+                      />
+                      <RowAction
+                        onClick={() => onMoveFeatured(tour, 'down')}
+                        disabled={isBusy || index === tours.length - 1}
+                        label="▼"
+                      />
+                    </div>
+                  </td>
+                )}
                 <td className="px-4 py-2.5">
                   <div className="flex items-center justify-end gap-1">
-                    {isActiveView ? (
+                    {isActiveView && (
+                      <>
+                        <FeaturedToggle
+                          isFeatured={tour.isFeatured}
+                          disabled={isBusy || (!tour.isFeatured && !canFeatureMore)}
+                          onToggle={() => onToggleFeatured(tour)}
+                        />
+                        <RowAction
+                          onClick={() => onArchive(tour)}
+                          disabled={isBusy}
+                          label="🗄 В архив"
+                        />
+                      </>
+                    )}
+                    {isFeaturedView && (
                       <RowAction
-                        onClick={() => onArchive(tour)}
+                        onClick={() => onToggleFeatured(tour)}
                         disabled={isBusy}
-                        label="🗄 В архив"
+                        label="✕ Убрать"
+                        tone="danger"
                       />
-                    ) : (
+                    )}
+                    {view === 'archived' && (
                       <>
                         <RowAction
                           onClick={() => onRestore(tour)}

@@ -4,7 +4,9 @@
  * All form mutations flow through here as a discriminated union of actions — components never
  * mutate state directly, they only dispatch. Every update is immutable and addresses list
  * items by their stable `key` (never by array index), so React keys stay valid across
- * reorders and removals.
+ * reorders and removals. The one deliberate exception is reordering: drag-and-drop
+ * (`shared/ui/SortableList`) reports a move as a from/to index pair, so the `move*` actions
+ * carry indices — a nested list still uses `dayKey` to locate the day that owns it.
  *
  * The domain rule about day count lives here, not in components:
  *  - Excursion = exactly one day (add/remove are no-ops, the UI hides the buttons).
@@ -12,6 +14,7 @@
  *    switching to Tour tops the list up to two.
  */
 
+import { arrayMove } from '@dnd-kit/sortable'
 import { TourType } from '@/features/admin/lib/enums'
 import { emptyDay, emptyExpense, emptyLocalizedItem, emptyGalleryItem } from '@/features/admin/lib/tourMapper'
 import type {
@@ -20,12 +23,11 @@ import type {
   TourDayFormState,
   TourFormState,
 } from '@/features/admin/types/form'
+import type { LangKey } from '@/features/admin/types/localized'
 
-/** The two languages every localized field carries. */
-export type LangKey = 'ru' | 'en'
-
-/** Direction for reordering an item within its ordered list. */
-export type MoveDirection = 'up' | 'down'
+/** `LangKey` now lives in `types/localized.ts` — it is shared with the settings screen
+ * (ADR 004). Re-exported here so every existing import from this reducer keeps working. */
+export type { LangKey }
 
 /** Tour-level localized fields (each is a `Localized { ru, en }` pair). */
 export type TourLocalizedField = 'title' | 'shortDescription' | 'description' | 'duration'
@@ -49,34 +51,46 @@ export type TourFormAction =
   // days
   | { kind: 'addDay' }
   | { kind: 'removeDay'; dayKey: string }
-  | { kind: 'moveDay'; dayKey: string; direction: MoveDirection }
+  | { kind: 'moveDay'; fromIndex: number; toIndex: number }
   | { kind: 'setDayPrice'; dayKey: string; value: string }
   | { kind: 'setDayLocalized'; dayKey: string; field: DayLocalizedField; lang: LangKey; value: string }
   // route points (of a day)
   | { kind: 'addRoutePoint'; dayKey: string }
   | { kind: 'removeRoutePoint'; dayKey: string; key: string }
-  | { kind: 'moveRoutePoint'; dayKey: string; key: string; direction: MoveDirection }
+  | { kind: 'moveRoutePoint'; dayKey: string; fromIndex: number; toIndex: number }
   | { kind: 'setRoutePointText'; dayKey: string; key: string; lang: LangKey; value: string }
   // gallery (of a day)
   | { kind: 'addGallery'; dayKey: string }
   | { kind: 'removeGallery'; dayKey: string; key: string }
-  | { kind: 'moveGallery'; dayKey: string; key: string; direction: MoveDirection }
+  | { kind: 'moveGallery'; dayKey: string; fromIndex: number; toIndex: number }
   | { kind: 'setGalleryUrl'; dayKey: string; key: string; value: string }
   // organizational details (tour-level list)
   | { kind: 'addOrgDetail' }
   | { kind: 'removeOrgDetail'; key: string }
-  | { kind: 'moveOrgDetail'; key: string; direction: MoveDirection }
+  | { kind: 'moveOrgDetail'; fromIndex: number; toIndex: number }
   | { kind: 'setOrgDetailText'; key: string; lang: LangKey; value: string }
   // restrictions (tour-level list)
   | { kind: 'addRestriction' }
   | { kind: 'removeRestriction'; key: string }
-  | { kind: 'moveRestriction'; key: string; direction: MoveDirection }
+  | { kind: 'moveRestriction'; fromIndex: number; toIndex: number }
   | { kind: 'setRestrictionText'; key: string; lang: LangKey; value: string }
+  // included (tour-level list — "Включено")
+  | { kind: 'addIncluded' }
+  | { kind: 'removeIncluded'; key: string }
+  | { kind: 'moveIncluded'; fromIndex: number; toIndex: number }
+  | { kind: 'setIncludedText'; key: string; lang: LangKey; value: string }
+  // not included (tour-level list — "Не включено")
+  | { kind: 'addNotIncluded' }
+  | { kind: 'removeNotIncluded'; key: string }
+  | { kind: 'moveNotIncluded'; fromIndex: number; toIndex: number }
+  | { kind: 'setNotIncludedText'; key: string; lang: LangKey; value: string }
   // additional expenses (tour-level list, unordered)
   | { kind: 'addExpense' }
   | { kind: 'removeExpense'; key: string }
   | { kind: 'setExpenseAmount'; key: string; value: string }
   | { kind: 'setExpenseDescription'; key: string; lang: LangKey; value: string }
+  // regions (tour-level, unordered checkbox set)
+  | { kind: 'toggleRegion'; regionId: number }
 
 /* -------------------------------------------------------------------------- */
 /*  Immutable list helpers                                                     */
@@ -90,15 +104,16 @@ const updateByKey = <T extends Keyed>(list: T[], key: string, fn: (item: T) => T
 const removeByKey = <T extends Keyed>(list: T[], key: string): T[] =>
   list.filter((item) => item.key !== key)
 
-/** Swap an item with its neighbour in the given direction; no-op at the list edges. */
-const moveByKey = <T extends Keyed>(list: T[], key: string, direction: MoveDirection): T[] => {
-  const index = list.findIndex((item) => item.key === key)
-  if (index === -1) return list
-  const target = direction === 'up' ? index - 1 : index + 1
-  if (target < 0 || target >= list.length) return list
-  const next = [...list]
-  ;[next[index], next[target]] = [next[target], next[index]]
-  return next
+/**
+ * Move an item to an arbitrary position (not just to a neighbour) — drag-and-drop can drop the
+ * first row straight at the end. Out-of-range or no-op indices leave the list untouched, so a
+ * stale index from a list that changed mid-drag can never corrupt state.
+ */
+const reorder = <T>(list: T[], fromIndex: number, toIndex: number): T[] => {
+  if (fromIndex === toIndex) return list
+  const isInRange = (i: number) => Number.isInteger(i) && i >= 0 && i < list.length
+  if (!isInRange(fromIndex) || !isInRange(toIndex)) return list
+  return arrayMove(list, fromIndex, toIndex)
 }
 
 /** Set one language of a `Localized` pair, leaving the other language untouched. */
@@ -176,7 +191,7 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
     }
 
     case 'moveDay':
-      return { ...state, days: moveByKey(state.days, action.dayKey, action.direction) }
+      return { ...state, days: reorder(state.days, action.fromIndex, action.toIndex) }
 
     case 'setDayPrice':
       return updateDay(state, action.dayKey, (day) => ({ ...day, price: action.value }))
@@ -203,7 +218,7 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
     case 'moveRoutePoint':
       return updateDay(state, action.dayKey, (day) => ({
         ...day,
-        routePoints: moveByKey(day.routePoints, action.key, action.direction),
+        routePoints: reorder(day.routePoints, action.fromIndex, action.toIndex),
       }))
 
     case 'setRoutePointText':
@@ -228,7 +243,7 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
     case 'moveGallery':
       return updateDay(state, action.dayKey, (day) => ({
         ...day,
-        gallery: moveByKey(day.gallery, action.key, action.direction),
+        gallery: reorder(day.gallery, action.fromIndex, action.toIndex),
       }))
 
     case 'setGalleryUrl':
@@ -247,7 +262,7 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
     case 'moveOrgDetail':
       return {
         ...state,
-        organizationalDetails: moveByKey(state.organizationalDetails, action.key, action.direction),
+        organizationalDetails: reorder(state.organizationalDetails, action.fromIndex, action.toIndex),
       }
 
     case 'setOrgDetailText':
@@ -264,12 +279,44 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
       return { ...state, restrictions: removeByKey(state.restrictions, action.key) }
 
     case 'moveRestriction':
-      return { ...state, restrictions: moveByKey(state.restrictions, action.key, action.direction) }
+      return { ...state, restrictions: reorder(state.restrictions, action.fromIndex, action.toIndex) }
 
     case 'setRestrictionText':
       return {
         ...state,
         restrictions: setItemText(state.restrictions, action.key, action.lang, action.value),
+      }
+
+    /* ---- included ("Включено") ---- */
+    case 'addIncluded':
+      return { ...state, included: [...state.included, emptyLocalizedItem()] }
+
+    case 'removeIncluded':
+      return { ...state, included: removeByKey(state.included, action.key) }
+
+    case 'moveIncluded':
+      return { ...state, included: reorder(state.included, action.fromIndex, action.toIndex) }
+
+    case 'setIncludedText':
+      return {
+        ...state,
+        included: setItemText(state.included, action.key, action.lang, action.value),
+      }
+
+    /* ---- not included ("Не включено") ---- */
+    case 'addNotIncluded':
+      return { ...state, notIncluded: [...state.notIncluded, emptyLocalizedItem()] }
+
+    case 'removeNotIncluded':
+      return { ...state, notIncluded: removeByKey(state.notIncluded, action.key) }
+
+    case 'moveNotIncluded':
+      return { ...state, notIncluded: reorder(state.notIncluded, action.fromIndex, action.toIndex) }
+
+    case 'setNotIncludedText':
+      return {
+        ...state,
+        notIncluded: setItemText(state.notIncluded, action.key, action.lang, action.value),
       }
 
     /* ---- additional expenses ---- */
@@ -296,5 +343,18 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
           description: setLoc(e.description, action.lang, action.value),
         })),
       }
+
+    /* ---- regions ---- */
+    case 'toggleRegion': {
+      const isSelected = state.regions.some((r) => r.regionId === action.regionId)
+      return {
+        ...state,
+        // Turning a region back on after unchecking it starts a fresh entry (no `serverId`) —
+        // see `TourRegionFormState`'s doc comment for why that's harmless on save.
+        regions: isSelected
+          ? state.regions.filter((r) => r.regionId !== action.regionId)
+          : [...state.regions, { regionId: action.regionId }],
+      }
+    }
   }
 }

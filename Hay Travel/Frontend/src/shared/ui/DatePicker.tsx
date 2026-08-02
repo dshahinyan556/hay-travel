@@ -1,20 +1,29 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useFocusTrap, useIsCompactViewport } from '@/shared/hooks'
+import type { Locale } from '@/shared/lib/locale'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { Popover } from './Popover'
 import { Sheet, SHEET_SINGLE_DETENT } from './Sheet'
 import { ChevronDownIcon } from './icons'
 
-const MONTHS_NOMINATIVE = [
-  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
-]
-/** Genitive case — "27 июля", not "27 Июль" — for the trigger's formatted display. */
-const MONTHS_GENITIVE = [
-  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
-]
-const WEEKDAYS_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
-const WEEKDAYS_FULL = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье']
+const MONTHS_NOMINATIVE: Record<Locale, string[]> = {
+  ru: ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'],
+  en: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+}
+/** Genitive case for `ru` — "27 июля", not "27 Июль" — for the trigger's formatted display.
+ * English has no genitive case, so `en` reuses the nominative list. */
+const MONTHS_GENITIVE: Record<Locale, string[]> = {
+  ru: ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'],
+  en: MONTHS_NOMINATIVE.en,
+}
+const WEEKDAYS_SHORT: Record<Locale, string[]> = {
+  ru: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+  en: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
+}
+const WEEKDAYS_FULL: Record<Locale, string[]> = {
+  ru: ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'],
+  en: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+}
 
 const ISO_RE = /^(\d{4})-(\d{2})-(\d{2})$/
 
@@ -99,8 +108,8 @@ function getMonthGrid(viewMonth: Date): Date[] {
   return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i))
 }
 
-function formatDisplay(date: Date): string {
-  return `${date.getDate()} ${MONTHS_GENITIVE[date.getMonth()]} ${date.getFullYear()}`
+function formatDisplay(date: Date, locale: Locale): string {
+  return `${date.getDate()} ${MONTHS_GENITIVE[locale][date.getMonth()]} ${date.getFullYear()}`
 }
 
 export interface DatePickerProps {
@@ -172,7 +181,7 @@ export function DatePicker({
   min,
   max,
   disablePast = true,
-  placeholder = 'Выберите дату',
+  placeholder,
   disabled = false,
   error = false,
   required,
@@ -185,6 +194,8 @@ export function DatePicker({
 }: DatePickerProps) {
   const generatedId = useId()
   const controlId = id ?? generatedId
+  const { locale, t } = useLocale()
+  const resolvedPlaceholder = placeholder ?? t('datePicker.placeholder')
 
   const isCompact = useIsCompactViewport()
   const today = stripTime(new Date())
@@ -298,7 +309,7 @@ export function DatePicker({
   }
 
   const labelledByText = useLabelledByText(ariaLabelledBy)
-  const dialogLabel = labelledByText ?? ariaLabel ?? placeholder
+  const dialogLabel = labelledByText ?? ariaLabel ?? resolvedPlaceholder
   const grid = getMonthGrid(viewMonth)
   const weeks = Array.from({ length: 6 }, (_, week) => grid.slice(week * 7, week * 7 + 7))
 
@@ -370,18 +381,18 @@ export function DatePicker({
         <button
           type="button"
           onClick={() => moveFocus(addMonths(focusedDate, -1))}
-          aria-label="Предыдущий месяц"
+          aria-label={t('datePicker.prevMonth')}
           className={navButtonClasses}
         >
           <ChevronDownIcon size={16} className="rotate-90" />
         </button>
         <p aria-live="polite" className={`font-display text-base ${isAdmin ? 'text-neutral-900' : 'text-ink'}`}>
-          {MONTHS_NOMINATIVE[viewMonth.getMonth()]} {viewMonth.getFullYear()}
+          {MONTHS_NOMINATIVE[locale][viewMonth.getMonth()]} {viewMonth.getFullYear()}
         </p>
         <button
           type="button"
           onClick={() => moveFocus(addMonths(focusedDate, 1))}
-          aria-label="Следующий месяц"
+          aria-label={t('datePicker.nextMonth')}
           className={navButtonClasses}
         >
           <ChevronDownIcon size={16} className="-rotate-90" />
@@ -389,7 +400,7 @@ export function DatePicker({
       </div>
 
       <div aria-hidden="true" className={`mt-3 grid grid-cols-7 gap-1 text-center text-xs ${isAdmin ? 'text-neutral-400' : 'text-ink-muted'}`}>
-        {WEEKDAYS_SHORT.map((label) => (
+        {WEEKDAYS_SHORT[locale].map((label) => (
           <span key={label}>{label}</span>
         ))}
       </div>
@@ -413,7 +424,7 @@ export function DatePicker({
                   aria-pressed={selectedDate ? isSameDay(date, selectedDate) : false}
                   aria-current={isSameDay(date, today) ? 'date' : undefined}
                   aria-disabled={dayDisabled || undefined}
-                  aria-label={`${date.getDate()} ${MONTHS_GENITIVE[date.getMonth()]} ${date.getFullYear()}, ${WEEKDAYS_FULL[mondayFirstWeekday(date)]}`}
+                  aria-label={`${date.getDate()} ${MONTHS_GENITIVE[locale][date.getMonth()]} ${date.getFullYear()}, ${WEEKDAYS_FULL[locale][mondayFirstWeekday(date)]}`}
                   onClick={() => commit(date)}
                   onKeyDown={(event) => handleDayKeyDown(event, date)}
                   onFocus={() => setFocusedDate(date)}
@@ -447,7 +458,7 @@ export function DatePicker({
         className={triggerClasses}
       >
         <span className={`flex-1 truncate ${selectedDate ? '' : mutedTextClass}`}>
-          {selectedDate ? formatDisplay(selectedDate) : placeholder}
+          {selectedDate ? formatDisplay(selectedDate, locale) : resolvedPlaceholder}
         </span>
         <span aria-hidden="true" className={`shrink-0 ${mutedTextClass}`}>
           <svg viewBox="0 0 24 24" width={16} height={16} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">

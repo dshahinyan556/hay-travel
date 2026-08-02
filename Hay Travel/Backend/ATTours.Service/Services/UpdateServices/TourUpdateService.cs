@@ -35,7 +35,7 @@ namespace ATTours.BusinessServices.Services.UpdateServices
         {
             var incoming = Entities.Single();
 
-            await new TourValidationService([incoming]).ValidateEntitiesAsync();
+            await new TourValidationService([incoming], Context).ValidateEntitiesAsync();
 
             var existing = await EntityRepository.AsQueryable()
                                                  .IncludeTourGraph()
@@ -55,23 +55,35 @@ namespace ATTours.BusinessServices.Services.UpdateServices
             ReconcileCollection(existing.AdditionalExpenses, incoming.AdditionalExpenses, (target, src) =>
             {
                 target.Amount = src.Amount;
+                // Ссылка на каталог (3.4) переносится так же, как Amount — правило null/[] тут
+                // не применяется (оно только для Regions, §3.2.9).
+                target.ExpenseTemplateId = src.ExpenseTemplateId;
                 ReconcileCollection(target.Translations, src.Translations,
                     (t, s) => { t.Type = s.Type; t.LanguageCode = s.LanguageCode; t.Value = s.Value; });
             });
 
-            ReconcileCollection(existing.OrganizationalDetails, incoming.OrganizationalDetails, (target, src) =>
+            // Орг. детали и ограничения — одна коллекция, вид задаёт Type (ADR 003).
+            // Type переносится вместе с SortOrder: заметку можно перенести из одного списка
+            // в другой, не пересоздавая её. SortOrder осмыслен только внутри своего Type —
+            // сверять его между заметками разных типов нельзя.
+            ReconcileCollection(existing.Notes, incoming.Notes, (target, src) =>
             {
+                target.Type = src.Type;
                 target.SortOrder = src.SortOrder;
+                target.TourNoteTemplateId = src.TourNoteTemplateId;
                 ReconcileCollection(target.Translations, src.Translations,
                     (t, s) => { t.LanguageCode = s.LanguageCode; t.Value = s.Value; });
             });
 
-            ReconcileCollection(existing.Restrictions, incoming.Restrictions, (target, src) =>
+            // Contract rule (backend-stage3-architecture.md §3.2.9): Regions == null (поле
+            // отсутствует в запросе) — не трогаем регионы тура; Regions == [] — очищаем все.
+            // Осознанная асимметрия с остальными коллекциями графа тура — защита от стирания
+            // регионов админкой в окне между 3.2 и 4.4 (пока она не умеет присылать regions).
+            if (incoming.TourRegions is not null)
             {
-                target.SortOrder = src.SortOrder;
-                ReconcileCollection(target.Translations, src.Translations,
-                    (t, s) => { t.LanguageCode = s.LanguageCode; t.Value = s.Value; });
-            });
+                ReconcileCollection(existing.TourRegions, incoming.TourRegions,
+                    (target, src) => { target.RegionId = src.RegionId; target.SortOrder = src.SortOrder; });
+            }
 
             ReconcileTourDays(existing, incoming);
 
@@ -123,6 +135,7 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                 ReconcileCollection(existingDay.RoutePoints, incomingDay.RoutePoints, (t, s) =>
                 {
                     t.SortOrder = s.SortOrder;
+                    t.PlaceId = s.PlaceId;
                     ReconcileCollection(t.Translations, s.Translations,
                         (tt, ss) => { tt.LanguageCode = ss.LanguageCode; tt.Value = ss.Value; });
                 });

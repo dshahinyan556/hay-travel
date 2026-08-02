@@ -3,9 +3,11 @@ import { TourType } from '@/features/admin/lib/enums'
 import type { TourFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
 import { computeTotalPrice, formatTotalPrice } from '@/features/admin/tour-form/lib/price'
+import { ImageUrlField } from '@/features/admin/ui/ImageUrlField'
+import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
+import type { RegionInfoModel } from '@/shared/types/attours'
+import { RegionPicker } from './RegionPicker'
 import { TourTypeToggle } from './TourTypeToggle'
-import { MainImageField } from './MainImageField'
-import { TranslationGroup } from './TranslationGroup'
 
 interface TourFormHeaderProps {
   state: TourFormState
@@ -16,6 +18,8 @@ interface TourFormHeaderProps {
   excursionPriceError?: string
   /** When true (edit mode) the type toggle is locked — type is immutable after creation. */
   typeLocked?: boolean
+  /** The fixed 11-region reference list, for the region picker (4.4). */
+  regions: RegionInfoModel[]
 }
 
 /**
@@ -33,6 +37,7 @@ export function TourFormHeader({
   titleRuError,
   excursionPriceError,
   typeLocked,
+  regions,
 }: TourFormHeaderProps) {
   const isExcursion = state.type === TourType.Excursion
   const totalPrice = computeTotalPrice(state.days)
@@ -78,7 +83,8 @@ export function TourFormHeader({
           )}
         </div>
 
-        <MainImageField
+        <ImageUrlField
+          label="Главная картинка — URL"
           value={state.mainImageUrl}
           onChange={actions.setMainImageUrl}
           required
@@ -109,6 +115,8 @@ export function TourFormHeader({
           value={state.duration}
           onChange={(lang, value) => actions.setLocalized('duration', lang, value)}
         />
+
+        <RegionPicker regions={regions} selected={state.regions} onToggle={actions.toggleRegion} />
 
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-semibold text-neutral-700">Публикация</span>

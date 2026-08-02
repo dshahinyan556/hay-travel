@@ -1,7 +1,7 @@
 import { Field, Input } from '@/shared/ui'
-import type { TourDayFormState } from '@/features/admin/types/form'
+import type { Localized, TourDayFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
-import { TranslationGroup } from './TranslationGroup'
+import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
 import { LocalizedListEditor } from './LocalizedListEditor'
 import { GalleryImagesEditor } from './GalleryImagesEditor'
 
@@ -16,6 +16,8 @@ interface TourDayFieldsProps {
   actions: TourFormActions
   /** "Цена дня, ֏" inside a multi-day accordion vs. plain "Цена, ֏" for a flat single day. */
   priceLabel?: string
+  /** Existing route-point catalog entries offered as autocomplete. */
+  routePointSuggestions: Localized[]
 }
 
 /**
@@ -31,6 +33,7 @@ export function TourDayFields({
   routePointError,
   actions,
   priceLabel = 'Цена дня, ֏',
+  routePointSuggestions,
 }: TourDayFieldsProps) {
   return (
     <div className="flex flex-col gap-4">
@@ -78,11 +81,13 @@ export function TourDayFields({
         emptyText="Точек маршрута пока нет."
         addLabel="Добавить точку"
         itemNoun="точку"
+        itemLabel="Точка маршрута"
         error={routePointError}
         items={day.routePoints}
+        suggestions={routePointSuggestions}
         onAdd={() => actions.addRoutePoint(day.key)}
         onRemove={(key) => actions.removeRoutePoint(day.key, key)}
-        onMove={(key, direction) => actions.moveRoutePoint(day.key, key, direction)}
+        onReorder={(fromIndex, toIndex) => actions.moveRoutePoint(day.key, fromIndex, toIndex)}
         onChangeText={(key, lang, value) => actions.setRoutePointText(day.key, key, lang, value)}
       />
 
@@ -92,7 +97,7 @@ export function TourDayFields({
           items={day.gallery}
           onAdd={() => actions.addGallery(day.key)}
           onRemove={(key) => actions.removeGallery(day.key, key)}
-          onMove={(key, direction) => actions.moveGallery(day.key, key, direction)}
+          onReorder={(fromIndex, toIndex) => actions.moveGallery(day.key, fromIndex, toIndex)}
           onChangeUrl={(key, value) => actions.setGalleryUrl(day.key, key, value)}
         />
       </div>

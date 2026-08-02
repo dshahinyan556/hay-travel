@@ -8,9 +8,12 @@ using ATTours.Common.DTO.Info;
 using ATTours.Common.DTO.Request;
 using ATTours.Common.Entities;
 using ATTours.Common.Enums;
-using ATTours.Common.Extensions;
+using ATTours.Exceptions;
+using ATTours.Helper.Enums;
 using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
+using System.Linq.Expressions;
+using System.Net;
 
 namespace ATTours.ClientAPI.Controllers
 {
@@ -62,6 +65,24 @@ namespace ATTours.ClientAPI.Controllers
             await archivalService.SetArchivedAsync(model.Id, model.IsArchived);
         }
 
+        // Отметка/снятие «избранного» (не больше 6 одновременно, TourFeaturedService).
+        [HttpPatch]
+        [Route("SetFeatured")]
+        public async Task SetFeaturedAsync([FromBody] SetTourFeaturedModel model)
+        {
+            using var featuredService = new TourFeaturedService();
+            await featuredService.SetFeaturedAsync(model.Id, model.IsFeatured);
+        }
+
+        // Порядок внутри избранного — полный список Id уже избранных туров в желаемом порядке.
+        [HttpPatch]
+        [Route("ReorderFeatured")]
+        public async Task ReorderFeaturedAsync([FromBody] ReorderFeaturedToursModel model)
+        {
+            using var featuredService = new TourFeaturedService();
+            await featuredService.ReorderAsync(model.OrderedIds);
+        }
+
         [HttpDelete]
         [Route("DeleteTour")]
         public async Task DeleteTourAsync([FromQuery] int id)
@@ -100,19 +121,54 @@ namespace ATTours.ClientAPI.Controllers
         #region ClientEndpoints
         [HttpGet]
         [Route("GetToursClient")]
-        public async Task<List<TourInfoModel>> GetToursAsyncClient([FromQuery] int languageCode)
+        public async Task<List<TourCardModel>> GetToursAsyncClient([FromQuery] int languageCode, [FromQuery] string? region = null)
         {
-            using var info = new TourInfo();
-            var result = await info.GetAllAsync();
-            return mapper.Map<List<TourInfoModel>>(result.ExtractWithNeededLanguageFromCollection(languageCode));
+            using var info = new TourClientInfo();
+            // Публичный эндпоинт: только опубликованные и неархивные туры, опционально
+            // дополнительно отфильтрованные по slug региона (?region=). Неизвестный slug
+            // отдаёт пустой список, а не 400 — параметр приходит из адресной строки.
+            Expression<Func<Tour, bool>> where = x => x.IsActive && !x.IsArchived;
+            if (!string.IsNullOrWhiteSpace(region))
+                where = x => x.IsActive && !x.IsArchived && x.TourRegions.Any(tr => tr.Region.Slug == region);
+
+            // Облегчённый card-граф (D-11): резолв каталога на списке не нужен, лишь одна локаль
+            // тур-уровневых переводов. Тип возврата — List<TourCardModel> (было List<TourInfoModel>).
+            var tours = await info.GetCardsAsync(where);
+            var projected = TourOverrideProjection.ProjectCards(tours, languageCode);
+            return mapper.Map<List<TourCardModel>>(projected);
+        }
+
+        // Публичная секция «избранное» на главной: только опубликованные, неархивные,
+        // отмеченные IsFeatured туры, в порядке FeaturedSortOrder. Тот же облегчённый
+        // card-граф, что и GetToursClient (пункт 3.5/D-11) — списку карточек не нужен весь граф.
+        [HttpGet]
+        [Route("GetFeaturedToursClient")]
+        public async Task<List<TourCardModel>> GetFeaturedToursClientAsync([FromQuery] int languageCode)
+        {
+            using var info = new TourClientInfo();
+            Expression<Func<Tour, bool>> where = x => x.IsActive && !x.IsArchived && x.IsFeatured;
+            var tours = await info.GetCardsAsync(where);
+            var ordered = tours.OrderBy(x => x.FeaturedSortOrder).ToList();
+            var projected = TourOverrideProjection.ProjectCards(ordered, languageCode);
+            return mapper.Map<List<TourCardModel>>(projected);
         }
 
         [HttpGet]
         [Route("GetTourInfo")]
         public async Task<TourInfoModel> GetTourInfoAsync([FromQuery] int id, [FromQuery] int languageCode)
         {
-            using var info = new TourInfo();
-            return mapper.Map<TourInfoModel>((await info.InitUpdate(id)).ExtractWithNeededLanguage(languageCode));
+            using var info = new TourClientInfo();
+            // Клиентский граф + переводы шаблонов каталога, чтобы резолв мог свернуть own ?? template.
+            var tour = await info.GetClientDetailAsync(id);
+            // Публичный эндпоинт: черновик/архив должны выглядеть так же, как
+            // несуществующий id — иначе по ответу можно узнать о существовании тура.
+            if (tour is not { IsActive: true, IsArchived: false })
+            {
+                throw new ErrorModelException(GlobalErrorCode.TourNotFound, HttpStatusCode.NotFound, $"Tour with id {id} not found.");
+            }
+
+            // Резолв own(lang) ?? template(lang) у каталог-привязанных строк (D-9/D-10), в Service.
+            return mapper.Map<TourInfoModel>(TourOverrideProjection.ResolveDetail(tour, languageCode));
         }
         #endregion
     }

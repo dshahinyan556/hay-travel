@@ -1,289 +1,195 @@
 /**
- * Mock data source for the public site.
+ * Public-site tour data — talks to the real backend (stage 5).
  *
- * This is the ONLY module that knows where tour data comes from. Route loaders call these
- * functions; when the real API lands (`GetToursClient` / `GetTourInfo`, see `docs/backend-api.md`),
- * only this file changes — types, loaders and components stay as they are.
+ * This is the ONLY module that knows the wire shape (`shared/types/attours.ts`'s
+ * `TourCardModel`/`TourInfoModel`). Route loaders and components only ever see `Tour`/
+ * `TourDetail` (`shared/types/tour.ts`) — the mapping between the two lives entirely here, so a
+ * future backend contract change (a real `Slug`, real ratings, …) only touches this file.
  *
- * Regions are mocked here too: the `Region` entity and the many-to-many `Tour↔Region` link
- * do not exist on the backend yet (planned as a separate step), so `regionSlugs` is authored
- * by hand for now.
- *
- * Images are generated local placeholders (see `photo` below) until the client supplies real
- * photography.
+ * Every call is pinned to the visitor's current locale (`getStoredLocale`, `shared/lib/locale`)
+ * via `LanguageCode` — a plain, synchronous read rather than a hook, since route loaders run
+ * outside React. `RootLayout`'s `useRevalidateOnLocaleChange` re-runs the active loader whenever
+ * `LanguageSwitch` flips the pill, so these calls always end up re-fetched in the new language.
  */
 
-import type { RegionSlug } from '@/shared/data/armeniaRegions'
-import type { Tour } from '@/shared/types/tour'
+import { apiFetch, ApiError } from '@/shared/lib/http'
+import { REGION_BY_SLUG, type RegionSlug } from '@/shared/data/armeniaRegions'
+import { getStoredLocale, LANGUAGE_CODE_BY_LOCALE } from '@/shared/lib/locale'
+import { translate } from '@/shared/i18n/translate'
+import type {
+  AdditionalExpenseInfoModel,
+  RoutePointInfoModel,
+  TourCardModel,
+  TourInfoModel,
+  TourNoteInfoModel,
+  TourRegionInfoModel,
+  TranslatableInfoModel,
+} from '@/shared/types/attours'
+import type { ItineraryDay, Tour, TourDetail, TourKind } from '@/shared/types/tour'
 
-/** Simulates network latency so loading states are actually visible during development. */
-const LATENCY_MS = 260
-
-function delay<T>(value: T): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), LATENCY_MS))
+function currentLanguageCode(): number {
+  return LANGUAGE_CODE_BY_LOCALE[getStoredLocale()]
 }
 
-/**
- * Local placeholder scenes (layered mountains in the site palette), served from `public/`.
- *
- * Deliberately NOT remote stock URLs: the ones tried first returned 404s and rendered as broken
- * images. A generated placeholder always loads, needs no network, and looks intentional until
- * the client supplies real photography — at which point only these paths change.
- */
-const photo = (scene: string) => `/placeholders/${scene}.svg`
+/** `TourTranslationType`/`TourDayTranslationType` on the backend — both enums share the same
+ * numbering, so one local map covers tour- and day-level translations alike. */
+const TRANSLATION_TITLE = 1
+const TRANSLATION_SHORT_DESCRIPTION = 2
+const TRANSLATION_DESCRIPTION = 3
 
-const TOURS: readonly Tour[] = [
-  {
-    id: '1',
-    slug: 'yug-armenii-tatev',
-    title: 'Юг Армении: Татев и Крылья',
-    kind: 'tour',
-    regionSlugs: ['syunik', 'vayots-dzor'],
-    durationDays: 3,
-    durationNights: 2,
-    priceFrom: 290,
-    currency: 'USD',
-    coverImage: photo('tatev'),
-    gallery: [photo('tatev'), photo('gyumri')],
-    shortDescription:
-      'Три дня по югу: монастырь Татев, самая длинная в мире пассажирская канатная дорога и пещерный Хндзореск.',
-    rating: 4.9,
-    reviewCount: 128,
-    badges: [
-      { type: 'popular', label: 'Популярное' },
-      { type: 'lastSeats', label: 'Последние места' },
-    ],
-    itinerary: [
-      {
-        day: 1,
-        title: 'Ереван — Нораванк — Горис',
-        description: 'Выезд утром, остановка в ущелье Нораванка, ночёвка в Горисе.',
-        routePoints: ['Ереван', 'Арени', 'Нораванк', 'Горис'],
-      },
-      {
-        day: 2,
-        title: 'Татев и Крылья Татева',
-        description: 'Канатная дорога над Воротанским ущельем, монастырь Татев, Хндзореск.',
-        routePoints: ['Крылья Татева', 'Монастырь Татев', 'Хндзореск'],
-      },
-      {
-        day: 3,
-        title: 'Возвращение через Севан',
-        description: 'Дорога назад с остановкой у озера и обедом с рыбой.',
-        routePoints: ['Горис', 'Селимский перевал', 'Ереван'],
-      },
-    ],
-    included: ['Транспорт', 'Гид', '2 ночи в отеле', 'Завтраки', 'Канатная дорога'],
-    excluded: ['Обеды и ужины', 'Личные расходы', 'Страховка'],
-  },
-  {
-    id: '2',
-    slug: 'garni-gegard',
-    title: 'Гарни и Гегард',
-    kind: 'excursion',
-    regionSlugs: ['kotayk'],
-    durationDays: 1,
-    durationNights: 0,
-    priceFrom: 45,
-    currency: 'USD',
-    coverImage: photo('garni'),
-    gallery: [photo('garni')],
-    shortDescription:
-      'Языческий храм Гарни, симфония камней в ущелье и высеченный в скале монастырь Гегард — за один день.',
-    rating: 4.8,
-    reviewCount: 214,
-    badges: [{ type: 'guide', label: 'С гидом' }],
-    itinerary: [
-      {
-        day: 1,
-        title: 'Гарни, симфония камней, Гегард',
-        description: 'Выезд из Еревана, храм Гарни, базальтовые органы и монастырь Гегард.',
-        routePoints: ['Ереван', 'Храм Гарни', 'Симфония камней', 'Монастырь Гегард'],
-      },
-    ],
-    included: ['Транспорт', 'Гид', 'Входные билеты'],
-    excluded: ['Обед', 'Личные расходы'],
-  },
-  {
-    id: '3',
-    slug: 'sevan-dilijan',
-    title: 'Севан и Дилижан',
-    kind: 'tour',
-    regionSlugs: ['gegharkunik', 'tavush'],
-    durationDays: 2,
-    durationNights: 1,
-    priceFrom: 170,
-    currency: 'USD',
-    coverImage: photo('sevan'),
-    gallery: [photo('sevan')],
-    shortDescription:
-      'Озеро Севан, монастырь Севанаванк и «армянская Швейцария» — лесной Дилижан с ночёвкой.',
-    rating: 4.7,
-    reviewCount: 96,
-    badges: [
-      { type: 'discount', label: '−15%' },
-      { type: 'popular', label: 'Популярное' },
-    ],
-    itinerary: [
-      {
-        day: 1,
-        title: 'Севан и Севанаванк',
-        description: 'Озеро, монастырь на полуострове, ночёвка в Дилижане.',
-        routePoints: ['Ереван', 'Севанаванк', 'Дилижан'],
-      },
-      {
-        day: 2,
-        title: 'Агарцин и Гошаванк',
-        description: 'Лесные монастыри Тавуша и старый центр Дилижана.',
-        routePoints: ['Агарцин', 'Гошаванк', 'Ереван'],
-      },
-    ],
-    included: ['Транспорт', 'Гид', '1 ночь в отеле', 'Завтрак'],
-    excluded: ['Обеды', 'Личные расходы'],
-  },
-  {
-    id: '4',
-    slug: 'khor-virap-echmiadzin',
-    title: 'Хор Вирап и Эчмиадзин',
-    kind: 'excursion',
-    regionSlugs: ['ararat', 'armavir'],
-    durationDays: 1,
-    durationNights: 0,
-    priceFrom: 50,
-    currency: 'USD',
-    coverImage: photo('ararat'),
-    gallery: [photo('ararat')],
-    shortDescription:
-      'Монастырь на фоне Арарата, главный собор Армянской церкви и руины Звартноца.',
-    rating: 4.6,
-    reviewCount: 73,
-    badges: [{ type: 'guide', label: 'С гидом' }],
-    itinerary: [
-      {
-        day: 1,
-        title: 'Хор Вирап, Эчмиадзин, Звартноц',
-        description: 'Вид на Арарат, духовный центр страны и античный храм.',
-        routePoints: ['Хор Вирап', 'Эчмиадзин', 'Звартноц'],
-      },
-    ],
-    included: ['Транспорт', 'Гид', 'Входные билеты'],
-    excluded: ['Обед', 'Личные расходы'],
-  },
-  {
-    id: '5',
-    slug: 'gyumri-lori',
-    title: 'Гюмри и монастыри Лори',
-    kind: 'tour',
-    regionSlugs: ['shirak', 'lori'],
-    durationDays: 2,
-    durationNights: 1,
-    priceFrom: 185,
-    currency: 'USD',
-    coverImage: photo('gyumri'),
-    gallery: [photo('gyumri')],
-    shortDescription:
-      'Чёрный туф Гюмри, монастыри Санаин и Ахпат из списка ЮНЕСКО, ущелье Дебед.',
-    rating: 4.7,
-    reviewCount: 54,
-    badges: [{ type: 'popular', label: 'Популярное' }],
-    itinerary: [
-      {
-        day: 1,
-        title: 'Гюмри',
-        description: 'Старый центр, чёрный туф, городские кофейни. Ночёвка.',
-        routePoints: ['Ереван', 'Гюмри', 'Мармашен'],
-      },
-      {
-        day: 2,
-        title: 'Санаин и Ахпат',
-        description: 'Два монастыря ЮНЕСКО и ущелье Дебед.',
-        routePoints: ['Санаин', 'Ахпат', 'Ереван'],
-      },
-    ],
-    included: ['Транспорт', 'Гид', '1 ночь в отеле', 'Завтрак'],
-    excluded: ['Обеды', 'Личные расходы'],
-  },
-  {
-    id: '6',
-    slug: 'yerevan-city',
-    title: 'Ереван за один день',
-    kind: 'excursion',
-    regionSlugs: ['yerevan'],
-    durationDays: 1,
-    durationNights: 0,
-    priceFrom: 35,
-    currency: 'USD',
-    coverImage: photo('yerevan'),
-    gallery: [photo('yerevan')],
-    shortDescription:
-      'Каскад, площадь Республики, Вернисаж и коньячный дом — розовый город целиком.',
-    rating: 4.8,
-    reviewCount: 187,
-    badges: [{ type: 'popular', label: 'Популярное' }],
-    itinerary: [
-      {
-        day: 1,
-        title: 'Центр Еревана',
-        description: 'Пешая прогулка по центру с дегустацией коньяка.',
-        routePoints: ['Площадь Республики', 'Каскад', 'Вернисаж', 'Арарат Брэнди'],
-      },
-    ],
-    included: ['Гид', 'Дегустация'],
-    excluded: ['Обед', 'Транспорт по городу'],
-  },
-  {
-    id: '7',
-    slug: 'amberd-aragats',
-    title: 'Амберд и склоны Арагаца',
-    kind: 'excursion',
-    regionSlugs: ['aragatsotn'],
-    durationDays: 1,
-    durationNights: 0,
-    priceFrom: 55,
-    currency: 'USD',
-    coverImage: photo('aragats'),
-    gallery: [photo('aragats')],
-    shortDescription: 'Крепость Амберд на высоте 2300 м, озеро Кари и монастырь Сагмосаванк.',
-    rating: 4.5,
-    reviewCount: 41,
-    badges: [{ type: 'lastSeats', label: 'Последние места' }],
-    itinerary: [
-      {
-        day: 1,
-        title: 'Амберд, озеро Кари, Сагмосаванк',
-        description: 'Высокогорный день на склонах Арагаца.',
-        routePoints: ['Сагмосаванк', 'Амберд', 'Озеро Кари'],
-      },
-    ],
-    included: ['Транспорт', 'Гид'],
-    excluded: ['Обед', 'Тёплая одежда'],
-  },
-]
+/** `TourType` on the backend. */
+const TOUR_TYPE_EXCURSION = 2
 
-export function getTours(): Promise<readonly Tour[]> {
-  return delay(TOURS)
+/** `TourNoteType` on the backend. */
+const NOTE_TYPE_ORGANIZATIONAL_DETAIL = 1
+const NOTE_TYPE_RESTRICTION = 2
+const NOTE_TYPE_INCLUDED = 3
+const NOTE_TYPE_NOT_INCLUDED = 4
+
+/** Route points, expenses and notes each carry a single textual field, always `type: 0` — see
+ * the admin mapper's identical convention in `features/admin/catalog/lib/catalogMapper.ts`. */
+const TRANSLATION_SINGLE_FIELD = 0
+
+/** Generated placeholder scene, same one the mocks used — shown when a tour has no photo yet. */
+const FALLBACK_IMAGE = '/placeholders/tatev.svg'
+
+function pickTranslation(translations: readonly TranslatableInfoModel[], type: number): string {
+  return translations.find((t) => t.type === type)?.value ?? ''
 }
 
-/** Newest/most prominent products for the home page showcase. */
-export function getFeaturedTours(limit = 3): Promise<readonly Tour[]> {
-  return delay(TOURS.filter((t) => t.badges.length > 0).slice(0, limit))
+function toKind(type: number): TourKind {
+  return type === TOUR_TYPE_EXCURSION ? 'excursion' : 'tour'
 }
 
-export function getTourBySlug(slug: string): Promise<Tour | undefined> {
-  return delay(TOURS.find((t) => t.slug === slug))
+function nightsFor(kind: TourKind, durationDays: number): number {
+  return kind === 'excursion' ? 0 : Math.max(durationDays - 1, 0)
 }
 
-export function getToursByRegion(region: RegionSlug): Promise<readonly Tour[]> {
-  return delay(TOURS.filter((t) => t.regionSlugs.includes(region)))
+/** A hand-authored slug from `TourRegionInfoModel` is trusted data (3.2 confirmed 11/11 against
+ * the frontend's own list), but this guards it anyway rather than letting `REGION_BY_SLUG[slug]`
+ * read as `undefined` deep inside a component that assumes every entry resolves. */
+function toRegionSlugs(regions: readonly TourRegionInfoModel[]): RegionSlug[] {
+  return regions.map((r) => r.slug).filter((slug): slug is RegionSlug => slug in REGION_BY_SLUG)
+}
+
+function mapCard(card: TourCardModel): Tour {
+  const kind = toKind(card.type)
+  return {
+    id: String(card.id),
+    title: pickTranslation(card.translations, TRANSLATION_TITLE),
+    kind,
+    regionSlugs: toRegionSlugs(card.regions),
+    durationDays: card.durationDays,
+    durationNights: nightsFor(kind, card.durationDays),
+    priceFrom: card.totalPrice ?? 0,
+    coverImage: card.mainImageUrl || FALLBACK_IMAGE,
+    shortDescription: pickTranslation(card.translations, TRANSLATION_SHORT_DESCRIPTION),
+  }
+}
+
+function sortedRoutePoints(points: readonly RoutePointInfoModel[]): string[] {
+  return [...points]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((p) => pickTranslation(p.translations, TRANSLATION_SINGLE_FIELD))
+    .filter((value) => value !== '')
+}
+
+function notesOfType(notes: readonly TourNoteInfoModel[], type: number): string[] {
+  return notes
+    .filter((n) => n.type === type)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((n) => pickTranslation(n.translations, TRANSLATION_SINGLE_FIELD))
+    .filter((value) => value !== '')
+}
+
+function mapExpenses(expenses: readonly AdditionalExpenseInfoModel[]) {
+  return expenses.map((e) => ({
+    label: pickTranslation(e.translations, TRANSLATION_SINGLE_FIELD),
+    amount: e.amount,
+  }))
+}
+
+function mapDetail(info: TourInfoModel): TourDetail {
+  const kind = toKind(info.type)
+  const durationDays = info.tourDays.length
+  const coverImage = info.mainImageUrl || FALLBACK_IMAGE
+
+  const locale = getStoredLocale()
+  const itinerary: ItineraryDay[] = info.tourDays.map((day, index) => ({
+    day: index + 1,
+    title:
+      pickTranslation(day.translations, TRANSLATION_TITLE) ||
+      translate(locale, 'tourDetail.dayFallback', { n: index + 1 }),
+    description: pickTranslation(day.translations, TRANSLATION_DESCRIPTION),
+    routePoints: sortedRoutePoints(day.routePoints),
+  }))
+
+  const gallery = info.tourDays.flatMap((day) =>
+    [...day.galleryImages].sort((a, b) => a.sortOrder - b.sortOrder).map((img) => img.url),
+  )
+
+  return {
+    id: String(info.id),
+    title: pickTranslation(info.translations, TRANSLATION_TITLE),
+    kind,
+    regionSlugs: toRegionSlugs(info.regions ?? []),
+    durationDays,
+    durationNights: nightsFor(kind, durationDays),
+    priceFrom: info.totalPrice ?? 0,
+    coverImage,
+    shortDescription: pickTranslation(info.translations, TRANSLATION_SHORT_DESCRIPTION),
+    gallery: gallery.length > 0 ? gallery : [coverImage],
+    itinerary,
+    organizationalDetails: notesOfType(info.notes, NOTE_TYPE_ORGANIZATIONAL_DETAIL),
+    restrictions: notesOfType(info.notes, NOTE_TYPE_RESTRICTION),
+    included: notesOfType(info.notes, NOTE_TYPE_INCLUDED),
+    notIncluded: notesOfType(info.notes, NOTE_TYPE_NOT_INCLUDED),
+    expenses: mapExpenses(info.additionalExpenses),
+  }
+}
+
+export async function getTours(): Promise<readonly Tour[]> {
+  const cards = await apiFetch<TourCardModel[]>(`api/Tour/GetToursClient?languageCode=${currentLanguageCode()}`)
+  return cards.map(mapCard)
+}
+
+/** Home page showcase — tours the admin marked `IsFeatured` (at most 6, `Продукты → Избранные`),
+ * in their admin-set display order. Shows exactly however many are marked, including none: no
+ * "first N tours" filler when the admin hasn't picked any yet (David, 2026-08-02). */
+export async function getFeaturedTours(): Promise<readonly Tour[]> {
+  const cards = await apiFetch<TourCardModel[]>(`api/Tour/GetFeaturedToursClient?languageCode=${currentLanguageCode()}`)
+  return cards.map(mapCard)
+}
+
+/** `undefined` for a 404 (hidden or nonexistent id) — same contract the mock had, so
+ * `tourDetailLoader`'s "not found" branch needs no change. Any other failure (network, 5xx)
+ * still throws, which the route's `errorElement` already handles. */
+export async function getTourInfo(id: string): Promise<TourDetail | undefined> {
+  try {
+    const info = await apiFetch<TourInfoModel>(
+      `api/Tour/GetTourInfo?id=${encodeURIComponent(id)}&languageCode=${currentLanguageCode()}`,
+    )
+    return mapDetail(info)
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return undefined
+    throw err
+  }
+}
+
+/** Region tours are fetched per selection (not sliced from an already-loaded list) because that
+ * is what the real `?region=` filter on `GetToursClient` does — `RegionExplorer`'s
+ * loading/error states are the ones that actually run in production, not decoration. */
+export async function getToursByRegion(region: RegionSlug): Promise<readonly Tour[]> {
+  const cards = await apiFetch<TourCardModel[]>(
+    `api/Tour/GetToursClient?languageCode=${currentLanguageCode()}&region=${encodeURIComponent(region)}`,
+  )
+  return cards.map(mapCard)
 }
 
 /**
  * How many products each region has — drives the map tooltip counters and dims regions
- * with nothing to sell. Computed synchronously: the map needs it to paint its initial state,
- * and it is derived from data the page already has.
- *
- * Note Vayots Dzor deliberately has only a pass-through tour, and some regions have none —
- * the empty region panel is a real state that has to look intentional.
+ * with nothing to sell. Computed synchronously from an already-loaded list (the map needs it
+ * to paint its initial state) rather than a server round trip.
  */
 export function countToursByRegion(tours: readonly Tour[]): Record<string, number> {
   const counts: Record<string, number> = {}

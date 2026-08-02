@@ -17,9 +17,21 @@ namespace ATTours.DataLayer
         public DbSet<TourDayInfoTranslation> TourDayInfoTranslations { get;set; }
         public DbSet<RoutePoint> RoutePoints { get; set; }
         public DbSet<RoutePointTranslation> RoutePointTranslations { get; set; }
-        public DbSet<OrganizationalDetail> OrganizationalDetails { get; set; }
-        public DbSet<OrganizationalDetailTranslation> OrganizationalDetailTranslations { get; set; }
-        public DbSet<Restriction> Restrictions { get; set; }
-        public DbSet<RestrictionTranslation> RestrictionTranslations { get; set; }
+        public DbSet<TourNote> TourNotes { get; set; }
+        public DbSet<TourNoteTranslation> TourNoteTranslations { get; set; }
+        public DbSet<SiteSetting> SiteSettings { get; set; }
+        public DbSet<SiteSettingTranslation> SiteSettingTranslations { get; set; }
+        public DbSet<Region> Regions { get; set; }
+        public DbSet<RegionTranslation> RegionTranslations { get; set; }
+        public DbSet<TourRegion> TourRegions { get; set; }
+        public DbSet<Place> Places { get; set; }
+        public DbSet<PlaceTranslation> PlaceTranslations { get; set; }
+        public DbSet<ExpenseTemplate> ExpenseTemplates { get; set; }
+        public DbSet<ExpenseTemplateTranslation> ExpenseTemplateTranslations { get; set; }
+        public DbSet<TourNoteTemplate> TourNoteTemplates { get; set; }
+        public DbSet<TourNoteTemplateTranslation> TourNoteTemplateTranslations { get; set; }
+        public DbSet<User> Users { get; set; }
+        public DbSet<UserRole> UserRoles { get; set; }
+        public DbSet<PasswordRecovery> PasswordRecoveries { get; set; }
     }
 }

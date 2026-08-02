@@ -1,10 +1,15 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { motion } from 'framer-motion'
 import { REGIONS, MAP_VIEWBOX, type RegionSlug } from '@/shared/data/armeniaRegions'
 // Geometry is a separate module so it only loads with the map — see `regionGeometry.ts`.
 import { REGION_GEOMETRY, SEVAN_GEOMETRY } from '@/shared/data/regionGeometry'
 import { formatTourCount } from '@/shared/lib/format'
-import { useIsTouchDevice } from '@/shared/hooks'
+import { useIsTouchDevice, useReducedMotion } from '@/shared/hooks'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
+
+/** `--dur-fast` / `--ease-out-soft` (`index.css`) in framer's units — keep them in step. */
+const DUR_FAST_S = 0.22
+const EASE_OUT_SOFT: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
 interface ArmeniaMapProps {
   selected: RegionSlug | null
@@ -13,6 +18,10 @@ interface ArmeniaMapProps {
   counts: Record<string, number>
   /** Tap on the map background (no region hit) — used to drop the mobile highlight. */
   onDismiss?: () => void
+  /** Admin-editable teaser text for the CURRENT locale, keyed by slug (`shared/api/regions.ts`).
+   * Falls back to the static `blurb`/`blurbEn` baked into `armeniaRegions.ts` per-slug when a
+   * slug is missing (still loading, or the fetch failed). */
+  blurbOverride?: Partial<Record<RegionSlug, string>>
 }
 
 /**
@@ -63,10 +72,24 @@ const PAINT_ORDER = [...REGIONS].sort(
  * Every colour here is a `var(--map-*)` token declared per theme in `index.css`. They are read
  * as raw CSS vars rather than Tailwind classes because these are SVG presentation attributes
  * (`fill`/`stroke`) driven by component state, not static classes.
+ *
+ * ── Entrance (2.4) ────────────────────────────────────────────────────────────────────────────
+ * The provinces fade and scale in one after another (`--stagger-map` apart), then the labels and
+ * the lake follow once the whole wave has landed. Two details are load-bearing:
+ *  1. The animation is on a WRAPPER `<g>`, not on the `<path>` itself. `.region-in` is switched off
+ *     under `prefers-reduced-motion` with `transition: none !important`, and on the path that
+ *     `!important` would also kill `.region-path`'s fill/stroke transition — which the spec keeps
+ *     alive on purpose, because a 420ms colour swap is a tint, not motion. Separate elements,
+ *     separate concerns, and the reduced-motion rule can never reach the colour.
+ *  2. `--i` is set inline because the paths are not plain siblings of a reveal group; the wave
+ *     follows PAINT_ORDER, so the capital (drawn last) also arrives last.
  */
-export function ArmeniaMap({ selected, onSelect, counts, onDismiss }: ArmeniaMapProps) {
+export function ArmeniaMap({ selected, onSelect, counts, onDismiss, blurbOverride }: ArmeniaMapProps) {
   const [hovered, setHovered] = useState<RegionSlug | null>(null)
   const isTouch = useIsTouchDevice()
+  const reducedMotion = useReducedMotion()
+  const { locale, t } = useLocale()
+  const regionName = (region: { ru: string; en: string }) => (locale === 'en' ? region.en : region.ru)
   const activeSlug = hovered ?? selected
   const active = activeSlug ? REGIONS.find((r) => r.slug === activeSlug) : null
 
@@ -76,13 +99,13 @@ export function ArmeniaMap({ selected, onSelect, counts, onDismiss }: ArmeniaMap
         viewBox={`0 0 ${MAP_VIEWBOX.width} ${MAP_VIEWBOX.height}`}
         className="h-auto w-full"
         role="group"
-        aria-label="Карта регионов Армении"
+        aria-label={t('regions.mapAriaLabel')}
         // Gaps between provinces belong to the <svg> itself; a tap there means "never mind".
         onClick={(event) => {
           if (event.target === event.currentTarget) onDismiss?.()
         }}
       >
-        {PAINT_ORDER.map((region) => {
+        {PAINT_ORDER.map((region, index) => {
           const isSelected = selected === region.slug
           const isHovered = hovered === region.slug
           // Regions with nothing to sell stay legible but visibly quieter. Expressed as a
@@ -91,44 +114,45 @@ export function ArmeniaMap({ selected, onSelect, counts, onDismiss }: ArmeniaMap
           const isMuted = (counts[region.slug] ?? 0) === 0 && !isSelected && !isHovered
 
           return (
-            <path
-              key={region.slug}
-              d={REGION_GEOMETRY[region.slug]}
-              className="region-path cursor-pointer"
-              fillRule="evenodd"
-              fill={
-                isSelected
-                  ? 'var(--map-region-selected-fill)'
-                  : isHovered
-                    ? 'var(--map-region-hover-fill)'
-                    : isMuted
-                      ? 'var(--map-region-muted-fill)'
-                      : 'var(--map-region-fill)'
-              }
-              stroke={
-                isSelected
-                  ? 'var(--map-region-stroke-selected)'
-                  : isHovered
-                    ? 'var(--map-region-stroke-hover)'
-                    : 'var(--map-region-stroke)'
-              }
-              strokeWidth={isSelected ? 3 : isHovered ? 2 : 1.4}
-              tabIndex={0}
-              role="button"
-              aria-pressed={isSelected}
-              aria-label={`${region.ru} — ${formatTourCount(counts[region.slug] ?? 0)}`}
-              onClick={() => onSelect(region.slug)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  onSelect(region.slug)
+            <g key={region.slug} className="region-in" style={{ '--i': index } as CSSProperties}>
+              <path
+                d={REGION_GEOMETRY[region.slug]}
+                className="region-path cursor-pointer"
+                fillRule="evenodd"
+                fill={
+                  isSelected
+                    ? 'var(--map-region-selected-fill)'
+                    : isHovered
+                      ? 'var(--map-region-hover-fill)'
+                      : isMuted
+                        ? 'var(--map-region-muted-fill)'
+                        : 'var(--map-region-fill)'
                 }
-              }}
-              onMouseEnter={() => setHovered(region.slug)}
-              onMouseLeave={() => setHovered(null)}
-              onFocus={() => setHovered(region.slug)}
-              onBlur={() => setHovered(null)}
-            />
+                stroke={
+                  isSelected
+                    ? 'var(--map-region-stroke-selected)'
+                    : isHovered
+                      ? 'var(--map-region-stroke-hover)'
+                      : 'var(--map-region-stroke)'
+                }
+                strokeWidth={isSelected ? 3 : isHovered ? 2 : 1.4}
+                tabIndex={0}
+                role="button"
+                aria-pressed={isSelected}
+                aria-label={`${regionName(region)} — ${formatTourCount(counts[region.slug] ?? 0, locale)}`}
+                onClick={() => onSelect(region.slug)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    onSelect(region.slug)
+                  }
+                }}
+                onMouseEnter={() => setHovered(region.slug)}
+                onMouseLeave={() => setHovered(null)}
+                onFocus={() => setHovered(region.slug)}
+                onBlur={() => setHovered(null)}
+              />
+            </g>
           )
         })}
 
@@ -137,13 +161,17 @@ export function ArmeniaMap({ selected, onSelect, counts, onDismiss }: ArmeniaMap
           so a tap on the lake falls through to the Gegharkunik <path> beneath it (the lake is part
           of that province). Sits below the labels, which are drawn last and keep their halo, so the
           "Гегаркуник" label stays legible where it overlaps the water.
+
+          `.map-label-in` puts it on the same delayed fade as the labels (2.4): the lake belongs to
+          the map's second layer, and having it painted while the provinces were still arriving
+          made it look like it was floating free of Gegharkunik.
         */}
         <path
           d={SEVAN_GEOMETRY}
           fill="var(--map-water-fill)"
           stroke="var(--map-water-stroke)"
           strokeWidth={1.2}
-          className="pointer-events-none"
+          className="map-label-in pointer-events-none"
           aria-hidden="true"
         />
 
@@ -175,7 +203,7 @@ export function ArmeniaMap({ selected, onSelect, counts, onDismiss }: ArmeniaMap
           const [x, y] = region.labelAt
 
           return (
-            <g key={`label-${region.slug}`} className="pointer-events-none">
+            <g key={`label-${region.slug}`} className="map-label-in pointer-events-none">
               {region.isEnclave && (
                 <circle
                   cx={x}
@@ -206,7 +234,7 @@ export function ArmeniaMap({ selected, onSelect, counts, onDismiss }: ArmeniaMap
                 stroke="var(--map-label-halo)"
                 strokeWidth={6}
               >
-                {region.ru}
+                {regionName(region)}
               </text>
             </g>
           )
@@ -217,13 +245,18 @@ export function ArmeniaMap({ selected, onSelect, counts, onDismiss }: ArmeniaMap
           normal type scale and wrap naturally on narrow screens. */}
       {active && (
         <motion.div
-          initial={{ opacity: 0, y: 6 }}
+          // Was framer's default spring with no transition of its own. Under reduced motion the
+          // readout still APPEARS — it just doesn't travel the 6px on the way in.
+          initial={{ opacity: 0, y: reducedMotion ? 0 : 6 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: reducedMotion ? 0 : DUR_FAST_S, ease: EASE_OUT_SOFT }}
           className="pointer-events-none absolute top-3 left-3 max-w-[70%] rounded-xl bg-map-tooltip-bg px-3.5 py-2.5 shadow-[var(--shadow-md)] ring-1 ring-map-tooltip-edge backdrop-blur-sm"
         >
-          <p className="font-display text-lg leading-tight text-accent-strong">{active.ru}</p>
-          <p className="mt-0.5 text-xs text-map-tooltip-text-muted">{active.blurb}</p>
-          <p className="mt-1 text-xs text-gold-ink">{formatTourCount(counts[active.slug] ?? 0)}</p>
+          <p className="font-display text-lg leading-tight text-accent-strong">{regionName(active)}</p>
+          <p className="mt-0.5 text-xs text-map-tooltip-text-muted">
+            {blurbOverride?.[active.slug] ?? (locale === 'en' ? active.blurbEn : active.blurb)}
+          </p>
+          <p className="mt-1 text-xs text-gold-ink">{formatTourCount(counts[active.slug] ?? 0, locale)}</p>
         </motion.div>
       )}
     </div>

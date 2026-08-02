@@ -36,7 +36,8 @@ export function Tabs({ tabs, activeId, onChange, label }: TabsProps) {
               role="tab"
               aria-selected={selected}
               onClick={() => onChange(tab.id)}
-              className={`-mb-px flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-sm font-semibold transition-colors ${
+              // Tabs are a segment control: colour cross-fade only, on `--dur-micro` (2.4 §5).
+              className={`-mb-px flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-sm font-semibold transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] ${
                 selected
                   ? 'border-brand-700 text-brand-800'
                   : 'border-transparent text-neutral-500 hover:text-neutral-800'

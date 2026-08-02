@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { MountainIcon } from '@/shared/ui/icons'
 
 type Mode = 'login' | 'register'
@@ -17,6 +18,7 @@ type Mode = 'login' | 'register'
 export function AuthPage() {
   const [mode, setMode] = useState<Mode>('login')
   const isRegister = mode === 'register'
+  const { t } = useLocale()
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col px-4 py-16 sm:py-24">
@@ -25,12 +27,10 @@ export function AuthPage() {
           <MountainIcon size={28} />
         </span>
         <h1 className="text-gold-sheen mt-3 font-display text-3xl">
-          {isRegister ? 'Создать аккаунт' : 'С возвращением'}
+          {isRegister ? t('auth.createAccount') : t('auth.welcomeBack')}
         </h1>
         <p className="mt-2 text-sm text-ink-muted">
-          {isRegister
-            ? 'Сохраняйте избранные маршруты и следите за бронями.'
-            : 'Войдите, чтобы видеть свои брони и избранное.'}
+          {isRegister ? t('auth.subtitleRegister') : t('auth.subtitleLogin')}
         </p>
       </div>
 
@@ -47,7 +47,7 @@ export function AuthPage() {
                 mode === value ? 'bg-wine text-gold-light' : 'text-ink-dim hover:text-gold-ink',
               ].join(' ')}
             >
-              {value === 'login' ? 'Вход' : 'Регистрация'}
+              {value === 'login' ? t('auth.tabLogin') : t('auth.tabRegister')}
             </button>
           ))}
         </div>
@@ -59,10 +59,10 @@ export function AuthPage() {
             // Intentionally inert until the auth endpoint exists.
           }}
         >
-          {isRegister && <AuthField label="Имя" type="text" autoComplete="name" />}
-          <AuthField label="Email" type="email" autoComplete="email" />
+          {isRegister && <AuthField label={t('auth.name')} type="text" autoComplete="name" />}
+          <AuthField label={t('auth.email')} type="email" autoComplete="email" />
           <AuthField
-            label="Пароль"
+            label={t('auth.password')}
             type="password"
             autoComplete={isRegister ? 'new-password' : 'current-password'}
           />
@@ -70,7 +70,7 @@ export function AuthPage() {
           {!isRegister && (
             <div className="text-right">
               <button type="button" className="text-xs text-gold-ink transition-colors hover:text-accent-strong">
-                Забыли пароль?
+                {t('auth.forgotPassword')}
               </button>
             </div>
           )}
@@ -79,20 +79,18 @@ export function AuthPage() {
             type="submit"
             className="w-full rounded-full bg-gold-fill px-5 py-3 text-sm font-medium text-gold-on transition-colors hover:bg-gold-fill-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-panel focus-visible:outline-none"
           >
-            {isRegister ? 'Зарегистрироваться' : 'Войти'}
+            {isRegister ? t('auth.submitRegister') : t('auth.submitLogin')}
           </button>
         </form>
 
-        <p className="mt-4 text-center text-xs text-ink-muted">
-          Продолжая, вы соглашаетесь с условиями сервиса.
-        </p>
+        <p className="mt-4 text-center text-xs text-ink-muted">{t('auth.terms')}</p>
       </div>
 
       <Link
         to="/"
         className="mt-6 text-center text-sm text-ink-dim transition-colors hover:text-gold-ink"
       >
-        Вернуться на главную
+        {t('auth.backHome')}
       </Link>
     </div>
   )

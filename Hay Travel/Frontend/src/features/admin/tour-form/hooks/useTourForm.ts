@@ -15,7 +15,7 @@ export type TourFormMode =
   | { kind: 'create' }
   | { kind: 'edit'; tourId: number; initialIsActive: boolean }
 
-import { useMemo, useReducer, useState } from 'react'
+import { useMemo, useReducer, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { createTour, setTourActive, updateTour } from '@/features/admin/api/adminTours'
 import { formToCreateModel, formToUpdateModel } from '@/features/admin/lib/tourMapper'
@@ -29,13 +29,17 @@ import {
 import type {
   DayLocalizedField,
   LangKey,
-  MoveDirection,
   TourLocalizedField,
 } from '@/features/admin/tour-form/reducer/tourFormReducer'
 import { validateTourForm } from '@/features/admin/tour-form/lib/validation'
 import type { TourFormValidation } from '@/features/admin/tour-form/lib/validation'
 
-/** Bound action creators — a thin, stable façade over `dispatch`. */
+/**
+ * Bound action creators — a thin, stable façade over `dispatch`.
+ *
+ * The `move*` members take a from/to index pair because reordering is drag-and-drop
+ * (`shared/ui/SortableList` reports exactly that); nested lists still take the owning `dayKey`.
+ */
 export interface TourFormActions {
   setType: (value: TourType) => void
   setMainImageUrl: (value: string) => void
@@ -44,34 +48,46 @@ export interface TourFormActions {
   // days
   addDay: () => void
   removeDay: (dayKey: string) => void
-  moveDay: (dayKey: string, direction: MoveDirection) => void
+  moveDay: (fromIndex: number, toIndex: number) => void
   setDayPrice: (dayKey: string, value: string) => void
   setDayLocalized: (dayKey: string, field: DayLocalizedField, lang: LangKey, value: string) => void
   // route points
   addRoutePoint: (dayKey: string) => void
   removeRoutePoint: (dayKey: string, key: string) => void
-  moveRoutePoint: (dayKey: string, key: string, direction: MoveDirection) => void
+  moveRoutePoint: (dayKey: string, fromIndex: number, toIndex: number) => void
   setRoutePointText: (dayKey: string, key: string, lang: LangKey, value: string) => void
   // gallery
   addGallery: (dayKey: string) => void
   removeGallery: (dayKey: string, key: string) => void
-  moveGallery: (dayKey: string, key: string, direction: MoveDirection) => void
+  moveGallery: (dayKey: string, fromIndex: number, toIndex: number) => void
   setGalleryUrl: (dayKey: string, key: string, value: string) => void
   // organizational details
   addOrgDetail: () => void
   removeOrgDetail: (key: string) => void
-  moveOrgDetail: (key: string, direction: MoveDirection) => void
+  moveOrgDetail: (fromIndex: number, toIndex: number) => void
   setOrgDetailText: (key: string, lang: LangKey, value: string) => void
   // restrictions
   addRestriction: () => void
   removeRestriction: (key: string) => void
-  moveRestriction: (key: string, direction: MoveDirection) => void
+  moveRestriction: (fromIndex: number, toIndex: number) => void
   setRestrictionText: (key: string, lang: LangKey, value: string) => void
+  // included
+  addIncluded: () => void
+  removeIncluded: (key: string) => void
+  moveIncluded: (fromIndex: number, toIndex: number) => void
+  setIncludedText: (key: string, lang: LangKey, value: string) => void
+  // not included
+  addNotIncluded: () => void
+  removeNotIncluded: (key: string) => void
+  moveNotIncluded: (fromIndex: number, toIndex: number) => void
+  setNotIncludedText: (key: string, lang: LangKey, value: string) => void
   // expenses
   addExpense: () => void
   removeExpense: (key: string) => void
   setExpenseAmount: (key: string, value: string) => void
   setExpenseDescription: (key: string, lang: LangKey, value: string) => void
+  // regions
+  toggleRegion: (regionId: number) => void
 }
 
 export interface UseTourFormResult {
@@ -83,6 +99,8 @@ export interface UseTourFormResult {
   submit: () => void
   isSubmitting: boolean
   error: string | null
+  /** True once the form differs from what it was seeded with. Drives the unsaved-changes guard. */
+  isDirty: boolean
 }
 
 /** Turn any thrown value from the save call into a user-facing Russian message. */
@@ -112,6 +130,9 @@ export function useTourForm(
 ): UseTourFormResult {
   const navigate = useNavigate()
   const [state, dispatch] = useReducer(tourFormReducer, initialState, normalizeInitialState)
+  // Snapshot of the normalized initial state, captured once on mount — never a dep of anything,
+  // so later renders can't shift the baseline out from under `isDirty`.
+  const baselineRef = useRef(state)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
@@ -126,42 +147,63 @@ export function useTourForm(
 
       addDay: () => dispatch({ kind: 'addDay' }),
       removeDay: (dayKey) => dispatch({ kind: 'removeDay', dayKey }),
-      moveDay: (dayKey, direction) => dispatch({ kind: 'moveDay', dayKey, direction }),
+      moveDay: (fromIndex, toIndex) => dispatch({ kind: 'moveDay', fromIndex, toIndex }),
       setDayPrice: (dayKey, value) => dispatch({ kind: 'setDayPrice', dayKey, value }),
       setDayLocalized: (dayKey, field, lang, value) =>
         dispatch({ kind: 'setDayLocalized', dayKey, field, lang, value }),
 
       addRoutePoint: (dayKey) => dispatch({ kind: 'addRoutePoint', dayKey }),
       removeRoutePoint: (dayKey, key) => dispatch({ kind: 'removeRoutePoint', dayKey, key }),
-      moveRoutePoint: (dayKey, key, direction) =>
-        dispatch({ kind: 'moveRoutePoint', dayKey, key, direction }),
+      moveRoutePoint: (dayKey, fromIndex, toIndex) =>
+        dispatch({ kind: 'moveRoutePoint', dayKey, fromIndex, toIndex }),
       setRoutePointText: (dayKey, key, lang, value) =>
         dispatch({ kind: 'setRoutePointText', dayKey, key, lang, value }),
 
       addGallery: (dayKey) => dispatch({ kind: 'addGallery', dayKey }),
       removeGallery: (dayKey, key) => dispatch({ kind: 'removeGallery', dayKey, key }),
-      moveGallery: (dayKey, key, direction) =>
-        dispatch({ kind: 'moveGallery', dayKey, key, direction }),
+      moveGallery: (dayKey, fromIndex, toIndex) =>
+        dispatch({ kind: 'moveGallery', dayKey, fromIndex, toIndex }),
       setGalleryUrl: (dayKey, key, value) => dispatch({ kind: 'setGalleryUrl', dayKey, key, value }),
 
       addOrgDetail: () => dispatch({ kind: 'addOrgDetail' }),
       removeOrgDetail: (key) => dispatch({ kind: 'removeOrgDetail', key }),
-      moveOrgDetail: (key, direction) => dispatch({ kind: 'moveOrgDetail', key, direction }),
+      moveOrgDetail: (fromIndex, toIndex) => dispatch({ kind: 'moveOrgDetail', fromIndex, toIndex }),
       setOrgDetailText: (key, lang, value) => dispatch({ kind: 'setOrgDetailText', key, lang, value }),
 
       addRestriction: () => dispatch({ kind: 'addRestriction' }),
       removeRestriction: (key) => dispatch({ kind: 'removeRestriction', key }),
-      moveRestriction: (key, direction) => dispatch({ kind: 'moveRestriction', key, direction }),
+      moveRestriction: (fromIndex, toIndex) => dispatch({ kind: 'moveRestriction', fromIndex, toIndex }),
       setRestrictionText: (key, lang, value) =>
         dispatch({ kind: 'setRestrictionText', key, lang, value }),
+
+      addIncluded: () => dispatch({ kind: 'addIncluded' }),
+      removeIncluded: (key) => dispatch({ kind: 'removeIncluded', key }),
+      moveIncluded: (fromIndex, toIndex) => dispatch({ kind: 'moveIncluded', fromIndex, toIndex }),
+      setIncludedText: (key, lang, value) => dispatch({ kind: 'setIncludedText', key, lang, value }),
+
+      addNotIncluded: () => dispatch({ kind: 'addNotIncluded' }),
+      removeNotIncluded: (key) => dispatch({ kind: 'removeNotIncluded', key }),
+      moveNotIncluded: (fromIndex, toIndex) => dispatch({ kind: 'moveNotIncluded', fromIndex, toIndex }),
+      setNotIncludedText: (key, lang, value) =>
+        dispatch({ kind: 'setNotIncludedText', key, lang, value }),
 
       addExpense: () => dispatch({ kind: 'addExpense' }),
       removeExpense: (key) => dispatch({ kind: 'removeExpense', key }),
       setExpenseAmount: (key, value) => dispatch({ kind: 'setExpenseAmount', key, value }),
       setExpenseDescription: (key, lang, value) =>
         dispatch({ kind: 'setExpenseDescription', key, lang, value }),
+
+      toggleRegion: (regionId) => dispatch({ kind: 'toggleRegion', regionId }),
     }),
     [],
+  )
+
+  // The form has no natural "diff" the way settings does (a handful of keyed fields) — it's a
+  // deep tree of days/lists reshuffled by drag-and-drop, so a structural snapshot comparison is
+  // simpler and just as correct than hand-rolling a walk over every nested list.
+  const isDirty = useMemo(
+    () => JSON.stringify(state) !== JSON.stringify(baselineRef.current),
+    [state],
   )
 
   const rawValidation = useMemo(() => validateTourForm(state), [state])
@@ -194,5 +236,5 @@ export function useTourForm(
       })
   }
 
-  return { state, actions, validation, hasAttemptedSubmit, submit, isSubmitting, error }
+  return { state, actions, validation, hasAttemptedSubmit, submit, isSubmitting, error, isDirty }
 }

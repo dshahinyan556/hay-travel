@@ -231,30 +231,67 @@
 
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1); /* reveals, sheet */
   --ease-in-out-soft: cubic-bezier(0.4, 0, 0.2, 1); /* colour swap, toggles */
+  --ease-back-out: cubic-bezier(0.34, 1.4, 0.64, 1); /* card/button lift — slight overshoot */
 
   --dur-micro: 150ms; /* button/chip/link colour */
-  --dur-fast: 220ms; /* card hover, region fill */
-  --dur-base: 340ms; /* sheet, modal, map reveal */
+  --dur-fast: 220ms; /* card hover, blink, tooltip, preview bar */
+  --dur-base: 340ms; /* sheet, accordion, chevron, map reveal */
+  --dur-map: 420ms; /* region fill/stroke — a COLOUR swap, not motion */
   --dur-reveal: 700ms; /* scroll-reveal */
   --dur-kenburns: 18s; /* hero slow zoom */
+
+  --stagger: 70ms; /* step between children of a revealed block */
+  --stagger-map: 45ms; /* step between the 11 map regions */
 }
 
+/**
+ * Reduced motion (2.4).
+ *
+ * Two token groups on purpose:
+ *  - MOTION durations collapse to 1ms — the state change still happens, it just doesn't travel.
+ *  - COLOUR durations (`--dur-micro`, `--dur-map`) are deliberately NOT collapsed. `prefers-reduced-motion`
+ *    is about movement, not about tint; killing the 150ms hover fade made the UI feel broken rather
+ *    than calm, and the map's 420ms fill is a colour swap wearing a duration.
+ * Anything that would still *travel* at 1ms (reveal, lift, press, ken burns) is switched off
+ * outright in the rules below rather than sped up.
+ */
 @media (prefers-reduced-motion: reduce) {
   :root {
-    --dur-micro: 1ms;
     --dur-fast: 1ms;
     --dur-base: 1ms;
     --dur-reveal: 1ms;
     --dur-kenburns: 1ms;
+    --stagger: 0ms;
+    --stagger-map: 0ms;
   }
   /* Motion (not state-change) is fully disabled rather than sped up. */
   .ken-burns,
   .parallax,
   .card-lift,
-  .skeleton-shimmer {
+  .skeleton-shimmer,
+  .reveal,
+  .reveal-seam,
+  .reveal-item,
+  .region-in,
+  .map-label-in {
     animation: none !important;
     transform: none !important;
     transition: none !important;
+  }
+  /* Reveal parks its subject at `opacity: 0` — without this the block would just stay invisible.
+     `.reveal-seam` is excluded on purpose: the seam owns its own `--seam-op` opacity. */
+  .reveal,
+  .reveal-item {
+    opacity: 1 !important;
+  }
+  /* Colour keeps animating on these (see the token note above), so only the transform half of
+     hover-lift / press-shrink is switched off. */
+  .btn-motion,
+  .btn-motion:hover,
+  .btn-motion:active,
+  .icon-press,
+  .icon-press:active {
+    transform: none !important;
   }
 }
 
@@ -330,7 +367,15 @@
   /* Armenia map */
   --map-sea: #ebe0cc;
   --map-region-fill: #e7dbc1;
-  --map-region-muted-fill: #efe7d6; /* no-tour region, replaces the current opacity:0.55 trick */
+  /**
+   * No-tour region (2.4). Raised from `#efe7d6` to widen the "has tours / has none" gap on the
+   * light map: WCAG ratios are useless this high up the scale (`#e7dbc1` vs. pure white tops out
+   * at 1.37:1), so the gap is measured in CIE ΔL* instead — 4.1 → 9.3. The whole difference is
+   * spent on the FILL; stroke (`#8e7444`, 4.12:1) and label (`#3a2a18`, 12.8:1) stay at full
+   * strength, which is why this is a lighter fill and not the `opacity: 0.55` it replaced.
+   * Dark theme is deliberately untouched (David's call) — see `--map-region-muted-fill` above.
+   */
+  --map-region-muted-fill: #faf6ee;
   --map-region-hover-fill: #ebd49a;
   --map-region-selected-fill: #8e1b38;
   --map-region-stroke: #8e7444;
@@ -404,7 +449,13 @@ body {
  * edge on wide viewports.
  */
 .h1-page {
-  @apply max-w-[20ch] font-display text-[48px] leading-[1.08] lg:text-[56px];
+  /*
+   * `leading-[1.08]` used to clip descenders (the tail of a "y"/"g"/"j") on every tour title:
+   * paired with `.text-gold-sheen`'s `background-clip: text`, the gradient fill is clipped to
+   * the line box, and Cormorant Garamond's descenders reach past a box that tight. 1.2 gives them
+   * room without visibly loosening the heading.
+   */
+  @apply max-w-[20ch] font-display text-[48px] leading-[1.2] lg:text-[56px];
 }
 .h2-section {
   @apply max-w-[17ch] font-display text-[36px] leading-tight lg:text-[44px];
@@ -448,6 +499,233 @@ body {
     transparent
   );
   opacity: var(--seam-op);
+}
+
+/**
+ * ── SCROLL REVEAL (2.4) ───────────────────────────────────────────────────────────────────────
+ *
+ * Deliberately CSS + one small hook (`shared/hooks/useReveal`) rather than a second animation
+ * library: every duration/curve/step below is a token, so `prefers-reduced-motion` is handled by
+ * the token block at the top of this file and there is no `if (reduced)` branch in JS to keep in
+ * sync. `framer-motion` stays where it earns its keep (`AnimatePresence`, `layout`).
+ *
+ * The hook only toggles `data-revealed` on the element. Apply through `shared/ui/Reveal`:
+ *   <Reveal as="section">…</Reveal>              single block, rises 18px
+ *   <Reveal rise={24}>…</Reveal>                 heavier block (review panel, booking card)
+ *   <Reveal rise="seam" className="seam" />      hairline that draws out from its centre
+ *   <Reveal group className="grid …">            container; children carry `.reveal-item`
+ *
+ * ── Why the stagger is a TRANSITION on the parent's attribute, not an animation on the child ──
+ * `.reveal-group[data-revealed] .reveal-item` is the final state. A child that mounts into a group
+ * which is ALREADY revealed resolves straight to that state on its first style computation, and a
+ * transition never runs on first computation — so re-filtering the catalog drops the new cards in
+ * finished, instead of replaying the whole wave on every keystroke. A keyframe animation would
+ * re-fire for each new child and do exactly the wrong thing.
+ *
+ * ── One caveat when applying these ────────────────────────────────────────────────────────────
+ * These rules are unlayered, so they outrank Tailwind's `@layer utilities`. Do not put a
+ * `transition-*`/`transform`/`scale-*` utility on the SAME element that carries `.reveal`,
+ * `.reveal-item` or `.card-lift` — the rules here would win. Wrap instead: the reveal element
+ * moves, its child does everything else.
+ */
+.reveal {
+  opacity: 0;
+  transform: translateY(var(--reveal-rise, 18px));
+  transition:
+    opacity var(--dur-reveal) var(--ease-out-soft),
+    transform var(--dur-reveal) var(--ease-out-soft);
+}
+.reveal[data-revealed] {
+  opacity: 1;
+  transform: none;
+}
+
+/**
+ * Seam variant: draws out from the centre instead of rising, and owns NO opacity of its own —
+ * `.seam` already runs at `--seam-op`, so fading it in would end up overwriting that.
+ */
+.reveal-seam {
+  transform: scaleX(0.2);
+  transform-origin: center;
+  transition: transform var(--dur-reveal) var(--ease-out-soft);
+}
+.reveal-seam[data-revealed] {
+  transform: none;
+}
+
+.reveal-group .reveal-item {
+  opacity: 0;
+  transform: translateY(var(--reveal-rise, 18px));
+  transition:
+    opacity var(--dur-reveal) var(--ease-out-soft),
+    transform var(--dur-reveal) var(--ease-out-soft);
+  /* Capped at 8 so a 30-card catalog page doesn't end on a 2-second delay. */
+  transition-delay: calc(min(var(--i, 0), 8) * var(--stagger));
+}
+.reveal-group[data-revealed] .reveal-item {
+  opacity: 1;
+  transform: none;
+}
+
+/**
+ * Wave index. Set inline (`style={{ '--i': index }}`) when the items are not plain siblings —
+ * otherwise these do it for free, including the cap for everything past the 9th item.
+ */
+.reveal-group .reveal-item {
+  --i: 8;
+}
+.reveal-group .reveal-item:nth-child(1) {
+  --i: 0;
+}
+.reveal-group .reveal-item:nth-child(2) {
+  --i: 1;
+}
+.reveal-group .reveal-item:nth-child(3) {
+  --i: 2;
+}
+.reveal-group .reveal-item:nth-child(4) {
+  --i: 3;
+}
+.reveal-group .reveal-item:nth-child(5) {
+  --i: 4;
+}
+.reveal-group .reveal-item:nth-child(6) {
+  --i: 5;
+}
+.reveal-group .reveal-item:nth-child(7) {
+  --i: 6;
+}
+.reveal-group .reveal-item:nth-child(8) {
+  --i: 7;
+}
+
+/**
+ * ── MAP ENTRANCE (2.4) ────────────────────────────────────────────────────────────────────────
+ * Keyframes, not a transition: the regions animate once on mount and there is no "before" state
+ * to transition from. `transform-box: fill-box` makes `transform-origin: center` mean the PATH's
+ * own centre — without it an SVG path scales around the viewBox origin and the province flies in
+ * from the corner. `--i` is set per path by `ArmeniaMap`; the labels wait for the whole wave
+ * (11 regions) plus a beat.
+ */
+@keyframes region-in {
+  from {
+    opacity: 0;
+    transform: scale(0.965);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes map-label-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.region-in {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: region-in var(--dur-base) var(--ease-out-soft) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger-map));
+}
+.map-label-in {
+  animation: map-label-in var(--dur-base) var(--ease-out-soft) both;
+  animation-delay: calc(11 * var(--stagger-map) + 60ms);
+}
+
+/**
+ * ── HOVER / PRESS (2.4) ───────────────────────────────────────────────────────────────────────
+ *
+ * These replace `transition-colors`, they do not sit next to it: unlayered CSS outranks Tailwind's
+ * `@layer utilities`, so a `transition` shorthand here would silently win over `transition-colors`
+ * on the same element. Each class therefore declares the colour half itself.
+ *
+ * `box-shadow` is deliberately absent from every list — the focus ring must appear instantly
+ * (2.4 §2b), and Tailwind draws `ring-*` as a box-shadow.
+ *
+ *  `.card-lift`  — tour card: rises on hover, and on `:focus-within` so a keyboard user tabbing
+ *                  into the card sees the same affordance a mouse user does.
+ *  `.btn-motion` — primary/secondary CTA: colour + 1px lift + press.
+ *  `.icon-press` — icon buttons (theme toggle, burger, close): colour + press only, no lift.
+ */
+.card-lift {
+  transition: transform var(--dur-fast) var(--ease-back-out);
+}
+.card-lift:hover,
+.card-lift:focus-within {
+  transform: translateY(-6px);
+}
+
+.btn-motion,
+.icon-press {
+  transition:
+    color var(--dur-micro) var(--ease-in-out-soft),
+    background-color var(--dur-micro) var(--ease-in-out-soft),
+    border-color var(--dur-micro) var(--ease-in-out-soft),
+    fill var(--dur-micro) var(--ease-in-out-soft),
+    transform var(--dur-fast) var(--ease-back-out);
+}
+.btn-motion:hover {
+  transform: translateY(-1px);
+}
+/* The press is a short, flat `ease-out` on purpose — an overshoot on the way DOWN reads as a
+   wobble rather than a click. */
+.btn-motion:active,
+.icon-press:active {
+  transition-duration: var(--dur-micro), var(--dur-micro), var(--dur-micro), var(--dur-micro), 90ms;
+  transition-timing-function: var(--ease-in-out-soft), var(--ease-in-out-soft),
+    var(--ease-in-out-soft), var(--ease-in-out-soft), ease-out;
+}
+.btn-motion:active {
+  transform: translateY(0) scale(0.97);
+}
+.icon-press:active {
+  transform: scale(0.92);
+}
+
+/**
+ * Text-link underline (2.4 §2, effect 3): a 1px rule that draws in from the left on hover/focus.
+ * Applied to inline text links only — buttons and pills use `.btn-motion` instead.
+ *
+ * Every number is a token, so `prefers-reduced-motion` is handled without a branch:
+ *  - colour runs at `--dur-micro`, which deliberately does NOT collapse (it is a tint, not motion);
+ *  - the rule runs at `--dur-fast`, which collapses to 1ms under reduced motion — those visitors
+ *    still get the underline, just not the sweep.
+ *
+ * `currentColor` makes the rule take whatever colour the link is at that moment (ink-dim at rest,
+ * gold-ink on hover), so it needs no per-theme value of its own.
+ *
+ * The hover half is wrapped in `@media (hover: hover)` on purpose — a touch tap fires `:hover` too,
+ * and without this the underline would draw in on tap and then sit stuck there until the user tapped
+ * elsewhere, since a touch screen has no "unhover". `:focus-visible` stays outside the media query:
+ * a keyboard user must get the same affordance as a mouse user, on any device.
+ */
+.link-underline {
+  position: relative;
+  transition: color var(--dur-micro) var(--ease-in-out-soft);
+}
+.link-underline::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -0.125rem;
+  left: 0;
+  height: 1px;
+  background-color: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur-fast) var(--ease-out-soft);
+}
+@media (hover: hover) {
+  .link-underline:hover::after {
+    transform: scaleX(1);
+  }
+}
+.link-underline:focus-visible::after {
+  transform: scaleX(1);
 }
 
 /**
@@ -554,9 +832,12 @@ body {
  */
 .region-path {
   outline: none;
-  transition: fill 420ms cubic-bezier(0.22, 1, 0.36, 1),
-    stroke 420ms cubic-bezier(0.22, 1, 0.36, 1),
-    stroke-width 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  /* `--dur-map` is intentionally NOT collapsed under reduced motion: this is a colour swap, and
+     the same 420ms/curve pair as before — only the literals moved into tokens. */
+  transition:
+    fill var(--dur-map) var(--ease-out-soft),
+    stroke var(--dur-map) var(--ease-out-soft),
+    stroke-width var(--dur-map) var(--ease-out-soft);
 }
 .region-path:focus-visible {
   stroke: var(--accent-strong);
@@ -564,10 +845,50 @@ body {
 }
 
 /**
+ * Site-wide thin scrollbar, replacing the native OS bar (Windows' boxy grey column with arrow
+ * buttons clashes with the "dark luxury" surfaces) everywhere a panel scrolls — region tours,
+ * the bottom sheet, itinerary lists, etc. `scrollbar-color` is an inherited property, so setting
+ * it once on `:root` covers the whole app; the `::-webkit-scrollbar` family isn't inherited and
+ * has to be declared per-element via `*`, but only actually renders where content overflows.
+ * Both read the theme-aware role tokens, so light/dark flip along with everything else.
+ */
+:root {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-edge-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-edge-strong);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-gold-ink);
+}
+/*
+ * Chromium on Windows still draws its native boxy up/down arrow buttons at each end of a
+ * custom-styled scrollbar unless they're explicitly zeroed out — that's what made the "thin"
+ * bar above look thick and boxed-in in practice (the buttons, not the 9px thumb, were doing it).
+ */
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/**
  * Hide the OS scrollbar on horizontally-scrollable strips (tab rows, mobile nav) while keeping
  * them scrollable. On Windows the native scrollbar also renders arrow buttons; hiding it removes
  * both the bar and those arrows. Scrollability is signalled visually with an edge gradient
- * instead (see `Tabs`), so nothing is lost for the user.
+ * instead (see `Tabs`), so nothing is lost for the user. Wins over the site-wide rule above on
+ * specificity (a class beats the bare `*`).
  */
 .no-scrollbar {
   -ms-overflow-style: none;

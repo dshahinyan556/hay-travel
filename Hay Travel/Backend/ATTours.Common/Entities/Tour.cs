@@ -14,11 +14,16 @@ namespace ATTours.Common.Entities
         // Мягкое удаление: архивный тур скрыт из основного списка, но восстановим.
         // Отдельно от IsActive (публикация на сайте) — это разные состояния.
         public bool IsArchived { get; set; }
+        // Показ в секции «избранное» на главной (не более 6 одновременно — TourFeaturedService).
+        public bool IsFeatured { get; set; }
+        // Порядок внутри избранного (0-based); осмыслен только пока IsFeatured == true.
+        public int FeaturedSortOrder { get; set; }
         public string MainImageUrl { get; set; }
         public HashSet<TourDetail> TourDetails { get; set; } = [];
         public HashSet<TourInfoTranslation> Translations { get; set; } = [];
         public HashSet<AdditionalExpense> AdditionalExpenses { get; set; } = [];
-        public HashSet<OrganizationalDetail> OrganizationalDetails { get; set; } = [];
-        public HashSet<Restriction> Restrictions { get; set; } = [];
+        // Орг. детали и ограничения слиты в одну коллекцию, различаются по TourNote.Type (ADR 003).
+        public HashSet<TourNote> Notes { get; set; } = [];
+        public HashSet<TourRegion> TourRegions { get; set; } = [];
     }
 }

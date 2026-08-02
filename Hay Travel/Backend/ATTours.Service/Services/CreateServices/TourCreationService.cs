@@ -12,7 +12,7 @@ namespace ATTours.BusinessServices.Services.CreateServices
     {
         protected override IEntityValidation GetEntityValidation()
         {
-            return new TourValidationService(Entities);
+            return new TourValidationService(Entities, Context);
         }
 
         // Compute-on-write: TotalPrice тура пересчитывается из цен дней при создании.

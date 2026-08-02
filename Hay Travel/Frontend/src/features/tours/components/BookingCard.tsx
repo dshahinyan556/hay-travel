@@ -1,6 +1,7 @@
 import { useId, useState } from 'react'
 import type { Tour } from '@/shared/types/tour'
 import { formatPrice } from '@/shared/lib/format'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { DatePicker } from '@/shared/ui'
 import { CheckIcon, GuideIcon } from '@/shared/ui/icons'
 
@@ -21,6 +22,7 @@ export function BookingCard({ tour }: { tour: Tour }) {
   const dateFieldId = useId()
   const dateLabelId = useId()
   const dateErrorId = `${dateFieldId}-error`
+  const { locale, t } = useLocale()
 
   const [guests, setGuests] = useState(2)
   const [date, setDate] = useState('')
@@ -39,16 +41,14 @@ export function BookingCard({ tour }: { tour: Tour }) {
         <span className="inline-flex text-gold-ink">
           <CheckIcon size={28} />
         </span>
-        <p className="mt-3 font-display text-xl text-ink">Заявка отправлена</p>
-        <p className="mt-2 text-sm text-ink-muted">
-          Мы свяжемся с вами в течение дня и подтвердим даты. Предоплата — после подтверждения.
-        </p>
+        <p className="mt-3 font-display text-xl text-ink">{t('booking.submittedTitle')}</p>
+        <p className="mt-2 text-sm text-ink-muted">{t('booking.submittedBody')}</p>
         <button
           type="button"
           onClick={() => setSubmitted(false)}
           className="mt-4 text-sm text-gold-ink transition-colors hover:text-accent-strong"
         >
-          Изменить заявку
+          {t('booking.editSubmission')}
         </button>
       </div>
     )
@@ -68,15 +68,15 @@ export function BookingCard({ tour }: { tour: Tour }) {
     >
       <div className="flex items-end justify-between gap-3 border-b border-edge pb-4">
         <div>
-          <p className="text-[10px] tracking-wide text-ink-muted">цена от</p>
+          <p className="text-[10px] tracking-wide text-ink-muted">{t('booking.priceFrom')}</p>
           <p className="font-display text-3xl text-gold-ink">
-            {formatPrice(tour.priceFrom, tour.currency)}
+            {formatPrice(tour.priceFrom, locale)}
           </p>
-          <p className="mt-0.5 text-xs text-ink-muted">за человека</p>
+          <p className="mt-0.5 text-xs text-ink-muted">{t('booking.perPerson')}</p>
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-panel-raised px-2.5 py-1 text-xs text-ink-dim ring-1 ring-edge">
           <GuideIcon size={13} />
-          малая группа
+          {t('booking.smallGroup')}
         </span>
       </div>
 
@@ -89,7 +89,7 @@ export function BookingCard({ tour }: { tour: Tour }) {
       */}
       <div className="mt-4">
         <label htmlFor={dateFieldId} id={dateLabelId} className="block text-xs text-ink-muted">
-          Дата выезда
+          {t('booking.dateLabel')}
         </label>
         <DatePicker
           id={dateFieldId}
@@ -106,18 +106,18 @@ export function BookingCard({ tour }: { tour: Tour }) {
         />
         {dateMissing && (
           <p id={dateErrorId} role="alert" className="mt-1.5 text-xs text-danger">
-            Выберите дату выезда
+            {t('booking.dateMissing')}
           </p>
         )}
       </div>
 
       <div className="mt-3">
-        <span className="text-xs text-ink-muted">Гостей</span>
+        <span className="text-xs text-ink-muted">{t('booking.guests')}</span>
         <div className="mt-1.5 flex items-center gap-3">
           <button
             type="button"
             onClick={() => setGuests((g) => Math.max(1, g - 1))}
-            aria-label="Меньше гостей"
+            aria-label={t('booking.guestsFewer')}
             className="h-9 w-9 rounded-full text-lg text-gold-ink ring-1 ring-edge-strong transition-colors hover:bg-accent-soft"
           >
             −
@@ -126,7 +126,7 @@ export function BookingCard({ tour }: { tour: Tour }) {
           <button
             type="button"
             onClick={() => setGuests((g) => Math.min(16, g + 1))}
-            aria-label="Больше гостей"
+            aria-label={t('booking.guestsMore')}
             className="h-9 w-9 rounded-full text-lg text-gold-ink ring-1 ring-edge-strong transition-colors hover:bg-accent-soft"
           >
             +
@@ -136,12 +136,12 @@ export function BookingCard({ tour }: { tour: Tour }) {
 
       <dl className="mt-4 space-y-1.5 border-t border-edge pt-4 text-sm">
         <div className="flex justify-between">
-          <dt className="text-ink-muted">Итого</dt>
-          <dd className="text-ink">{formatPrice(total, tour.currency)}</dd>
+          <dt className="text-ink-muted">{t('booking.total')}</dt>
+          <dd className="text-ink">{formatPrice(total, locale)}</dd>
         </div>
         <div className="flex justify-between">
-          <dt className="text-ink-muted">Предоплата 20%</dt>
-          <dd className="text-gold-ink">{formatPrice(prepayment, tour.currency)}</dd>
+          <dt className="text-ink-muted">{t('booking.prepayment')}</dt>
+          <dd className="text-gold-ink">{formatPrice(prepayment, locale)}</dd>
         </div>
       </dl>
 
@@ -149,11 +149,9 @@ export function BookingCard({ tour }: { tour: Tour }) {
         type="submit"
         className="mt-5 w-full rounded-full bg-gold-fill px-5 py-3 text-sm font-medium text-gold-on transition-colors hover:bg-gold-fill-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-panel focus-visible:outline-none"
       >
-        Забронировать
+        {t('booking.submit')}
       </button>
-      <p className="mt-2.5 text-center text-xs text-ink-muted">
-        Бронь без оплаты — подтвердим и пришлём детали
-      </p>
+      <p className="mt-2.5 text-center text-xs text-ink-muted">{t('booking.submitHint')}</p>
     </form>
   )
 }

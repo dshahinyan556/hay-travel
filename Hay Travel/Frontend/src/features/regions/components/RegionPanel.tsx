@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { Region } from '@/shared/data/armeniaRegions'
 import type { Tour } from '@/shared/types/tour'
 import { formatDuration, formatPrice, formatTourCount } from '@/shared/lib/format'
+import { useReducedMotion } from '@/shared/hooks'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { KindChip } from '@/shared/ui/Chip'
 import {
   ArrowRightIcon,
@@ -11,6 +13,19 @@ import {
   ClockIcon,
   AlertIcon,
 } from '@/shared/ui/icons'
+
+/**
+ * The wave the rest of the site runs on, in framer's units: `--stagger` (70ms) between rows,
+ * `--dur-base` / `--ease-out-soft` for each. The list is rendered by `AnimatePresence`, so the
+ * numbers cannot be CSS tokens here — they mirror `index.css` and must stay in step with it.
+ *
+ * `STAGGER_CAP` matches the `:nth-child` cap in the CSS group: past the 9th row the delay stops
+ * growing, so a region with 20 tours does not end on a second and a half of dead time.
+ */
+const STAGGER_S = 0.07
+const STAGGER_CAP = 8
+const DUR_BASE_S = 0.34
+const EASE_OUT_SOFT: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
 export type RegionPanelState =
   | { status: 'loading' }
@@ -36,6 +51,11 @@ interface RegionPanelProps {
  * intentional rather than broken.
  */
 export function RegionPanel({ region, state, onClose, onRetry }: RegionPanelProps) {
+  const reducedMotion = useReducedMotion()
+  const { locale, t } = useLocale()
+  const regionName = locale === 'en' ? region.en : region.ru
+  const regionBlurb = locale === 'en' ? region.blurbEn : region.blurb
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/*
@@ -45,15 +65,17 @@ export function RegionPanel({ region, state, onClose, onRetry }: RegionPanelProp
       */}
       <header className="flex touch-none items-start gap-3 border-b border-edge pb-3">
         <div className="min-w-0">
-          <p className="text-[11px] tracking-[0.16em] text-gold-ink uppercase">Регион</p>
-          <h3 className="font-display text-2xl leading-tight text-accent-strong">{region.ru}</h3>
-          <p className="mt-1 line-clamp-2 text-xs text-ink-muted">{region.blurb}</p>
+          <p className="text-[11px] tracking-[0.16em] text-gold-ink uppercase">{t('regions.panel.label')}</p>
+          <h3 className="font-display text-2xl leading-tight text-accent-strong">{regionName}</h3>
+          <p className="mt-1 line-clamp-2 text-xs text-ink-muted">{regionBlurb}</p>
         </div>
         <button
           type="button"
           onClick={onClose}
-          aria-label="Закрыть панель региона"
-          className="ml-auto inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink-muted transition-colors hover:text-gold-ink focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
+          aria-label={t('regions.panel.close')}
+          // `.icon-press` = colour + the 90ms press, and it replaces `transition-colors` rather
+          // than joining it (unlayered CSS outranks the utility — see `index.css`).
+          className="icon-press ml-auto inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink-muted hover:text-gold-ink focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
         >
           <CloseIcon size={18} />
         </button>
@@ -71,15 +93,15 @@ export function RegionPanel({ region, state, onClose, onRetry }: RegionPanelProp
           <PanelMessage
             tone="error"
             icon={<AlertIcon size={26} />}
-            title="Не удалось загрузить туры"
-            body="Проверьте соединение — данные не пришли."
+            title={t('regions.panel.errorTitle')}
+            body={t('regions.panel.errorBody')}
             action={
               <button
                 type="button"
                 onClick={onRetry}
-                className="cursor-pointer rounded-full px-4 py-2 text-sm text-gold-ink ring-1 ring-gold-line transition-colors hover:bg-accent-soft"
+                className="btn-motion cursor-pointer rounded-full px-4 py-2 text-sm text-gold-ink ring-1 ring-gold-line hover:bg-accent-soft"
               >
-                Повторить
+                {t('regions.panel.retry')}
               </button>
             }
           />
@@ -88,14 +110,14 @@ export function RegionPanel({ region, state, onClose, onRetry }: RegionPanelProp
         {state.status === 'ready' && state.tours.length === 0 && (
           <PanelMessage
             icon={<CompassIcon size={26} />}
-            title="В этом регионе пока нет маршрутов"
-            body={`Мы готовим программы для ${region.ru}. Посмотрите соседние регионы или весь каталог.`}
+            title={t('regions.panel.emptyTitle')}
+            body={t('regions.panel.emptyBody', { region: regionName })}
             action={
               <Link
                 to="/trips"
-                className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm text-gold-ink ring-1 ring-gold-line transition-colors hover:bg-accent-soft"
+                className="btn-motion inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm text-gold-ink ring-1 ring-gold-line hover:bg-accent-soft"
               >
-                Весь каталог
+                {t('regions.panel.allCatalog')}
                 <ArrowRightIcon size={15} />
               </Link>
             }
@@ -104,15 +126,19 @@ export function RegionPanel({ region, state, onClose, onRetry }: RegionPanelProp
 
         {state.status === 'ready' && state.tours.length > 0 && (
           <>
-            <p className="text-xs text-ink-muted">{formatTourCount(state.tours.length)}</p>
+            <p className="text-xs text-ink-muted">{formatTourCount(state.tours.length, locale)}</p>
             <ul className="mt-3 space-y-2.5">
               <AnimatePresence initial={false}>
                 {state.tours.map((tour, index) => (
                   <motion.li
                     key={tour.id}
-                    initial={{ opacity: 0, y: 10 }}
+                    initial={{ opacity: 0, y: reducedMotion ? 0 : 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
+                    transition={{
+                      duration: reducedMotion ? 0 : DUR_BASE_S,
+                      delay: reducedMotion ? 0 : Math.min(index, STAGGER_CAP) * STAGGER_S,
+                      ease: EASE_OUT_SOFT,
+                    }}
                   >
                     <RegionTourRow tour={tour} />
                   </motion.li>
@@ -131,9 +157,11 @@ export function RegionPanel({ region, state, onClose, onRetry }: RegionPanelProp
  * narrow column, where full cards would force one item per screen.
  */
 function RegionTourRow({ tour }: { tour: Tour }) {
+  const { locale } = useLocale()
+
   return (
     <Link
-      to={`/tours/${tour.slug}`}
+      to={`/tours/${tour.id}`}
       className="group flex gap-3 rounded-xl bg-panel-raised p-2.5 ring-1 ring-edge transition-colors hover:ring-gold-line focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
     >
       <img
@@ -155,10 +183,10 @@ function RegionTourRow({ tour }: { tour: Tour }) {
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
           <span className="flex items-center gap-1.5 text-[11px] text-ink-muted">
             <ClockIcon size={13} />
-            {formatDuration(tour.durationDays, tour.durationNights)}
+            {formatDuration(tour.durationDays, tour.durationNights, locale)}
           </span>
           <span className="font-display text-lg text-gold-ink">
-            {formatPrice(tour.priceFrom, tour.currency)}
+            {formatPrice(tour.priceFrom, locale)}
           </span>
         </div>
       </div>

@@ -161,6 +161,22 @@ export function ChevronDownIcon(props: IconProps) {
   )
 }
 
+export function ChevronLeftIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m14.5 6-6 6 6 6" />
+    </Icon>
+  )
+}
+
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m9.5 6 6 6-6 6" />
+    </Icon>
+  )
+}
+
 export function HeartIcon(props: IconProps) {
   return (
     <Icon {...props}>
@@ -182,6 +198,80 @@ export function MapIcon(props: IconProps) {
     <Icon {...props}>
       <path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2Z" />
       <path d="M9 4v14M15 6v14" />
+    </Icon>
+  )
+}
+
+export function HomeIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 11.5 12 4l8 7.5" />
+      <path d="M6 10v9a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-9" />
+    </Icon>
+  )
+}
+
+export function SearchIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </Icon>
+  )
+}
+
+/**
+ * Social glyphs (footer). Reinterpreted as line art in the site's own 24×24/1.5-stroke
+ * geometry rather than the brands' own bitmap logos — consistent with the rest of this hand-drawn
+ * set, and it means they tint with `currentColor` like everything else here.
+ */
+export function InstagramIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="16.8" cy="7.2" r="0.6" fill="currentColor" stroke="none" />
+    </Icon>
+  )
+}
+
+export function FacebookIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M13.5 21v-8h2.7l.4-3.1h-3.1V7.9c0-.9.3-1.5 1.6-1.5h1.7V3.4c-.3 0-1.3-.1-2.4-.1-2.4 0-4 1.5-4 4.2v2.4H7.5v3.1h2.9V21" />
+    </Icon>
+  )
+}
+
+/** Paper-plane silhouette (closed outline + one wing crease) — the old two-stroke arrow read as a generic "send" glyph rather than Telegram. */
+export function TelegramIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 12 21 4 13 21l-2-8Z" strokeLinejoin="round" />
+      <path d="M11 13 21 4" />
+    </Icon>
+  )
+}
+
+/** Speech bubble + a proper phone-handset glyph (filled, like the real WhatsApp mark) — the old thin stroke squiggle didn't read as a phone at 17px. */
+export function WhatsappIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 20l1.4-4.2A8 8 0 1 1 8.6 19L4 20Z" />
+      <path
+        d="M9.3 8.7c-.4 0-.9.2-1.1.6-.4.5-.6 1.2-.4 2 .4 2 1.6 4 3.4 5.3.7.5 1.6.5 2.2 0l.5-.4c.3-.2.3-.6.1-.9l-1-1.3c-.2-.2-.5-.3-.7-.2-.6.3-1.3.1-1.7-.4-.5-.5-.8-1.1-.9-1.8 0-.3.1-.5.4-.7.2-.2.3-.5.2-.8l-.5-1.5c-.1-.4-.4-.7-.8-.8Z"
+        fill="currentColor"
+        stroke="none"
+      />
+    </Icon>
+  )
+}
+
+export function YoutubeIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="6" width="18" height="12" rx="4" />
+      <path d="M10.5 9.7v4.6l4.2-2.3Z" fill="currentColor" stroke="none" />
     </Icon>
   )
 }

@@ -32,6 +32,20 @@ namespace ATTours.Helper.Enums
         RelationalEntityNotFound = 2003,
         [Description("Tour not found.")]
         TourNotFound = 2004,
+        [Description("Site setting key is unknown.")]
+        SiteSettingKeyUnknown = 2005,
+        [Description("Region not found.")]
+        RegionNotFound = 2006,
+        [Description("Place not found.")]
+        PlaceNotFound = 2007,
+        [Description("Expense template not found.")]
+        ExpenseTemplateNotFound = 2008,
+        [Description("Tour note template not found.")]
+        TourNoteTemplateNotFound = 2009,
+        [Description("Catalog entry is in use and cannot be deleted.")]
+        CatalogEntryInUse = 2010,
+        [Description("At most 6 tours can be featured at once.")]
+        TooManyFeaturedTours = 2011,
 
         #endregion
 

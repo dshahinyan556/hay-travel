@@ -1,10 +1,10 @@
 import { Link } from 'react-router'
-import { motion } from 'framer-motion'
 import type { Tour } from '@/shared/types/tour'
 import { REGION_BY_SLUG } from '@/shared/data/armeniaRegions'
 import { formatDuration, formatPrice } from '@/shared/lib/format'
-import { BadgeChip, KindChip } from './Chip'
-import { ClockIcon, HeartIcon, MapPinIcon } from './icons'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
+import { KindChip } from './Chip'
+import { ClockIcon, MapPinIcon } from './icons'
 
 /**
  * Tour card for the showcase, catalog and region panel.
@@ -24,25 +24,31 @@ import { ClockIcon, HeartIcon, MapPinIcon } from './icons'
  * titles and still breaks at narrow widths — clamping plus `mt-auto` holds at any breakpoint.
  *
  * ── Interaction ───────────────────────────────────────────────────────────────────────────
- * Not a "click to expand" card: hovering slides a route summary up over the image, so the
- * itinerary can be judged without leaving the page. It is presentational only — everything it
- * reveals is also on the detail page, so keyboard and touch users lose nothing (they never get
- * `:hover`). The whole card is one link, so there is a single tab stop per card.
+ * The whole card is one link, so there is a single tab stop per card. It used to also reveal a
+ * route-summary teaser on hover, sourced from the first day's stops — dropped in stage 5 (by
+ * design, not an oversight): the real card endpoint (`GetToursClient`) deliberately does not load
+ * the day graph for the whole list (`TourCardModel`'s own doc comment explains why), so there is
+ * no itinerary data left to show here. The full itinerary is still one click away, on the detail
+ * page.
+ *
+ * ── Motion (2.4) ──────────────────────────────────────────────────────────────────────────────
+ * The card lifts on hover/focus (`.card-lift`, `--dur-fast` / `--ease-back-out`), the top blink
+ * stretches, the cover zooms. The lift used to be a framer-motion `whileHover` spring — CSS
+ * instead, because a spring is the one thing in the file `prefers-reduced-motion` could not reach,
+ * and a hover effect does not justify a JS animation loop per card in a 30-card grid. `.card-lift`
+ * also answers `:focus-within`, so tabbing into a card looks the same as hovering it.
  */
 export function TourCard({ tour }: { tour: Tour }) {
-  const regions = tour.regionSlugs.map((slug) => REGION_BY_SLUG[slug].ru)
-  // First-day stops stand in for the route teaser — enough to convey the shape of the trip.
-  const routeTeaser = tour.itinerary[0]?.routePoints ?? []
+  const { locale, t } = useLocale()
+  const regions = tour.regionSlugs.map((slug) =>
+    locale === 'en' ? REGION_BY_SLUG[slug].en : REGION_BY_SLUG[slug].ru,
+  )
 
   return (
-    <motion.article
-      whileHover={{ y: -6 }}
-      transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-      className="group h-full"
-    >
+    <article className="card-lift group h-full">
       <Link
-        to={`/tours/${tour.slug}`}
-        className="relative flex h-full flex-col overflow-hidden rounded-2xl bg-gradient-to-b from-panel-raised to-panel ring-1 ring-edge transition-shadow duration-300 hover:ring-gold-line focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
+        to={`/tours/${tour.id}`}
+        className="relative flex h-full flex-col overflow-hidden rounded-2xl bg-gradient-to-b from-panel-raised to-panel ring-1 ring-edge transition-shadow duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] hover:ring-gold-line focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
       >
         {/*
           Top blink (2.3): a short hairline at rest, stretching to the card's full width on
@@ -52,7 +58,7 @@ export function TourCard({ tour }: { tour: Tour }) {
         */}
         <span
           aria-hidden="true"
-          className="absolute inset-x-0 top-0 z-10 h-px origin-center scale-x-[0.14] bg-gold-line transition-transform duration-[var(--dur-fast)] ease-out group-hover:scale-x-100 group-focus-within:scale-x-100"
+          className="absolute inset-x-0 top-0 z-10 h-px origin-center scale-x-[0.14] bg-gold-line transition-transform duration-[var(--dur-fast)] ease-[var(--ease-out-soft)] group-hover:scale-x-100 group-focus-within:scale-x-100"
         />
 
         {/* Cover */}
@@ -61,36 +67,14 @@ export function TourCard({ tour }: { tour: Tour }) {
             src={tour.coverImage}
             alt={tour.title}
             loading="lazy"
-            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+            className="h-full w-full object-cover transition-transform duration-[var(--dur-reveal)] ease-[var(--ease-out-soft)] group-hover:scale-105"
           />
           {/* Scrim keeps chip text legible over any photo. */}
           <div className="absolute inset-0 bg-gradient-to-t from-obsidian/85 via-obsidian/10 to-obsidian/40" />
 
-          <div className="absolute inset-x-3 top-3 flex flex-wrap items-start gap-1.5">
-            {tour.badges.map((badge) => (
-              <BadgeChip key={badge.type} badge={badge} />
-            ))}
-            {/* Sits on an obsidian pill over the photo, so it keeps the literal cream tint
-                rather than the theme-aware ink token, which would go dark in light mode. */}
-            <span className="ml-auto rounded-full bg-obsidian/70 p-1.5 text-cream-dim ring-1 ring-edge transition-colors group-hover:text-gold-light">
-              <HeartIcon size={15} />
-            </span>
-          </div>
-
           <div className="absolute bottom-3 left-3">
             <KindChip kind={tour.kind} />
           </div>
-
-          {/* Hover-revealed route teaser. `translate-y-full` parks it just below the frame. */}
-          {routeTeaser.length > 0 && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 translate-y-full bg-obsidian/92 px-4 py-3 backdrop-blur-sm transition-transform duration-300 ease-out group-hover:translate-y-0">
-              <p className="text-[11px] tracking-[0.14em] text-gold uppercase">Маршрут</p>
-              {/* Also on an obsidian scrim — literal cream, not the theme token. */}
-              <p className="mt-1 line-clamp-2 text-sm text-cream-dim">
-                {routeTeaser.join(' → ')}
-              </p>
-            </div>
-          )}
         </div>
 
         {/* Body */}
@@ -108,18 +92,18 @@ export function TourCard({ tour }: { tour: Tour }) {
           <div className="mt-auto flex items-end justify-between gap-3 border-t border-edge pt-3.5">
             <span className="flex items-center gap-1.5 text-xs text-ink-dim">
               <ClockIcon size={14} />
-              {formatDuration(tour.durationDays, tour.durationNights)}
+              {formatDuration(tour.durationDays, tour.durationNights, locale)}
             </span>
             <span className="text-right leading-tight">
-              <span className="block text-[10px] tracking-wide text-ink-muted">цена от</span>
+              <span className="block text-[10px] tracking-wide text-ink-muted">{t('tourCard.priceFrom')}</span>
               <span className="font-display text-2xl text-gold-ink">
-                {formatPrice(tour.priceFrom, tour.currency)}
+                {formatPrice(tour.priceFrom, locale)}
               </span>
             </span>
           </div>
         </div>
       </Link>
-    </motion.article>
+    </article>
   )
 }
 

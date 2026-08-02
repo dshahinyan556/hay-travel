@@ -20,9 +20,15 @@ const sizeClasses: Record<ButtonSize, string> = {
  * Class-name builder shared between the native `<button>` below and navigational CTAs
  * that must render as a router `<Link>` instead (e.g. "Смотреть туры" on the homepage
  * hero). Keeps both in visual sync without a polymorphic `as` prop.
+ *
+ * Motion (2.4): colour only, on `--dur-micro`/`--ease-in-out-soft` — the same 150ms Tailwind
+ * defaulted to, now named rather than implicit. The hover lift and press-shrink of §2/§2a live in
+ * the `.btn-motion` class (`index.css`) and are NOT applied here on purpose: every consumer of
+ * this builder today is inside `/admin`, whose look is out of scope, while the public site's CTAs
+ * are their own components. A public CTA that wants the full treatment adds `btn-motion`.
  */
 export function buttonClassName(variant: ButtonVariant = 'primary', size: ButtonSize = 'md'): string {
-  return `inline-flex cursor-pointer items-center justify-center rounded-lg font-medium transition-colors disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 ${variantClasses[variant]} ${sizeClasses[size]}`
+  return `inline-flex cursor-pointer items-center justify-center rounded-lg font-medium transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 ${variantClasses[variant]} ${sizeClasses[size]}`
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

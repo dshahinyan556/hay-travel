@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useBodyScrollLock, useFocusTrap } from '@/shared/hooks'
+import { useBodyScrollLock, useFocusTrap, useReducedMotion } from '@/shared/hooks'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 
 /**
  * Sheet position, expressed as a percentage of the sheet's own height:
@@ -8,8 +9,15 @@ import { useBodyScrollLock, useFocusTrap } from '@/shared/hooks'
  */
 const CLOSED_OFFSET = 100
 
-const SETTLE_MS = 320
-const SETTLE_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
+/**
+ * Settle transition (2.4). The transition itself is written in tokens — `--dur-base` /
+ * `--ease-out-soft`, straight into the inline `style`, so `prefers-reduced-motion` collapses it in
+ * CSS with no branch here. `SETTLE_MS` is the same number in JS, needed only by the unmount timer
+ * that has to outlive the exit transition; it MUST stay in step with `--dur-base` in `index.css`.
+ */
+const SETTLE_MS = 340
+const SETTLE_TRANSFORM_TRANSITION = 'transform var(--dur-base) var(--ease-out-soft)'
+const SETTLE_OPACITY_TRANSITION = 'opacity var(--dur-base) var(--ease-out-soft)'
 /** px/ms at release. Above this the gesture reads as a flick and beats the distance dragged. */
 const FLICK_VELOCITY = 0.5
 /** Trailing window the release velocity is measured over, and the floor for its divisor. */
@@ -92,7 +100,7 @@ export interface SheetProps {
   heightDvh?: number
   /** Extra classes for the sheet's root element (background/rounding already provided). */
   className?: string
-  /** Accessible name for the backdrop's close button. Default `'Закрыть'`. */
+  /** Accessible name for the backdrop's close button. Defaults to the current locale's "Close". */
   backdropLabel?: string
   /** Accessible name for the drag handle when tapping it would expand the sheet. */
   expandLabel?: string
@@ -132,6 +140,10 @@ export interface SheetProps {
  * value, and the offset then moves to `initialDetent` — a real enter animation without keyframes.
  * On close the parent flips `open` to false, the sheet transitions back down and unmounts after
  * `SETTLE_MS`.
+ *
+ * Under `prefers-reduced-motion` the sheet still OPENS and still CLOSES — the slide just takes
+ * 1ms (`--dur-base` collapses), and the unmount timer shortens to match so the closed sheet does
+ * not sit invisible-but-mounted for a third of a second, holding the body scroll lock.
  */
 export function Sheet({
   open,
@@ -142,11 +154,17 @@ export function Sheet({
   initialDetent = 'half',
   heightDvh,
   className = '',
-  backdropLabel = 'Закрыть',
-  expandLabel = 'Развернуть',
-  collapseLabel = 'Свернуть',
+  backdropLabel,
+  expandLabel,
+  collapseLabel,
 }: SheetProps) {
+  const { t } = useLocale()
+  const resolvedBackdropLabel = backdropLabel ?? t('common.close')
+  const resolvedExpandLabel = expandLabel ?? t('common.expand')
+  const resolvedCollapseLabel = collapseLabel ?? t('common.collapse')
   const { half: HALF_OFFSET, full: FULL_OFFSET } = detents
+
+  const reducedMotion = useReducedMotion()
 
   const [mounted, setMounted] = useState(false)
   const [offset, setOffsetState] = useState(CLOSED_OFFSET)
@@ -186,9 +204,9 @@ export function Sheet({
       return
     }
     setOffset(CLOSED_OFFSET)
-    const timer = window.setTimeout(() => setMounted(false), SETTLE_MS)
+    const timer = window.setTimeout(() => setMounted(false), reducedMotion ? 1 : SETTLE_MS)
     return () => window.clearTimeout(timer)
-  }, [open, setOffset])
+  }, [open, setOffset, reducedMotion])
 
   useLayoutEffect(() => {
     if (!open || !mounted) return
@@ -338,7 +356,7 @@ export function Sheet({
 
   // Fades out in step with the drag, so a swipe-to-close reads as one continuous motion.
   const backdropOpacity = 1 - clamp((offset - HALF_OFFSET) / (CLOSED_OFFSET - HALF_OFFSET), 0, 1)
-  const settle = dragging ? 'none' : `transform ${SETTLE_MS}ms ${SETTLE_EASING}`
+  const settle = dragging ? 'none' : SETTLE_TRANSFORM_TRANSITION
 
   const paddingExtraDvh =
     heightDvh !== undefined
@@ -351,11 +369,11 @@ export function Sheet({
     <div className="fixed inset-0 z-40 flex items-end">
       <button
         type="button"
-        aria-label={backdropLabel}
+        aria-label={resolvedBackdropLabel}
         onClick={onClose}
         style={{
           opacity: backdropOpacity,
-          transition: dragging ? 'none' : `opacity ${SETTLE_MS}ms ease-out`,
+          transition: dragging ? 'none' : SETTLE_OPACITY_TRANSITION,
         }}
         className="absolute inset-0 cursor-pointer bg-obsidian/70 backdrop-blur-sm"
       />
@@ -379,7 +397,7 @@ export function Sheet({
           type="button"
           onClick={handleToggle}
           aria-expanded={detent === 'full'}
-          aria-label={detent === 'full' ? collapseLabel : expandLabel}
+          aria-label={detent === 'full' ? resolvedCollapseLabel : resolvedExpandLabel}
           // `touch-none` keeps the browser from claiming the vertical swipe on this strip.
           // The generous padding is what makes a 6px bar a comfortable 44px touch target.
           className="flex w-full shrink-0 cursor-grab touch-none items-center justify-center rounded-t-3xl py-4 focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none active:cursor-grabbing"

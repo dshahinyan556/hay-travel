@@ -4,8 +4,10 @@ import {
   deleteTour,
   getAllTours,
   getArchivedTours,
+  reorderFeaturedTours,
   setTourActive,
   setTourArchived,
+  setTourFeatured,
 } from '@/features/admin/api/adminTours'
 import { Button, Modal, Spinner, buttonClassName } from '@/shared/ui'
 import { ApiError } from '@/shared/lib/http'
@@ -18,6 +20,23 @@ import {
 } from './lib/filterProducts'
 import { ProductsToolbar } from './components/ProductsToolbar'
 import { ProductsTable, type ProductsView } from './components/ProductsTable'
+
+const MAX_FEATURED = 6
+/** `GlobalErrorCode.TooManyFeaturedTours` — surfaced as a specific message instead of the
+ * generic "сервер вернул ошибку (400)". */
+const TOO_MANY_FEATURED_CODE = 2011
+
+function errorCodeOf(body: unknown): number | undefined {
+  if (typeof body !== 'object' || body === null) return undefined
+  const record = body as Record<string, unknown>
+  const raw = record.errorCode ?? record.ErrorCode
+  return typeof raw === 'number' ? raw : undefined
+}
+
+/** Sorted by `featuredSortOrder` — the order the public "избранное" section shows them in. */
+function featuredOf(tours: TourInfoModel[]): TourInfoModel[] {
+  return tours.filter((t) => t.isFeatured).sort((a, b) => a.featuredSortOrder - b.featuredSortOrder)
+}
 
 /**
  * Loads both the active and the archived tour lists in parallel. Errors are NOT swallowed —
@@ -43,15 +62,22 @@ export function ProductsPage() {
   const cancelDeleteRef = useRef<HTMLButtonElement>(null)
 
   const isBusy = pendingId !== null || revalidator.state !== 'idle'
-  const sourceList = view === 'active' ? active : archived
+  const featured = useMemo(() => featuredOf(active), [active])
+  const sourceList = view === 'active' ? active : view === 'featured' ? featured : archived
   const visible = useMemo(() => filterProducts(sourceList, filters), [sourceList, filters])
+  const canFeatureMore = featured.length < MAX_FEATURED
 
   function patchFilters(patch: Partial<ProductFilters>) {
     setFilters((prev) => ({ ...prev, ...patch }))
   }
 
   function errorText(err: unknown, action: string): string {
-    if (err instanceof ApiError) return `Не удалось ${action}: сервер вернул ошибку (${err.status}).`
+    if (err instanceof ApiError) {
+      if (errorCodeOf(err.body) === TOO_MANY_FEATURED_CODE) {
+        return `Уже отмечено ${MAX_FEATURED} туров — сначала уберите один из «Избранных».`
+      }
+      return `Не удалось ${action}: сервер вернул ошибку (${err.status}).`
+    }
     return `Не удалось ${action}: проверьте соединение и попробуйте ещё раз.`
   }
 
@@ -83,6 +109,21 @@ export function ProductsPage() {
     runMutation(tour.id, 'архивировать', () => setTourArchived(tour.id, true))
   const restore = (tour: TourInfoModel) =>
     runMutation(tour.id, 'восстановить', () => setTourArchived(tour.id, false))
+  const toggleFeatured = (tour: TourInfoModel) =>
+    runMutation(tour.id, tour.isFeatured ? 'убрать из избранного' : 'добавить в избранное', () =>
+      setTourFeatured(tour.id, !tour.isFeatured),
+    )
+
+  /** Swaps the tour with its up/down neighbour in the featured order and sends the full
+   * reordered id list — `ReorderFeatured` replaces the whole order, not a single position. */
+  function moveFeatured(tour: TourInfoModel, direction: 'up' | 'down') {
+    const ids = featured.map((t) => t.id)
+    const from = ids.indexOf(tour.id)
+    const to = direction === 'up' ? from - 1 : from + 1
+    if (from === -1 || to < 0 || to >= ids.length) return
+    ;[ids[from], ids[to]] = [ids[to], ids[from]]
+    runMutation(tour.id, 'изменить порядок', () => reorderFeaturedTours(ids))
+  }
 
   async function confirmDelete() {
     if (confirmTarget === null) return
@@ -131,6 +172,7 @@ export function ProductsPage() {
         view={view}
         onViewChange={setView}
         activeCount={active.length}
+        featuredCount={featured.length}
         archivedCount={archived.length}
         filters={filters}
         onFiltersChange={patchFilters}
@@ -148,8 +190,11 @@ export function ProductsPage() {
           view={view}
           pendingId={pendingId}
           isBusy={isBusy}
+          canFeatureMore={canFeatureMore}
           onOpen={openEdit}
           onTogglePublish={togglePublish}
+          onToggleFeatured={toggleFeatured}
+          onMoveFeatured={moveFeatured}
           onArchive={archive}
           onRestore={restore}
           onDelete={setConfirmTarget}
@@ -206,8 +251,25 @@ export function ProductsPage() {
   )
 }
 
-/** Empty-list state, differs by view (no products at all vs. empty archive). */
+/** Empty-list state, differs by view (no products at all vs. empty archive vs. nothing featured). */
 function EmptyState({ view }: { view: ProductsView }) {
+  if (view === 'featured') {
+    return (
+      <div className="rounded-xl border border-neutral-200 bg-white px-6 py-14 text-center">
+        <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
+          <span aria-hidden="true" className="mb-2 text-2xl">
+            ♡
+          </span>
+          <h2 className="text-base font-semibold text-neutral-800">Ничего не отмечено</h2>
+          <p className="text-sm text-neutral-500">
+            Отметьте сердечком до {MAX_FEATURED} туров на вкладке «Активные» — они появятся в
+            секции «избранное» на главной странице сайта.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   if (view === 'archived') {
     return (
       <div className="rounded-xl border border-neutral-200 bg-white px-6 py-14 text-center">

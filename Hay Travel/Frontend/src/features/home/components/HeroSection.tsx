@@ -1,13 +1,19 @@
 import { Link } from 'react-router'
 import { motion } from 'framer-motion'
+import { useReducedMotion } from '@/shared/hooks'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
+import type { HeroContent } from '@/shared/api/siteSettings'
 import { ArrowRightIcon, MapIcon, StarIcon } from '@/shared/ui/icons'
 
-/**
- * Generated placeholder, same as the tour covers — swap for real photography later.
- * A remote stock URL is deliberately avoided: the hero is the first thing painted, and a
- * broken or slow image there ruins the first impression.
- */
-const HERO_IMAGE = '/placeholders/tatev.svg'
+interface HeroSectionProps {
+  /**
+   * `hero.imageUrl`/`title`/`subtitle`/`ctaLabel`/`ctaHref` from the admin "Настройки" screen
+   * (stage 5.2) — the only five hero fields the catalog exposes (`SiteSettingCatalog.cs`). The
+   * season eyebrow and the secondary "Карта регионов" button below are NOT among them and stay
+   * hardcoded, same as before.
+   */
+  hero: HeroContent
+}
 
 /**
  * Full-bleed cinematic hero.
@@ -21,17 +27,29 @@ const HERO_IMAGE = '/placeholders/tatev.svg'
  * shot would wash it out. So its content deliberately does NOT follow the theme: text uses the
  * fixed `hero-ink` tokens and the accents keep the vivid dark-theme gold literals. The `hero`
  * class is what `index.css` hooks to keep `.text-gold-sheen` bright here in the light theme.
+ *
+ * ── Motion (2.4) ──────────────────────────────────────────────────────────────────────────────
+ * Everything that travels in this section is gated on the same `reducedMotion` flag: the slow zoom
+ * (gated twice on purpose — the `.ken-burns` class lets `index.css` shut it off in CSS with an
+ * `!important` transform that beats framer's inline one, and the JS gate below means the animation
+ * is never even started) AND the four staggered copy blocks below it. The copy still fades in under
+ * reduced motion (`opacity` is untouched) — only the `y` travel and the transition duration collapse
+ * to 0, so the block appears in place instead of rising into it. The rest of the section is
+ * untouched: this is the reference hero, not a component to redesign.
  */
-export function HeroSection() {
+export function HeroSection({ hero }: HeroSectionProps) {
+  const reducedMotion = useReducedMotion()
+  const { t } = useLocale()
+
   return (
     <section className="hero relative isolate flex min-h-[78vh] items-end overflow-hidden">
       <motion.img
-        src={HERO_IMAGE}
+        src={hero.imageUrl}
         alt=""
         initial={{ scale: 1.08 }}
-        animate={{ scale: 1 }}
-        transition={{ duration: 12, ease: 'linear' }}
-        className="absolute inset-0 -z-10 h-full w-full object-cover"
+        animate={{ scale: reducedMotion ? 1.08 : 1 }}
+        transition={{ duration: reducedMotion ? 0 : 12, ease: 'linear' }}
+        className="ken-burns absolute inset-0 -z-10 h-full w-full object-cover"
       />
       {/*
         Two stacked gradients, both theme tokens rather than `from-page/…`: the page colour flips
@@ -50,54 +68,64 @@ export function HeroSection() {
 
       <div className="mx-auto w-full max-w-7xl px-4 pb-16 sm:px-6 sm:pb-24">
         <motion.p
-          initial={{ opacity: 0, y: 14 }}
+          initial={{ opacity: 0, y: reducedMotion ? 0 : 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
+          transition={{ duration: reducedMotion ? 0 : 0.6 }}
           className="flex items-center gap-2 text-[11px] tracking-[0.22em] text-gold uppercase"
         >
           <StarIcon size={14} />
-          Сезон 2026 открыт
+          {t('home.hero.season')}
         </motion.p>
 
         <motion.h1
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: reducedMotion ? 0 : 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.1 }}
-          className="mt-4 max-w-3xl font-display text-5xl leading-[1.05] text-hero-ink sm:text-6xl lg:text-7xl"
+          transition={{ duration: reducedMotion ? 0 : 0.7, delay: 0.1 }}
+          // One gold block for the whole heading, not a "last word" split: that treatment assumed
+          // one fixed Russian phrase, which stopped being true the moment the copy became
+          // admin-editable free text (`hero.title` can be any length, any wording).
+          className="text-gold-sheen mt-4 max-w-3xl font-display text-5xl leading-[1.05] sm:text-6xl lg:text-7xl"
         >
-          Армения за пределами
-          <span className="text-gold-sheen block">путеводителей</span>
+          {hero.title}
         </motion.h1>
 
         <motion.p
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: reducedMotion ? 0 : 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.2 }}
+          transition={{ duration: reducedMotion ? 0 : 0.7, delay: 0.2 }}
           className="mt-5 max-w-xl text-base text-hero-ink-dim sm:text-lg"
         >
-          Монастыри в ущельях, чёрный туф Гюмри, вино Арени и Севан на рассвете. Небольшие группы
-          и местные гиды — от однодневных экскурсий до маршрутов на весь юг.
+          {hero.subtitle}
         </motion.p>
 
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: reducedMotion ? 0 : 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.3 }}
+          transition={{ duration: reducedMotion ? 0 : 0.7, delay: 0.3 }}
           className="mt-8 flex flex-wrap items-center gap-3"
         >
-          <Link
-            to="/trips"
-            className="inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3 text-sm font-medium text-obsidian transition-colors hover:bg-gold-light focus-visible:ring-2 focus-visible:ring-gold-light focus-visible:ring-offset-2 focus-visible:ring-offset-page focus-visible:outline-none"
+          {/*
+            `.btn-motion` replaces `transition-colors` rather than joining it (2.4): it declares the
+            colour half itself, and being unlayered it would outrank the utility anyway. Resting
+            appearance is unchanged — it only adds the 1px hover lift and the 90ms press.
+
+            A plain `<a>`, not `Link`: `hero.ctaHref` is admin-entered free text (`SiteSettingCatalog`
+            types it as a URL, not a route), so it may not be an internal path at all — `Link`
+            would try to client-side-route it either way.
+          */}
+          <a
+            href={hero.ctaHref}
+            className="btn-motion inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3 text-sm font-medium text-obsidian hover:bg-gold-light focus-visible:ring-2 focus-visible:ring-gold-light focus-visible:ring-offset-2 focus-visible:ring-offset-page focus-visible:outline-none"
           >
-            Смотреть путешествия
+            {hero.ctaLabel}
             <ArrowRightIcon size={16} />
-          </Link>
+          </a>
           <Link
             to="/regions"
-            className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm text-gold-light ring-1 ring-gold-deep/60 transition-colors hover:bg-wine-tint focus-visible:ring-2 focus-visible:ring-gold-light focus-visible:outline-none"
+            className="btn-motion inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm text-gold-light ring-1 ring-gold-deep/60 hover:bg-wine-tint focus-visible:ring-2 focus-visible:ring-gold-light focus-visible:outline-none"
           >
             <MapIcon size={16} />
-            Карта регионов
+            {t('home.hero.regionsCta')}
           </Link>
         </motion.div>
       </div>

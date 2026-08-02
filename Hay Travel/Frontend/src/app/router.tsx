@@ -14,12 +14,15 @@ import { RouteErrorBoundary } from './layout/RouteErrorBoundary'
  *  - The catalog is ONE canonical page, `/trips` ("Путешествия"). Tours and excursions are the
  *    same list narrowed by `?kind`; the route never pre-filters it. `/tours` and `/excursions`
  *    are kept alive as loader redirects (see below) because those links were shared publicly.
- *  - When mocks are swapped for the real API, only `shared/api/tours.ts` changes — loaders,
- *    components and this tree stay put.
+ *  - `shared/api/tours.ts` talks to the real backend (stage 5); loaders, components and this
+ *    tree don't know or care.
+ *  - The detail route is `tours/:id`, not `tours/:slug`: `Tour` has no `Slug` field on the
+ *    backend (adding one needs a migration, out of scope for now — see `docs/backend-stage3-sync.md`),
+ *    so the public detail page is addressed the same way the admin one already is.
  *
  * Deploy note: renders entirely client-side (no SSR). `netlify.toml` adds the SPA fallback
- * redirect so deep links like `/tours/yug-armenii-tatev` work on direct load or refresh — the
- * same fallback is what makes the redirects below work on a cold visit to an old URL.
+ * redirect so deep links like `/tours/42` work on direct load or refresh — the same fallback is
+ * what makes the redirects below work on a cold visit to an old URL.
  */
 export const router = createBrowserRouter([
   {
@@ -60,7 +63,7 @@ export const router = createBrowserRouter([
         },
       },
       {
-        path: 'tours/:slug',
+        path: 'tours/:id',
         lazy: () =>
           import('@/features/tours').then((m) => ({
             Component: m.TourDetailPage,
@@ -103,6 +106,16 @@ export const router = createBrowserRouter([
         path: 'products',
         lazy: () =>
           import('@/features/admin').then((m) => ({ Component: m.ProductsPage, loader: m.productsLoader })),
+      },
+      {
+        path: 'catalog',
+        lazy: () =>
+          import('@/features/admin').then((m) => ({ Component: m.CatalogPage, loader: m.catalogLoader })),
+      },
+      {
+        path: 'settings',
+        lazy: () =>
+          import('@/features/admin').then((m) => ({ Component: m.SettingsPage, loader: m.settingsLoader })),
       },
       {
         path: 'tours/new',

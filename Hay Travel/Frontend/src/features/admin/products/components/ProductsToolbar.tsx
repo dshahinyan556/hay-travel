@@ -35,6 +35,7 @@ interface ProductsToolbarProps {
   view: ProductsView
   onViewChange: (view: ProductsView) => void
   activeCount: number
+  featuredCount: number
   archivedCount: number
   filters: ProductFilters
   onFiltersChange: (patch: Partial<ProductFilters>) => void
@@ -82,25 +83,37 @@ export function ProductsToolbar({
   view,
   onViewChange,
   activeCount,
+  featuredCount,
   archivedCount,
   filters,
   onFiltersChange,
 }: ProductsToolbarProps) {
   return (
     <div className="flex flex-col gap-3">
-      <div className="inline-flex w-fit rounded-xl border border-neutral-200 bg-neutral-100 p-1">
-        <ViewTab
-          selected={view === 'active'}
-          label="Активные"
-          count={activeCount}
-          onClick={() => onViewChange('active')}
-        />
-        <ViewTab
-          selected={view === 'archived'}
-          label="Архив"
-          count={archivedCount}
-          onClick={() => onViewChange('archived')}
-        />
+      {/* Pinned below the mobile hamburger bar (60px) on phones, flush to the viewport top on
+          desktop where that bar doesn't exist. Bleeds to `main`'s own edges (`-mx-4 sm:-mx-6`)
+          so the background covers content scrolling underneath it. */}
+      <div className="sticky top-[60px] z-10 -mx-4 bg-neutral-50 px-4 pt-1 sm:-mx-6 sm:px-6 md:top-0">
+        <div className="inline-flex w-fit rounded-xl border border-neutral-200 bg-neutral-100 p-1">
+          <ViewTab
+            selected={view === 'active'}
+            label="Активные"
+            count={activeCount}
+            onClick={() => onViewChange('active')}
+          />
+          <ViewTab
+            selected={view === 'featured'}
+            label="Избранные"
+            count={featuredCount}
+            onClick={() => onViewChange('featured')}
+          />
+          <ViewTab
+            selected={view === 'archived'}
+            label="Архив"
+            count={archivedCount}
+            onClick={() => onViewChange('archived')}
+          />
+        </div>
       </div>
 
       <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">

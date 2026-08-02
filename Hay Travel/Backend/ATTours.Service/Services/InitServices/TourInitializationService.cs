@@ -13,8 +13,8 @@ namespace ATTours.BusinessServices.Services.InitServices
                 Type = tourType,
                 Translations = InitTranslations<TourTranslationType>(),
                 TourDays = InitTourDays(),
-                OrganizationalDetails = new List<OrganizationalDetailCreateModel>(),
-                Restrictions = new List<RestrictionCreateModel>()
+                Notes = new List<TourNoteCreateModel>(),
+                Regions = new List<TourRegionCreateModel>()
             };
 
             return await Task.FromResult(initModel);

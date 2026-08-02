@@ -42,7 +42,7 @@ export function AdminLayout() {
       </aside>
 
       {/* Mobile top bar with hamburger */}
-      <header className="flex items-center gap-3 bg-[#0b1220] px-4 py-3 text-white md:hidden">
+      <header className="sticky top-0 z-30 flex items-center gap-3 bg-[#0b1220] px-4 py-3 text-white md:hidden">
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}

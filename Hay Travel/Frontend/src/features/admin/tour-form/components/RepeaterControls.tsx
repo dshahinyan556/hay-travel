@@ -1,44 +1,11 @@
-import type { MoveDirection } from '@/features/admin/tour-form/reducer/tourFormReducer'
-
 /**
  * Small, shared controls for the form's list repeaters (route points, gallery, expenses,
  * details, restrictions, days). Kept in one place so every repeater has identical affordances
  * and hit areas without copy-pasted markup.
+ *
+ * Reordering is NOT here: it is drag-and-drop via the shared `SortableList`/`DragHandle`
+ * primitive (`shared/ui/SortableList.tsx`), which replaced the old ▲/▼ buttons.
  */
-
-interface ReorderButtonsProps {
-  onMove: (direction: MoveDirection) => void
-  canMoveUp: boolean
-  canMoveDown: boolean
-  /** Label prefix for screen readers, e.g. "картинку", "точку". */
-  itemNoun: string
-}
-
-/** Stacked ▲/▼ buttons for reordering a list item. Disabled at the list edges. */
-export function ReorderButtons({ onMove, canMoveUp, canMoveDown, itemNoun }: ReorderButtonsProps) {
-  return (
-    <span className="flex flex-col text-neutral-400">
-      <button
-        type="button"
-        onClick={() => onMove('up')}
-        disabled={!canMoveUp}
-        aria-label={`Переместить ${itemNoun} вверх`}
-        className="cursor-pointer px-1 text-[10px] leading-none transition-colors hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-30"
-      >
-        ▲
-      </button>
-      <button
-        type="button"
-        onClick={() => onMove('down')}
-        disabled={!canMoveDown}
-        aria-label={`Переместить ${itemNoun} вниз`}
-        className="cursor-pointer px-1 text-[10px] leading-none transition-colors hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-30"
-      >
-        ▼
-      </button>
-    </span>
-  )
-}
 
 interface RemoveButtonProps {
   onClick: () => void

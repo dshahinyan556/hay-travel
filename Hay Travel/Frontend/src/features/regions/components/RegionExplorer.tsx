@@ -1,13 +1,24 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { REGION_BY_SLUG, type RegionSlug } from '@/shared/data/armeniaRegions'
+import { REGION_BY_SLUG, type Region, type RegionSlug } from '@/shared/data/armeniaRegions'
 import { countToursByRegion, getToursByRegion } from '@/shared/api/tours'
-import { useIsCompactViewport } from '@/shared/hooks'
+import { getRegionBlurbs, type RegionBlurbs } from '@/shared/api/regions'
+import { useIsCompactViewport, useReducedMotion } from '@/shared/hooks'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import type { Tour } from '@/shared/types/tour'
+import { Reveal } from '@/shared/ui'
 import { RegionPanel, type RegionPanelState } from './RegionPanel'
 import { RegionPreviewBar } from './RegionPreviewBar'
 import { RegionSheet } from './RegionSheet'
 import { ChevronDownIcon, MapIcon } from '@/shared/ui/icons'
+
+/**
+ * `--dur-base` / `--ease-out-soft` (`index.css`) in framer's units. The expand is a height
+ * animation, so the number has to exist in JS — keep it in step with the token, and gate it on
+ * `prefers-reduced-motion` by hand (the map still opens, it just doesn't unroll).
+ */
+const DUR_BASE_S = 0.34
+const EASE_OUT_SOFT: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
 /**
  * The map carries ~37KB of province geometry, and on the home page it starts collapsed — so it
@@ -61,7 +72,35 @@ export function RegionExplorer({ tours, defaultOpen = false }: RegionExplorerPro
   const [open, setOpen] = useState(defaultOpen)
   const [selection, setSelection] = useState<RegionSelection | null>(null)
   const [panel, setPanel] = useState<RegionPanelState>({ status: 'loading' })
+  const [blurbs, setBlurbs] = useState<RegionBlurbs>({ ru: {}, en: {} })
   const isCompact = useIsCompactViewport()
+  const reducedMotion = useReducedMotion()
+  const { locale, t } = useLocale()
+
+  // Admin-editable teaser text (`Настройки → Справочники → Регионы`), overlaid on top of the
+  // static geometry/name data — see `shared/api/regions.ts`. Falls back to the static blurb
+  // baked into `armeniaRegions.ts` while this is loading or if the fetch fails.
+  useEffect(() => {
+    let cancelled = false
+    getRegionBlurbs().then((result) => {
+      if (!cancelled) setBlurbs(result)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const regionWithBlurb = useCallback(
+    (slug: RegionSlug): Region => {
+      const base = REGION_BY_SLUG[slug]
+      return {
+        ...base,
+        blurb: blurbs.ru[slug] ?? base.blurb,
+        blurbEn: blurbs.en[slug] ?? base.blurbEn,
+      }
+    },
+    [blurbs],
+  )
 
   const counts = countToursByRegion(tours)
 
@@ -118,9 +157,9 @@ export function RegionExplorer({ tours, defaultOpen = false }: RegionExplorerPro
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [selection])
 
-  const selectedRegion = selection ? REGION_BY_SLUG[selection.slug] : null
-  const openedRegion = selection?.stage === 'opened' ? REGION_BY_SLUG[selection.slug] : null
-  const previewRegion = selection?.stage === 'preview' ? REGION_BY_SLUG[selection.slug] : null
+  const selectedRegion = selection ? regionWithBlurb(selection.slug) : null
+  const openedRegion = selection?.stage === 'opened' ? regionWithBlurb(selection.slug) : null
+  const previewRegion = selection?.stage === 'preview' ? regionWithBlurb(selection.slug) : null
 
   return (
     <>
@@ -133,29 +172,45 @@ export function RegionExplorer({ tours, defaultOpen = false }: RegionExplorerPro
         their own side effects (scroll lock, focus trap) and have no business inside the ribbon's
         DOM, which exists purely for the background gradient's box.
       */}
-      <section className="ribbon-veil relative w-full overflow-hidden py-24 sm:py-32">
+      {/*
+        Top padding is smaller when this is the dedicated `/regions` page (`defaultOpen`): there
+        the section sits directly under the sticky header with nothing above it, so the full
+        `py-24 sm:py-32` rhythm — sized for a section that follows others on the home page — reads
+        as a dead gap rather than breathing room.
+      */}
+      <section
+        className={`ribbon-veil relative w-full overflow-hidden pb-24 sm:pb-32 ${
+          defaultOpen ? 'pt-8 sm:pt-12' : 'pt-24 sm:pt-32'
+        }`}
+      >
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-16">
           <div className="rounded-3xl bg-panel/60 p-5 ring-1 ring-edge sm:p-8">
             <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <p className="section-eyebrow">Интерактивная карта</p>
-                <h2 className="text-gold-sheen h2-section mt-1.5">Армения по регионам</h2>
-                <p className="mt-2 max-w-md text-sm text-ink-muted">
-                  11 регионов, у каждого свой характер. Выберите регион на карте — покажем, что
-                  можно посмотреть именно там.
-                </p>
-              </div>
+              <Reveal as="div">
+                <p className="section-eyebrow">{t('regions.eyebrow')}</p>
+                <h2 className="text-gold-sheen h2-section mt-1.5">{t('regions.title')}</h2>
+                <p className="mt-2 max-w-md text-sm text-ink-muted">{t('regions.subtitle')}</p>
+              </Reveal>
 
               {!defaultOpen && (
                 <button
                   type="button"
                   onClick={() => setOpen((v) => !v)}
                   aria-expanded={open}
-                  className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-gold-fill px-5 py-2.5 text-sm font-medium text-gold-on transition-colors hover:bg-gold-fill-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-page focus-visible:outline-none"
+                  // `.btn-motion` carries the colour transition itself, so it REPLACES
+                  // `transition-colors` (unlayered CSS outranks the utility — see `index.css`).
+                  className="btn-motion inline-flex cursor-pointer items-center gap-2 rounded-full bg-gold-fill px-5 py-2.5 text-sm font-medium text-gold-on hover:bg-gold-fill-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-page focus-visible:outline-none"
                 >
                   <MapIcon size={17} />
-                  {open ? 'Свернуть карту' : 'Исследовать по регионам'}
-                  <motion.span animate={{ rotate: open ? 180 : 0 }} className="inline-flex">
+                  {open ? t('regions.collapse') : t('regions.expand')}
+                  {/* Explicit transition rather than framer's default spring, so the chevron turns
+                      on the same token as the panel it opens — and holds still under reduced
+                      motion, where the map still expands. */}
+                  <motion.span
+                    animate={{ rotate: open ? 180 : 0 }}
+                    transition={{ duration: reducedMotion ? 0 : DUR_BASE_S, ease: EASE_OUT_SOFT }}
+                    className="inline-flex"
+                  >
                     <ChevronDownIcon size={16} />
                   </motion.span>
                 </button>
@@ -169,7 +224,7 @@ export function RegionExplorer({ tours, defaultOpen = false }: RegionExplorerPro
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ duration: reducedMotion ? 0 : DUR_BASE_S, ease: EASE_OUT_SOFT }}
                   // `overflow-hidden` is what makes the height animation clip cleanly.
                   className="overflow-hidden"
                 >
@@ -190,30 +245,39 @@ export function RegionExplorer({ tours, defaultOpen = false }: RegionExplorerPro
                         onSelect={handleSelect}
                         onDismiss={dismissPreview}
                         counts={counts}
+                        blurbOverride={locale === 'en' ? blurbs.en : blurbs.ru}
                       />
                     </Suspense>
 
                     {/* Desktop side panel */}
                     <div className="hidden lg:block">
                       {openedRegion ? (
-                        <div className="sticky top-24 max-h-[70vh] rounded-2xl bg-panel p-4 ring-1 ring-edge">
-                          <RegionPanel
-                            region={openedRegion}
-                            state={panel}
-                            onClose={clearSelection}
-                            onRetry={() => loadRegion(openedRegion.slug)}
-                          />
+                        // The ring lives on its own layer, painted after (on top of) the clipping
+                        // box below rather than as that box's own box-shadow. Chrome mis-renders a
+                        // rounded corner's box-shadow when an `overflow-hidden` ancestor also clips
+                        // a transform-animated descendant (the tour rows animate in via framer
+                        // motion) — the composited clip and the shadow's own anti-aliasing fall out
+                        // of step and a hairline gap opens at the corner. A separate, unclipped
+                        // overlay can't be affected by whatever the scrolling/animating content
+                        // underneath is doing, so the border stays crisp regardless of browser.
+                        <div className="sticky top-24 relative rounded-2xl bg-panel shadow-[var(--shadow-lg)]">
+                          <div className="flex max-h-[70vh] flex-col overflow-hidden rounded-2xl p-4">
+                            <RegionPanel
+                              region={openedRegion}
+                              state={panel}
+                              onClose={clearSelection}
+                              onRetry={() => loadRegion(openedRegion.slug)}
+                            />
+                          </div>
+                          <div aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-gold-line" />
                         </div>
                       ) : (
                         <div className="veil-top sticky top-24 rounded-2xl border border-dashed border-edge p-6 text-center">
                           <span className="inline-flex text-gold-ink">
                             <MapIcon size={26} />
                           </span>
-                          <p className="mt-3 font-display text-lg text-ink">Выберите регион</p>
-                          <p className="mt-1.5 text-sm text-ink-muted">
-                            Наведите на регион, чтобы увидеть, сколько там маршрутов, и нажмите —
-                            покажем список.
-                          </p>
+                          <p className="mt-3 font-display text-lg text-ink">{t('regions.empty.placeholder')}</p>
+                          <p className="mt-1.5 text-sm text-ink-muted">{t('regions.empty.hint')}</p>
                         </div>
                       )}
                     </div>
@@ -247,7 +311,7 @@ export function RegionExplorer({ tours, defaultOpen = false }: RegionExplorerPro
           <RegionSheet
             open={selection?.stage === 'opened'}
             onClose={clearSelection}
-            ariaLabel={`Регион ${selectedRegion?.ru ?? ''}`.trim()}
+            ariaLabel={`${t('regions.panel.label')} ${selectedRegion?.ru ?? ''}`.trim()}
           >
             {selectedRegion && (
               <RegionPanel

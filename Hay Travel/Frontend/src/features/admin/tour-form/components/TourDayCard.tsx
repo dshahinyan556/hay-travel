@@ -1,16 +1,18 @@
-import { useState } from 'react'
-import type { TourDayFormState } from '@/features/admin/types/form'
+import { useEffect, useState } from 'react'
+import { DragHandle } from '@/shared/ui'
+import type { SortableRowRenderProps } from '@/shared/ui'
+import type { Localized, TourDayFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
 import { TourDayFields } from './TourDayFields'
-import { ReorderButtons, RemoveButton } from './RepeaterControls'
+import { RemoveButton } from './RepeaterControls'
 
 interface TourDayCardProps {
   day: TourDayFormState
   index: number
   /** True when removing this day keeps the day count legal for the current type. */
   canRemove: boolean
-  canMoveUp: boolean
-  canMoveDown: boolean
+  /** Drag mechanics handed down by the `SortableList` in `TourDaysEditor`. */
+  sortable: SortableRowRenderProps
   /** RU-title error for this day, if any. */
   titleError?: string
   /** Negative-price error for this day, if any. */
@@ -18,6 +20,8 @@ interface TourDayCardProps {
   /** Missing-route-point error for this day, if any. */
   routePointError?: string
   actions: TourFormActions
+  /** Existing route-point catalog entries offered as autocomplete. */
+  routePointSuggestions: Localized[]
 }
 
 const priceFormatter = new Intl.NumberFormat('ru-RU')
@@ -43,31 +47,50 @@ function imagesLabel(count: number): string {
  * price); expanded, it reveals the day's price, bilingual fields, its route points
  * (`LocalizedListEditor`) and its gallery (`GalleryImagesEditor`). Only local UI state here
  * (open/closed) — all data changes go through `actions`, keyed by `day.key`.
+ *
+ * Reordering is drag-and-drop by the header handle only (never the whole card — the body is full
+ * of inputs). The `SortableList` that owns the drag lives one level up, in `TourDaysEditor`.
  */
 export function TourDayCard({
   day,
   index,
   canRemove,
-  canMoveUp,
-  canMoveDown,
+  sortable,
   titleError,
   priceError,
   routePointError,
   actions,
+  routePointSuggestions,
 }: TourDayCardProps) {
   const [open, setOpen] = useState(index === 0)
   const bodyId = `day-body-${day.key}`
   const summaryTitle = day.title.ru.trim() || `День ${index + 1}`
   const hasError = Boolean(titleError || priceError || routePointError)
 
+  // Collapse before a drag starts: an expanded card's body (price/text fields, route points,
+  // gallery) can be far taller than a neighbouring collapsed card, and dnd-kit's keyboard
+  // coordinate-getter moves the virtual cursor by increments of the DRAGGED item's own rect — on
+  // a very tall expanded card a single arrow press can undershoot and land back on the same slot,
+  // silently no-opping the move. Collapsing keeps every row a uniform, small height for the
+  // duration of the drag regardless of input method.
+  useEffect(() => {
+    if (sortable.isDragging) setOpen(false)
+  }, [sortable.isDragging])
+
   return (
-    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-      <div className="flex items-center gap-2.5 bg-neutral-50 px-3 py-2.5">
-        <ReorderButtons
-          onMove={(direction) => actions.moveDay(day.key, direction)}
-          canMoveUp={canMoveUp}
-          canMoveDown={canMoveDown}
-          itemNoun="день"
+    <div
+      ref={sortable.setNodeRef}
+      style={sortable.style}
+      className={`relative overflow-hidden rounded-xl border bg-white ${
+        sortable.isDragging ? 'z-10 border-brand-300 shadow-lg' : 'border-neutral-200'
+      }`}
+    >
+      <div className="flex items-center gap-2 bg-neutral-50 px-2.5 py-2.5 sm:gap-2.5 sm:px-3">
+        <DragHandle
+          ref={sortable.setActivatorNodeRef}
+          {...sortable.attributes}
+          {...sortable.listeners}
+          label={`Перетащить день ${index + 1}, чтобы изменить порядок`}
         />
         <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md bg-brand-700 text-xs font-bold text-white tabular-nums">
           {index + 1}
@@ -115,6 +138,7 @@ export function TourDayCard({
             priceError={priceError}
             routePointError={routePointError}
             actions={actions}
+            routePointSuggestions={routePointSuggestions}
           />
         </div>
       )}

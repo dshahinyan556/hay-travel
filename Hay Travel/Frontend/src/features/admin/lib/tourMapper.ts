@@ -11,14 +11,18 @@ import {
   ExpenseTranslationType,
   LanguageCode,
   TourDayTranslationType,
+  TourNoteType,
   TourTranslationType,
   TourType,
 } from '@/features/admin/lib/enums'
 import type {
+  ExpenseTemplateInfoModel,
+  PlaceInfoModel,
   TourCreateModel,
   TourDayCreateModel,
   TourInfoModel,
   TourDayInfoModel,
+  TourNoteTemplateInfoModel,
   TranslatableCreateModel,
   TranslatableInfoModel,
 } from '@/shared/types/attours'
@@ -39,8 +43,9 @@ const newKey = (): string => crypto.randomUUID()
 
 export const emptyLocalized = (): Localized => ({ ru: '', en: '' })
 
-/** Route points, organizational details and restrictions all share the LocalizedListItem
- * shape, so one factory serves all three (exported under intention-revealing aliases). */
+/** Route points and every tour note list (organizational details, restrictions, included,
+ * not-included) share the LocalizedListItem shape, so one factory serves all of them (exported
+ * under intention-revealing aliases). */
 export const emptyLocalizedItem = (): LocalizedListItem => ({
   key: newKey(),
   text: emptyLocalized(),
@@ -49,6 +54,8 @@ export const emptyLocalizedItem = (): LocalizedListItem => ({
 export const emptyRoutePoint = emptyLocalizedItem
 export const emptyOrganizationalDetail = emptyLocalizedItem
 export const emptyRestriction = emptyLocalizedItem
+export const emptyIncluded = emptyLocalizedItem
+export const emptyNotIncluded = emptyLocalizedItem
 
 export const emptyGalleryItem = (): GalleryItemFormState => ({
   key: newKey(),
@@ -94,6 +101,34 @@ export function writeLocalized(type: number, value: Localized): TranslatableCrea
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Catalog suggestions (autocomplete)                                        */
+/* -------------------------------------------------------------------------- */
+
+/** Catalog entries always encode their bilingual name as translation `type: 0` (see
+ * `catalog/lib/catalogMapper.ts`'s header) — a different sentinel-reuse than route points'
+ * `type: 0`, coincidentally the same number for an unrelated reason. */
+const CATALOG_NAME_TYPE = 0
+
+export function placesToSuggestions(places: PlaceInfoModel[]): Localized[] {
+  return places.map((p) => readLocalized(p.translations, CATALOG_NAME_TYPE))
+}
+
+export function expenseTemplatesToSuggestions(templates: ExpenseTemplateInfoModel[]): Localized[] {
+  return templates.map((t) => readLocalized(t.translations, CATALOG_NAME_TYPE))
+}
+
+/** `type` is a `TourNoteType` — callers pass one of its four values to get suggestions for the
+ * matching tab only. */
+export function noteTemplatesToSuggestions(
+  templates: TourNoteTemplateInfoModel[],
+  type: number,
+): Localized[] {
+  return templates
+    .filter((t) => t.type === type)
+    .map((t) => readLocalized(t.translations, CATALOG_NAME_TYPE))
+}
+
+/* -------------------------------------------------------------------------- */
 /*  DTO -> form                                                                */
 /* -------------------------------------------------------------------------- */
 
@@ -112,20 +147,37 @@ export function createModelToForm(dto: TourCreateModel): TourFormState {
     shortDescription: readLocalized(dto.translations, TourTranslationType.ShortDescription),
     description: readLocalized(dto.translations, TourTranslationType.Description),
     duration: readLocalized(dto.translations, TourTranslationType.Duration),
-    organizationalDetails: (dto.organizationalDetails ?? []).map((o) => ({
-      key: newKey(),
-      text: readLocalized(o.translations ?? [], ExpenseTranslationType.Description),
-    })),
-    restrictions: (dto.restrictions ?? []).map((o) => ({
-      key: newKey(),
-      text: readLocalized(o.translations ?? [], ExpenseTranslationType.Description),
-    })),
+    organizationalDetails: (dto.notes ?? [])
+      .filter((n) => n.type === TourNoteType.OrganizationalDetail)
+      .map((n) => ({
+        key: newKey(),
+        text: readLocalized(n.translations ?? [], ExpenseTranslationType.Description),
+      })),
+    restrictions: (dto.notes ?? [])
+      .filter((n) => n.type === TourNoteType.Restriction)
+      .map((n) => ({
+        key: newKey(),
+        text: readLocalized(n.translations ?? [], ExpenseTranslationType.Description),
+      })),
+    included: (dto.notes ?? [])
+      .filter((n) => n.type === TourNoteType.Included)
+      .map((n) => ({
+        key: newKey(),
+        text: readLocalized(n.translations ?? [], ExpenseTranslationType.Description),
+      })),
+    notIncluded: (dto.notes ?? [])
+      .filter((n) => n.type === TourNoteType.NotIncluded)
+      .map((n) => ({
+        key: newKey(),
+        text: readLocalized(n.translations ?? [], ExpenseTranslationType.Description),
+      })),
     days: (dto.tourDays ?? []).map(createDayToForm),
     additionalExpenses: (dto.additionalExpenses ?? []).map((e) => ({
       key: newKey(),
       amount: e.amount == null ? '' : String(e.amount),
       description: readLocalized(e.translations ?? [], ExpenseTranslationType.Description),
     })),
+    regions: sortBySortOrder(dto.regions ?? []).map((r) => ({ regionId: r.regionId })),
   }
 }
 
@@ -139,15 +191,33 @@ export function infoToForm(dto: TourInfoModel): TourFormState {
     shortDescription: readLocalized(dto.translations, TourTranslationType.ShortDescription),
     description: readLocalized(dto.translations, TourTranslationType.Description),
     duration: readLocalized(dto.translations, TourTranslationType.Duration),
-    organizationalDetails: sortBySortOrder(dto.organizationalDetails ?? []).map((o) => ({
+    organizationalDetails: sortBySortOrder(
+      (dto.notes ?? []).filter((n) => n.type === TourNoteType.OrganizationalDetail),
+    ).map((n) => ({
       key: newKey(),
-      serverId: o.id,
-      text: readLocalized(o.translations ?? [], ExpenseTranslationType.Description),
+      serverId: n.id,
+      text: readLocalized(n.translations ?? [], ExpenseTranslationType.Description),
     })),
-    restrictions: sortBySortOrder(dto.restrictions ?? []).map((o) => ({
+    restrictions: sortBySortOrder(
+      (dto.notes ?? []).filter((n) => n.type === TourNoteType.Restriction),
+    ).map((n) => ({
       key: newKey(),
-      serverId: o.id,
-      text: readLocalized(o.translations ?? [], ExpenseTranslationType.Description),
+      serverId: n.id,
+      text: readLocalized(n.translations ?? [], ExpenseTranslationType.Description),
+    })),
+    included: sortBySortOrder(
+      (dto.notes ?? []).filter((n) => n.type === TourNoteType.Included),
+    ).map((n) => ({
+      key: newKey(),
+      serverId: n.id,
+      text: readLocalized(n.translations ?? [], ExpenseTranslationType.Description),
+    })),
+    notIncluded: sortBySortOrder(
+      (dto.notes ?? []).filter((n) => n.type === TourNoteType.NotIncluded),
+    ).map((n) => ({
+      key: newKey(),
+      serverId: n.id,
+      text: readLocalized(n.translations ?? [], ExpenseTranslationType.Description),
     })),
     days: (dto.tourDays ?? []).map(infoDayToForm),
     additionalExpenses: (dto.additionalExpenses ?? []).map((e) => ({
@@ -156,6 +226,7 @@ export function infoToForm(dto: TourInfoModel): TourFormState {
       amount: e.amount == null ? '' : String(e.amount),
       description: readLocalized(e.translations ?? [], ExpenseTranslationType.Description),
     })),
+    regions: sortBySortOrder(dto.regions ?? []).map((r) => ({ serverId: r.id, regionId: r.regionId })),
   }
 }
 
@@ -253,14 +324,29 @@ export function formToCreateModel(form: TourFormState): TourCreateModel {
       amount: e.amount.trim() === '' ? null : parseDecimal(e.amount),
       translations: writeLocalized(ExpenseTranslationType.Description, e.description),
     })),
-    organizationalDetails: form.organizationalDetails.map((o, i) => ({
-      sortOrder: i,
-      translations: writeLocalized(ExpenseTranslationType.Description, o.text),
-    })),
-    restrictions: form.restrictions.map((o, i) => ({
-      sortOrder: i,
-      translations: writeLocalized(ExpenseTranslationType.Description, o.text),
-    })),
+    notes: [
+      ...form.organizationalDetails.map((o, i) => ({
+        type: TourNoteType.OrganizationalDetail,
+        sortOrder: i,
+        translations: writeLocalized(ExpenseTranslationType.Description, o.text),
+      })),
+      ...form.restrictions.map((o, i) => ({
+        type: TourNoteType.Restriction,
+        sortOrder: i,
+        translations: writeLocalized(ExpenseTranslationType.Description, o.text),
+      })),
+      ...form.included.map((o, i) => ({
+        type: TourNoteType.Included,
+        sortOrder: i,
+        translations: writeLocalized(ExpenseTranslationType.Description, o.text),
+      })),
+      ...form.notIncluded.map((o, i) => ({
+        type: TourNoteType.NotIncluded,
+        sortOrder: i,
+        translations: writeLocalized(ExpenseTranslationType.Description, o.text),
+      })),
+    ],
+    regions: form.regions.map((r, i) => ({ regionId: r.regionId, sortOrder: i })),
   }
 }
 
@@ -292,9 +378,11 @@ export function formToUpdateModel(form: TourFormState, tourId: number): TourInfo
     id: tourId,
     type: form.type,
     isActive: form.isActive,
-    // Ignored by UpdateTour (archive/restore go through SetArchived); present only to satisfy the
-    // wire type. Kept `false` — the update endpoint never reads it.
+    // Ignored by UpdateTour (archive/restore go through SetArchived, featured through
+    // SetFeatured/ReorderFeatured); present only to satisfy the wire type.
     isArchived: false,
+    isFeatured: false,
+    featuredSortOrder: 0,
     mainImageUrl: form.mainImageUrl.trim() === '' ? null : form.mainImageUrl.trim(),
     translations: asInfoTranslations([
       ...writeLocalized(TourTranslationType.Title, form.title),
@@ -326,16 +414,38 @@ export function formToUpdateModel(form: TourFormState, tourId: number): TourInfo
       amount: e.amount.trim() === '' ? null : parseDecimal(e.amount),
       translations: asInfoTranslations(writeLocalized(ExpenseTranslationType.Description, e.description)),
     })),
-    organizationalDetails: form.organizationalDetails.map((o, i) => ({
-      id: o.serverId ?? NEW,
-      sortOrder: i,
-      translations: asInfoTranslations(writeLocalized(ExpenseTranslationType.Description, o.text)),
-    })),
-    restrictions: form.restrictions.map((o, i) => ({
-      id: o.serverId ?? NEW,
-      sortOrder: i,
-      translations: asInfoTranslations(writeLocalized(ExpenseTranslationType.Description, o.text)),
-    })),
+    notes: [
+      ...form.organizationalDetails.map((o, i) => ({
+        id: o.serverId ?? NEW,
+        type: TourNoteType.OrganizationalDetail,
+        sortOrder: i,
+        translations: asInfoTranslations(writeLocalized(ExpenseTranslationType.Description, o.text)),
+      })),
+      ...form.restrictions.map((o, i) => ({
+        id: o.serverId ?? NEW,
+        type: TourNoteType.Restriction,
+        sortOrder: i,
+        translations: asInfoTranslations(writeLocalized(ExpenseTranslationType.Description, o.text)),
+      })),
+      ...form.included.map((o, i) => ({
+        id: o.serverId ?? NEW,
+        type: TourNoteType.Included,
+        sortOrder: i,
+        translations: asInfoTranslations(writeLocalized(ExpenseTranslationType.Description, o.text)),
+      })),
+      ...form.notIncluded.map((o, i) => ({
+        id: o.serverId ?? NEW,
+        type: TourNoteType.NotIncluded,
+        sortOrder: i,
+        translations: asInfoTranslations(writeLocalized(ExpenseTranslationType.Description, o.text)),
+      })),
+    ],
+    // Always the real list (never omitted): the contract's `Regions == null` → "don't touch" only
+    // existed to protect against an admin that couldn't express regions at all (pre-4.4) — see
+    // `TourInfoModel.regions`'s doc comment. `slug` is unused by the update mapping (`UpdateTour`
+    // ignores it, matching by `RegionId`) — sent blank rather than threading the full region list
+    // through just to fill a field nothing reads.
+    regions: form.regions.map((r, i) => ({ id: r.serverId ?? NEW, regionId: r.regionId, slug: '', sortOrder: i })),
   }
 }
 

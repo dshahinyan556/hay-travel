@@ -10,6 +10,10 @@ export {
   useIsTouchDevice,
   COMPACT_VIEWPORT_QUERY,
 } from './useMediaQuery'
+export { useReducedMotion, REDUCED_MOTION_QUERY } from './useReducedMotion'
+export { useReveal } from './useReveal'
+export type { UseRevealOptions, UseRevealResult } from './useReveal'
 export { useBodyScrollLock } from './useBodyScrollLock'
 export { useFocusTrap } from './useFocusTrap'
 export { useDeferredCommit, type DeferredCommit } from './useDeferredCommit'
+export { useUnsavedChangesGuard, type UnsavedChangesGuard } from './useUnsavedChangesGuard'

@@ -1,13 +1,33 @@
 import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router'
-import type { RegionSlug } from '@/shared/data/armeniaRegions'
+import { REGION_BY_SLUG, type RegionSlug } from '@/shared/data/armeniaRegions'
 import { useDeferredCommit } from '@/shared/hooks'
 import type { Tour, TourKind } from '@/shared/types/tour'
 
+/** Catalog sort order — `'default'` keeps the list in the order the API returned it. */
+export type TourSort = 'default' | 'price-asc' | 'price-desc'
+
+function isTourSort(value: string | null): value is TourSort {
+  return value === 'price-asc' || value === 'price-desc'
+}
+
 export interface TourFilters {
   kind: TourKind | 'all'
-  region: RegionSlug | 'all'
+  /** Regions to match, OR'd together. `[]` is the default (no filter — every region matches). */
+  region: readonly RegionSlug[]
+  minPrice: number | null
   maxPrice: number | null
+  sort: TourSort
+  /** Free-text match against the tour title. `''` is the default (no filter). */
+  search: string
+}
+
+/** `?region=` holds comma-joined slugs. Unknown slugs (a hand-edited URL) are dropped rather than
+ * left in `filters.region`, where they'd never match a tour and silently look like "nothing found"
+ * instead of "no filter". */
+function parseRegionParam(raw: string | null): RegionSlug[] {
+  if (!raw) return []
+  return raw.split(',').filter((slug): slug is RegionSlug => slug in REGION_BY_SLUG)
 }
 
 export interface UseTourFilters {
@@ -44,6 +64,10 @@ export const PRICE_STEP = 10
 export function useTourFilters(): UseTourFilters {
   const [params, setParams] = useSearchParams()
 
+  const rawMinPrice = params.get('minPrice')?.trim()
+  const parsedMinPrice = rawMinPrice ? Number(rawMinPrice) : Number.NaN
+  const urlMinPrice = Number.isFinite(parsedMinPrice) ? parsedMinPrice : null
+
   const rawMaxPrice = params.get('maxPrice')?.trim()
   // A hand-edited `?maxPrice=abc` (or an empty `?maxPrice=`, which `Number` reads as 0) must not
   // silently hide every tour — anything unparseable is simply "no limit".
@@ -55,8 +79,10 @@ export function useTourFilters(): UseTourFilters {
       setParams(
         (current) => {
           const next = new URLSearchParams(current)
-          // `'all'` and `null` are the defaults — omit them so links stay clean.
-          if (value === 'all' || value === null) {
+          // `'all'`, `null`, `''` and `[]` are the defaults — omit them so links stay clean.
+          // `Array.prototype.toString` (via the `String()` fallback below) already comma-joins,
+          // which is exactly the `?region=lori,tavush` encoding `parseRegionParam` expects back.
+          if (value === 'all' || value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
             next.delete(key)
           } else {
             next.set(key, String(value))
@@ -67,6 +93,15 @@ export function useTourFilters(): UseTourFilters {
       )
     },
     [setParams],
+  )
+
+  const commitMinPrice = useCallback(
+    (value: TourFilters['minPrice']) => {
+      // `replace`, same reasoning as `commitMaxPrice` below: typing digits into the bound field is
+      // a stream of edits, not a series of deliberate navigations.
+      writeParam('minPrice', value, true)
+    },
+    [writeParam],
   )
 
   const commitMaxPrice = useCallback(
@@ -81,50 +116,102 @@ export function useTourFilters(): UseTourFilters {
 
   // Destructured so the callbacks below depend on the stable functions, not on a fresh object.
   const {
+    value: draftMinPrice,
+    set: setDraftMinPrice,
+    sync: syncMinPrice,
+  } = useDeferredCommit(urlMinPrice, commitMinPrice)
+  const {
     value: draftMaxPrice,
     set: setDraftMaxPrice,
     sync: syncMaxPrice,
   } = useDeferredCommit(urlMaxPrice, commitMaxPrice)
 
+  const urlSearch = params.get('search') ?? ''
+
+  const commitSearch = useCallback(
+    (value: TourFilters['search']) => {
+      // Same reasoning as `commitMaxPrice`: a keystroke stream must not spawn a history entry
+      // per character, so this overwrites the current one instead of pushing a new one.
+      writeParam('search', value, true)
+    },
+    [writeParam],
+  )
+
+  // Same instant-draft/debounced-commit split as the price slider (see `commitMaxPrice`): typing
+  // filters the grid immediately from the local draft, and only reaches the URL — a navigation —
+  // once the user pauses.
+  const { value: draftSearch, set: setDraftSearch, sync: syncSearch } = useDeferredCommit(urlSearch, commitSearch)
+
   const setFilter = useCallback(
     <K extends keyof TourFilters>(key: K, value: TourFilters[K]) => {
+      if (key === 'minPrice') {
+        setDraftMinPrice(value as TourFilters['minPrice'])
+        return
+      }
       if (key === 'maxPrice') {
         // TS cannot narrow `value` from a comparison on the generic key, but inside this branch
         // `K` is `'maxPrice'`, so the value is `number | null`.
         setDraftMaxPrice(value as TourFilters['maxPrice'])
         return
       }
-      // Kind and region are single deliberate choices: they push, so "Back" undoes them.
+      if (key === 'search') {
+        setDraftSearch(value as TourFilters['search'])
+        return
+      }
+      // Kind, region and sort are single deliberate choices: they push, so "Back" undoes them.
       writeParam(key, value, false)
     },
-    [setDraftMaxPrice, writeParam],
+    [setDraftMinPrice, setDraftMaxPrice, setDraftSearch, writeParam],
   )
 
   const reset = useCallback(() => {
-    // Drop the draft together with the params, otherwise a commit scheduled a moment ago would
-    // land right after the reset and put the price filter back.
+    // Drop the drafts together with the params, otherwise a commit scheduled a moment ago would
+    // land right after the reset and put the price/search filter back.
+    syncMinPrice(null)
     syncMaxPrice(null)
+    syncSearch('')
     setParams(new URLSearchParams(), { preventScrollReset: true })
-  }, [syncMaxPrice, setParams])
+  }, [syncMinPrice, syncMaxPrice, syncSearch, setParams])
+
+  const sortParam = params.get('sort')
 
   const filters: TourFilters = {
     kind: (params.get('kind') as TourKind | null) ?? 'all',
-    region: (params.get('region') as RegionSlug | null) ?? 'all',
+    region: parseRegionParam(params.get('region')),
+    minPrice: draftMinPrice,
     maxPrice: draftMaxPrice,
+    sort: isTourSort(sortParam) ? sortParam : 'default',
+    search: draftSearch,
   }
 
-  const isFiltered = filters.kind !== 'all' || filters.region !== 'all' || filters.maxPrice !== null
+  const isFiltered =
+    filters.kind !== 'all' ||
+    filters.region.length > 0 ||
+    filters.minPrice !== null ||
+    filters.maxPrice !== null ||
+    filters.sort !== 'default' ||
+    filters.search !== ''
 
   return { filters, setFilter, reset, isFiltered }
 }
 
 export function applyTourFilters(tours: readonly Tour[], filters: TourFilters): readonly Tour[] {
-  return tours.filter((tour) => {
+  const query = filters.search.trim().toLowerCase()
+  const filtered = tours.filter((tour) => {
     if (filters.kind !== 'all' && tour.kind !== filters.kind) return false
-    if (filters.region !== 'all' && !tour.regionSlugs.includes(filters.region)) return false
+    // OR across selected regions: a multi-day tour crossing several regions matches if ANY of
+    // them is picked, not all — picking more regions should only ever widen the result set.
+    if (filters.region.length > 0 && !filters.region.some((slug) => tour.regionSlugs.includes(slug))) return false
+    if (filters.minPrice !== null && tour.priceFrom < filters.minPrice) return false
     if (filters.maxPrice !== null && tour.priceFrom > filters.maxPrice) return false
+    if (query !== '' && !tour.title.toLowerCase().includes(query)) return false
     return true
   })
+  // `.filter()` above always hands back a fresh array, so sorting it in place here never touches
+  // the caller's own `tours`.
+  if (filters.sort === 'price-asc') filtered.sort((a, b) => a.priceFrom - b.priceFrom)
+  if (filters.sort === 'price-desc') filtered.sort((a, b) => b.priceFrom - a.priceFrom)
+  return filtered
 }
 
 export interface PriceRange {

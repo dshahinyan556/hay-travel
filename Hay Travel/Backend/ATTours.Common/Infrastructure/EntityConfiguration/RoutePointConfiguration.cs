@@ -14,6 +14,14 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
                 .WithOne(x => x.RoutePoint)
                 .HasForeignKey(x => x.RoutePointId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Ссылка на каталог (3.4). Restrict, а не SetNull: обнуление FK у «привязанной,
+            // не переопределённой» точки потеряло бы её текст. Множественных каскадных путей
+            // не возникает — владелец (TourDay) каскадит, шаблон Place не каскадит.
+            builder.HasOne(x => x.Place)
+                .WithMany(x => x.RoutePoints)
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }

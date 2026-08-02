@@ -20,12 +20,7 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
                 .HasForeignKey(a => a.TourId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            builder.HasMany(x => x.OrganizationalDetails)
-                .WithOne(x => x.Tour)
-                .HasForeignKey(x => x.TourId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            builder.HasMany(x => x.Restrictions)
+            builder.HasMany(x => x.Notes)
                 .WithOne(x => x.Tour)
                 .HasForeignKey(x => x.TourId)
                 .OnDelete(DeleteBehavior.Cascade);
@@ -40,6 +35,7 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
             builder.HasIndex(t => t.Type);
             builder.HasIndex(t => t.TotalPrice);
             builder.HasIndex(t => t.IsArchived);
+            builder.HasIndex(t => t.IsFeatured);
         }
     }
 }
