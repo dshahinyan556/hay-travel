@@ -1,4 +1,5 @@
 using ATTours.Common.Dto.Init;
+using ATTours.Common.DTO.Auth;
 using ATTours.Common.DTO.Info;
 using ATTours.Common.DTO.Init;
 using ATTours.Common.DTO.Request;
@@ -394,6 +395,36 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.Type))
                 .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
                 .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+
+            // ============= Mappings for USER =============
+            // Токен-ответы (LoginResultModel/AccessTokenModel) собираются в AuthService вручную:
+            // это не проекция сущности, а результат подписи JWT.
+
+            // RegisterModel -> User. Всё, что определяет саму учётку (хеш пароля, роль,
+            // подтверждение почты, счётчики блокировки), проставляет AuthService —
+            // маппер переносит только то, что пришло из формы.
+            CreateMap<RegisterModel, User>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.Password, opt => opt.Ignore())
+                .ForMember(dest => dest.IsEmailVerified, opt => opt.Ignore())
+                .ForMember(dest => dest.RoleId, opt => opt.Ignore())
+                .ForMember(dest => dest.Role, opt => opt.Ignore())
+                .ForMember(dest => dest.FailedLoginAttempts, opt => opt.Ignore())
+                .ForMember(dest => dest.LockedUntil, opt => opt.Ignore())
+                .ForMember(dest => dest.ForceToChangePass, opt => opt.Ignore())
+                .ForMember(dest => dest.Tokens, opt => opt.Ignore())
+                .ForMember(dest => dest.RefreshTokens, opt => opt.Ignore());
+
+            // User -> UserInfoModel. Наружу не уходят ни хеш пароля, ни счётчик неудачных
+            // входов, ни точное время блокировки — только флаг IsLocked.
+            // Требует загруженного Role (Include): без него Role.Type недоступен.
+            CreateMap<User, UserInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.RoleId, opt => opt.MapFrom(src => src.RoleId))
+                .ForMember(dest => dest.Role, opt => opt.MapFrom(src => src.Role.Type))
+                .ForMember(dest => dest.IsEmailVerified, opt => opt.MapFrom(src => src.IsEmailVerified))
+                .ForMember(dest => dest.IsLocked,
+                    opt => opt.MapFrom(src => src.LockedUntil.HasValue && src.LockedUntil.Value > DateTime.UtcNow));
 
             // ============= Mappings for translations =============
 

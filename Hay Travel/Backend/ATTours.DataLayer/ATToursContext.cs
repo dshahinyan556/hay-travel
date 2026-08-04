@@ -32,6 +32,7 @@ namespace ATTours.DataLayer
         public DbSet<TourNoteTemplateTranslation> TourNoteTemplateTranslations { get; set; }
         public DbSet<User> Users { get; set; }
         public DbSet<UserRole> UserRoles { get; set; }
-        public DbSet<PasswordRecovery> PasswordRecoveries { get; set; }
+        public DbSet<UserToken> UserTokens { get; set; }
+        public DbSet<RefreshToken> RefreshTokens { get; set; }
     }
 }

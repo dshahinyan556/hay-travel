@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Outlet, ScrollRestoration, useLocation } from 'react-router'
+import { Outlet, ScrollRestoration, useLoaderData, useLocation } from 'react-router'
 import { AdminSidebar } from './AdminSidebar'
+import { AdminAccessDenied } from './AdminAccessDenied'
+import type { adminRootLoader } from './adminRootLoader'
 
 /**
  * Shell for the whole `/admin` tree.
+ *
+ * The route's loader has already resolved the session (`adminRootLoader`), so by the time this
+ * renders the visitor is either staff — and gets the shell — or a signed-in customer, who gets
+ * the refusal screen instead of an empty panel.
  *
  * Desktop (`md+`): a two-pane layout — a persistent dark `AdminSidebar` rail on the left, the
  * light work area (`<Outlet />`) on the right.
@@ -14,6 +20,7 @@ import { AdminSidebar } from './AdminSidebar'
  * it's open. Deliberately has NO public Header/Footer — the panel is a self-contained tool.
  */
 export function AdminLayout() {
+  const { accessDenied, user } = useLoaderData<typeof adminRootLoader>()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const location = useLocation()
 
@@ -32,12 +39,14 @@ export function AdminLayout() {
     }
   }, [drawerOpen])
 
+  if (accessDenied) return <AdminAccessDenied user={user} />
+
   return (
     <div className="flex min-h-screen flex-col bg-neutral-50 text-neutral-800 md:flex-row">
       {/* Desktop rail */}
       <aside className="hidden w-60 shrink-0 md:block">
         <div className="sticky top-0 h-screen overflow-y-auto">
-          <AdminSidebar />
+          <AdminSidebar user={user} />
         </div>
       </aside>
 
@@ -83,7 +92,7 @@ export function AdminLayout() {
           className="absolute inset-y-0 left-0 w-72 max-w-[82%] shadow-2xl transition-transform duration-200"
           style={{ transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)' }}
         >
-          <AdminSidebar onNavigate={() => setDrawerOpen(false)} />
+          <AdminSidebar user={user} onNavigate={() => setDrawerOpen(false)} />
           <button
             type="button"
             onClick={() => setDrawerOpen(false)}

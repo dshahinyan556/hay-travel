@@ -1,0 +1,261 @@
+AUTH / РЕГИСТРАЦИЯ / ЛОГИН / РОЛИ — СТАТУС (2026-08-02)
+=========================================================
+Лимиты закончились в процессе работы. Фронтенд-часть ОСТАНОВЛЕНА по прямому указанию
+Давида ("фронтэнд не нужен лимиты на тебя закончились"). Это чек-лист для продолжения
+в новой сессии — читать целиком перед тем как что-либо делать дальше.
+
+ГОТОВО: БЭКЕНД (полностью реализован, собран, протестирован вживую на LocalDB)
+--------------------------------------------------------------------------
+Реализовано backend-developer'ом по контракту backend-architect'а (контракт целиком —
+в ADR-файлах, см. ниже). Всё ниже — реально сделано и проверено curl'ом/сервером, не
+предположение.
+
+1. Схема БД (LocalDB "ATTours", НЕ Azure):
+   - User: + IsEmailVerified (bool, default false).
+   - PasswordRecovery ПЕРЕИМЕНОВАНА в UserToken (+ поле Type: EmailVerification=1/
+     PasswordReset=2), unique index (UserId,Type) вместо unique(UserId).
+   - Новая RefreshToken (Id/UserId/TokenHash-unique(SHA256)/ExpiresAtUtc/CreatedAtUtc/
+     CreatedByIp/RevokedAtUtc/ReplacedByTokenHash).
+   - Миграции применены к LocalDB: AddAuthTokensAndEmailVerification, SeedAdminUser.
+   - Azure SQL НЕ трогали (осознанно, по решению Давида — сначала локальный тест).
+
+2. Сид админа (данные УЖЕ переданы Давиду в чате, пароль сохранён им в password
+   manager — здесь НЕ дублирую пароль):
+   Username: admin
+   Email:    admin@haytravel.local
+   (пароль — см. чат / password manager Давида, не хранить plaintext в файлах)
+
+3. JWT: access 15 мин (в теле ответа), refresh 14 дней (httpOnly Secure SameSite=Lax
+   cookie, Path=/api/Auth — РЕГИСТРОЗАВИСИМО, фронт обязан ходить ровно на /api/Auth,
+   не /api/auth). Ротация refresh с reuse-detection (повторное предъявление отозванного
+   токена гасит ВСЕ refresh-токены юзера). BCrypt для паролей.
+
+4. Email: IEmailSender с DevEmailSender (сейчас активен — токен возвращается в поле
+   DevToken ответа, реальных писем не шлёт) и SendGridEmailSender (код готов, но
+   SendGridApiKey пуст — не используется, пока Давид не даст ключ; провайдер выбирается
+   в DI автоматически по наличию ключа).
+
+5. Эндпоинты AuthController (api/Auth, все AllowAnonymous кроме ChangePassword):
+   POST Register {FirstName,LastName?,Username,Email,PhoneNumber,Password}
+        -> MessageResultModel{Message,DevToken?}. Email уже занят -> generic 200
+        (без утечки инфы), если юзер неверифицирован - письмо шлётся повторно (это и
+        есть "resend", отдельного эндпоинта нет и не нужно).
+        Username занят -> 400 UsernameTaken.
+   POST VerifyEmail {Token} -> MessageResultModel. Невалиден/просрочен -> 400
+        VerificationTokenInvalid.
+   POST Login {UsernameOrEmail,Password} -> LoginResultModel{AccessToken,
+        ExpiresInSeconds,User(UserInfoModel),ForceChangePassword}.
+        401 InvalidCredentials / 401 AccountLocked / 403 EmailNotVerified.
+        Lockout: 5 неудачных попыток -> блок 15 мин (UTC).
+   POST RefreshToken (читает cookie) -> AccessTokenModel. Теперь ТАКЖЕ перепроверяет
+        LockedUntil/IsEmailVerified при каждом refresh (ужесточено по просьбе Давида) -
+        если юзера заблокировали/деверифицировали после логина, refresh отклонится
+        (401) и текущий (только текущий, не все) токен отзовётся.
+   POST Logout (cookie) -> 204, отзывает refresh на сервере, идемпотентно.
+   POST ForgotPassword {Email} -> MessageResultModel, ВСЕГДА generic 200.
+   POST ResetPassword {Token,NewPassword} -> MessageResultModel. Успех: новый пароль +
+        погашение токена + сброс FailedLoginAttempts/LockedUntil/ForceToChangePass +
+        отзыв ВСЕХ refresh-токенов юзера. Невалиден -> 400 ResetTokenInvalid.
+   POST ChangePassword {CurrentPassword,NewPassword} - [Authorize] (добавлено доп. по
+        просьбе Давида, в исходном контракте не было). Неверный текущий -> 401
+        InvalidCredentials.
+
+6. UsersController (api/Users, [Authorize(Roles="Admin")] на весь контроллер):
+   GET -> List<UserInfoModel>. PATCH ChangeRole {UserId,RoleId} -> UserInfoModel.
+   Guard: нельзя снять роль Admin у последнего админа / у самого себя.
+
+7. Роли на TourController (TourInitializationController.cs):
+   TourManager+Admin: InitTour, CreateTour, UpdateTour, InitUpdate, SetActive,
+        SetArchived, GetAll, GetArchived (GetAll/GetArchived расширены на TourManager
+        по решению Давида - иначе TourManager не видит список туров для правки).
+   Admin only: DeleteTour, SetFeatured, ReorderFeatured.
+   Anonymous (без изменений): GetToursClient, GetTourInfo, GetFeaturedToursClient.
+
+8. ДОПОЛНИТЕЛЬНО закрыты справочники (были ПОЛНОСТЬЮ без авторизации - реальная дыра,
+   закрыто по прямому запросу Давида "не делай уязвимостей"):
+   PlaceController: TourManager+Admin=GetAll; Admin=Create/Update/Delete;
+        Anonymous=GetForClient.
+   ExpenseTemplateController: то же самое разделение.
+   TourNoteTemplateController: то же самое разделение.
+   RegionController: TourManager+Admin=GetAll; Admin=UpdateBlurb;
+        Anonymous=GetRegionsClient.
+   SiteSettingsController: Admin=GetAll+Update; Anonymous=GetPublic.
+   Роли вынесены в константы Hay Travel/Backend/ATTours.ClientAPI/Authorization/
+   ApiRoles.cs (привязаны к enum RoleType).
+
+9. CORS ИСПРАВЛЕН И ПОДТВЕРЖДЁН (финальный отчёт агента получен после паузы):
+   Было AllowAnyOrigin() - несовместимо с cookie-credentials. Теперь
+   Hay Travel/Backend/ATTours.Common/Settings/CorsSettings.cs - список origin'ов через
+   запятую (dev: http://localhost:5173; prod-шаблон в appsettings.json:
+   https://haytravel.netlify.app) + AllowCredentials(). При пустом/некорректном
+   конфиге - fallback на AllowAnyOrigin без credentials (деградирует только
+   cookie-сессия, не роняет API). dotnet build 0 errors. Проверено вживую: preflight
+   OPTIONS, Login->Set-Cookie, RefreshToken с cookie и Origin, чужой Origin блокируется
+   браузером (заголовков нет). Полный auth-цикл Login->Refresh->Logout с Origin
+   отработал 200/204/200/204.
+
+   ЗАМЕЧАНИЕ АГЕНТА для фронтенд-агента при реализации:
+   - Frontend/.env сейчас VITE_API_BASE_URL=http://localhost:5254, а
+     .env.example/launchSettings.json используют 5253 - рассинхрон, с текущим .env
+     фронт локально в API не попадёт. Проверить/поправить при подъёме окружения.
+   - Нет заголовка Vary: Origin в ответах - теоретическая, не блокирующая деталь
+     (нет CDN/кэша перед API), можно игнорировать.
+
+10. GlobalErrorCode добавлены (ATTours.Helper/Enums/GlobalErrorCode.cs, регион ~2200):
+    InvalidCredentials=2200, AccountLocked=2201, EmailNotVerified=2202,
+    VerificationTokenInvalid=2203, ResetTokenInvalid=2204, UsernameTaken=2205,
+    RoleNotFound=2206, RefreshTokenInvalid=2207.
+
+ИЗВЕСТНЫЕ ОГРАНИЧЕНИЯ / НЕ ИДЕАЛ (осознанные решения, не баги):
+   - Ошибки валидации DTO (короткий пароль и т.п.) приходят стандартным ASP.NET
+     ProblemDetails, НЕ в формате проекта {ErrorCode:...} - решение Давида "оставить
+     как есть для этой задачи", проект в принципе нигде не подключает
+     FieldValidationActionFilter (не только в auth) - унификация отложена отдельной
+     задачей, не переспрашивать.
+   - SendGrid не протестирован (ключа нет) - будет работать когда Давид даст API key.
+   - Azure SQL не мигрирован - осознанно, накатка на прод отдельным шагом с разрешения.
+
+НЕ СДЕЛАНО ВООБЩЕ: ФРОНТЕНД (только дизайн, реализации 0%)
+--------------------------------------------------------------------------
+Архитектура фронта СПРОЕКТИРОВАНА (agent architect), но НЕ РЕАЛИЗОВАНА. Полный текст
+дизайна был в отчёте агента - здесь только выжимка, при реализации лучше попросить
+architect ещё раз кратко пересказать по этому файлу + docs/user-management.md, чем
+полагаться только на этот конспект:
+
+- Auth-состояние - module-level store вне React в src/shared/auth/ (authStore.ts,
+  authApi.ts, authFetch.ts, permissions.ts, AuthProvider.tsx, useAuth.ts, types.ts,
+  index.ts) - токен ТОЛЬКО в памяти (не localStorage). Причина: React Router
+  data-лоадеры (adminRootLoader и т.п.) не имеют доступа к React-контексту.
+- authFetch делает: await ensureAuthReady() -> Authorization header -> apiFetch; на 401
+  делает один silent-refresh-and-retry через authStore.refresh() (single-flight);
+  403 НЕ логаутит (это "нет прав", не "протухла сессия").
+- /admin guard в adminRootLoader: не залогинен -> redirect /auth?returnTo=; залогинен
+  но Regular -> НЕ редирект, а рендер AdminAccessDenied (без сайдбара).
+- Роуты: /auth (табы login/register, если уже залогинен - показывает аккаунт+кнопку
+  Панель), /auth/check-email, /auth/verify (POST, не GET - защита от StrictMode
+  double-fire съедающего одноразовый токен), /auth/forgot-password,
+  /auth/reset-password. /login -> redirect-лоадер на /auth (механическая правка по
+  аналогии с /tours->/trips).
+- Navbar: новый UserMenu.tsx рядом с ThemeToggle/LanguageSwitch в src/app/layout/. Ссылка
+  "Панель" только если canOpenAdminPanel(role) (Admin/TourManager).
+- Admin -> Пользователи: features/admin/users/ (UsersPage+loader, UsersTable со сменой
+  роли через PATCH ChangeRole, UsersToolbar) - пункт меню только Admin.
+- Admin sidebar: внизу "<- На сайт" (обычная Link, не в новой вкладке) + email юзера +
+  Выйти.
+- permissions.ts - ЕДИНСТВЕННОЕ место сравнения ролей (canOpenAdminPanel,
+  canManageTours, canPublishTours, canArchiveTours, canDeleteTours, canFeatureTours,
+  canManageCatalog, canManageSettings, canManageUsers) - TourManager видит в сайдбаре
+  только Дашборд+Продукты.
+- КРИТИЧНО для реализации: ВСЕ admin api/*.ts (adminTours.ts, adminCatalog.ts,
+  adminSiteSettings.ts и т.п.) сейчас используют голый apiFetch без токена - после
+  бэкенд-правок (пункт 8 выше) это 401 везде. Обязательно мигрировать их все на
+  authFetch, не только tours - иначе вся админка сломается после подключения бэкенда.
+- ОТКРЫТЫЙ РИСК (не блокирует локальную разработку, важно для прода): фронт на Netlify,
+  бэк на Azure - third-party cookie, часть браузеров (Safari/Firefox ITP) может её
+  блокировать. Рекомендация архитектора - проксировать /api/* через netlify.toml на
+  Azure-бэкенд (одна строка редиректа), тогда cookie станет first-party. НЕ делать без
+  явного разрешения Давида (изменение прод-конфига/деплоя).
+
+ПОСЛЕ ФРОНТЕНДА (тоже не начато):
+   - backend-tester: curl round-trip полного flow.
+   - tester: браузер E2E + ОБЯЗАТЕЛЬНО мобильный экран (правило agents.md).
+   - backend-code-reviewer + code-reviewer.
+   - update-docs: закрыть docs/user-management.md, docs/admin-panel.md,
+     docs/backend-api.md, docs/CHANGELOG.md одним махом в конце (НЕ раньше - .md не
+     трогать без спроса, этот файл - временный чек-лист, не проектная документация).
+
+ФАЙЛЫ ДЛЯ СПРАВКИ:
+   - Hay Travel/docs/adr/005-auth-vertical-uses-constructor-di.md (архитектурное
+     решение: auth - единственная вертикаль на конструкторном DI, не new XxxService()).
+   - Hay Travel/docs/adr/006-single-usertoken-table-plus-refreshtoken.md (схема
+     токенов). ОБА untracked, ещё не закоммичены.
+   - Полный список изменённых/новых backend-файлов - смотреть `git status` в
+     "Hay Travel/Backend" - НИЧЕГО из бэкенда ещё не закоммичено.
+
+КАК ПРОДОЛЖИТЬ В НОВОЙ СЕССИИ (актуально до сессии 2026-08-05, см. блок ниже):
+   1. Прочитать этот файл целиком.
+   2. `git status` в Hay Travel/Backend - свериться со списком выше, ничего не
+      закоммичено, всё ещё working tree.
+   3. dotnet build - убедиться что после CORS-фикса всё ещё зелёный (я не дождался
+      финального подтверждения агента по этому пункту).
+   4. Спросить Давида, можно ли продолжать фронтенд (лимиты могли смениться) - НЕ
+      начинать самостоятельно, он явно попросил остановиться.
+   5. Когда даст добро - dispatch frontend-developer с контрактом из раздела
+      "НЕ СДЕЛАНО ВООБЩЕ: ФРОНТЕНД" выше + backend-контрактом из раздела "ГОТОВО:
+      БЭКЕНД" выше (точные пути/DTO/статусы).
+
+=========================================================
+СЕССИЯ 2026-08-05: ФРОНТЕНД-ИНТЕГРАЦИЯ РЕАЛИЗОВАНА
+=========================================================
+Давид дал добро продолжать. Порядок: architect (сверил черновой дизайн выше с реальной
+структурой кода, выдал окончательный план) -> frontend-developer (реализация по плану) ->
+СТОП по прямому запросу Давида перед backend-tester/tester - "хочу сам посмотреть результат".
+
+ГОТОВО:
+- Все файлы из раздела "НЕ СДЕЛАНО: ФРОНТЕНД" выше - реализованы. Полный список файлов
+  (создано/изменено) - в отчёте frontend-developer'а этой сессии, здесь только выжимка:
+  shared/auth/* (types/permissions/authErrors/authApi/authStore/authFetch/useAuth/index -
+  БЕЗ AuthProvider.tsx, архитектор отменил: module-level store + useSyncExternalStore не
+  нуждается в Context), features/auth/* (все 6 экранов + AuthShell/AuthField/LoginForm/
+  RegisterForm/AccountPanel), features/admin/users/* (UsersPage+Table+Toolbar+RoleSelect),
+  UserMenu.tsx в навбаре, гарды в adminRootLoader/AdminLayout/AdminSidebar, миграция
+  adminTours.ts/adminCatalog.ts/adminSiteSettings.ts на authFetch, netlify.toml (прокси
+  /api/* на Azure, см. ниже), .env.production, ADR-007.
+- `npm run build` (tsc+vite) чист. Логика store прогнана 72 проверками (37 pure-logic +
+  23 stateful + 12 cold-reload) через реальный бэкенд на :5253, не моками.
+- Порт бэкенда исправлен везде на 5253 (было рассинхронно: .env=5254, launch.json тоже
+  форсировал 5254 - оба поправлены; launchSettings.json/.env.example всегда были верны).
+- ADR-007 создан (Hay Travel/docs/adr/007-frontend-auth-store-module-level-and-jwt-decode.md)
+  - зафиксированы 2 решения: store вне React (лоадеры React Router не видят Context),
+    восстановление юзера декодом JWT-claims (эндпоинта /Me на бэке нет и не будет).
+- Прод-cookie фикс (Давид разрешил делать сразу, не откладывать): netlify.toml проксирует
+  /api/* на Azure-бэкенд (правило above SPA fallback, status=200 rewrite, force=true) -
+  делает refresh-cookie first-party. `.env.production` -> VITE_API_BASE_URL= (пусто
+  умышленно, не забыто).
+  ВАЖНО ДЛЯ ДЕПЛОЯ: если в Netlify UI (Site settings -> Environment variables) стоит
+  VITE_API_BASE_URL - её НАДО УДАЛИТЬ, иначе она перебьёт .env.production (Vite отдаёт
+  process.env приоритет над .env-файлами) и прокси-фикс не применится. Проверено 2026-08-05:
+  удаление ничего не ломает до следующего деплоя (env-переменные влияют только на сборку),
+  откат - вернуть значение и передеплоить.
+
+НЕ БАГ (перепроверено лично, ложная тревога от инструмента тестирования):
+  Субагент backend-developer сообщил "500 на кириллице в Register" как критический баг.
+  Перепроверка (2026-08-05): POST с firstName="Тест" как файл в корректном UTF-8
+  (--data-binary @file) -> 200 OK. Та же кириллица, вставленная текстом прямо в команду
+  curl в Git Bash на Windows -> 500. Причина - кодировка консоли Windows/Git Bash ломает
+  кириллицу в аргументе командной строки ДО отправки, а не сам бэкенд. Реальный браузер
+  (fetch+JSON.stringify) всегда шлёт корректный UTF-8 - живых пользователей не касается.
+  Бэкенд не трогали, чинить нечего.
+
+ОСТАНОВЛЕНО ПО ПРЯМОМУ ЗАПРОСУ ДАВИДА (не техническая проблема):
+  "Стоп, хочу сам посмотреть результат" - после реализации фронтенда, перед
+  backend-tester (curl round-trip) и tester (браузер+ОБЯЗАТЕЛЬНО мобильный экран).
+  Оба шага в очереди, ждут явного "продолжай" от Давида. Дальше по цепочке (не начинать
+  самостоятельно): backend-tester -> tester -> backend-code-reviewer+code-reviewer ->
+  update-docs (закрыть docs/user-management.md, docs/admin-panel.md, docs/backend-api.md,
+  docs/CHANGELOG.md одним махом, только с разрешения на правку .md).
+
+ОТКЛОНЕНИЯ ОТ ПЛАНА АРХИТЕКТОРА (все обоснованы, зафиксировано в отчёте
+frontend-developer'а):
+  - authFetch рефрешит токен только на 401 БЕЗ errorCode (bodyless-challenge JWT-мидлвари),
+    а не на любой 401 - иначе ChangePassword с неверным текущим паролем (тоже 401,
+    но С errorCode InvalidCredentials) разлогинивал бы юзера вместо показа ошибки.
+  - sessionEpoch-гард в store - защита от гонки "login во время фонового refresh".
+  - Роль в JWT приходит НЕ как claim "role", а как длинный WS-URI claims-namespace
+    (`http://schemas.microsoft.com/ws/2008/06/identity/claims/role`) - план архитектора
+    предполагал короткое имя, это единственное непроверенное допущение плана, оно не
+    подтвердилось на практике. decodeAccessToken читает оба варианта.
+  - Ошибки бэкенда - PascalCase {Message,ErrorCode}, не camelCase как в плане (§0.4
+    архитектора был неточен). Обработано (читает оба регистра, как уже делал
+    catalogErrors.ts).
+  - Backend email-ссылки (Email:VerifyUrlBase/ResetUrlBase в appsettings) указывают на
+    /verify-email и /reset-password, а не /auth/* - добавлены 2 redirect-роута вместо
+    правки backend-конфига (dev и prod appsettings трогать не стали).
+
+НЕ СДЕЛАНО:
+  - backend-tester: curl round-trip полного flow - в очереди, ждёт разрешения.
+  - tester: браузер E2E + ОБЯЗАТЕЛЬНО мобильный экран - в очереди, ждёт разрешения.
+  - backend-code-reviewer + code-reviewer - в очереди.
+  - update-docs - в очереди, НЕ раньше остальных шагов.
+  - Деплой на прод (Давид: "это я после того как сделаешь буду деплоить") - его
+    собственное действие, не наше.

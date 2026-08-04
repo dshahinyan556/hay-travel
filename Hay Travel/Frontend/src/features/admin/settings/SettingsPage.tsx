@@ -1,6 +1,7 @@
-import { useLoaderData } from 'react-router'
+import { redirect, useLoaderData } from 'react-router'
 import { UnsavedChangesModal } from '@/shared/ui'
 import { useUnsavedChangesGuard } from '@/shared/hooks'
+import { canManageSettings, ensureAuthReady, getAuthState } from '@/shared/auth'
 import { getAllSiteSettings } from '@/features/admin/api/adminSiteSettings'
 import { useSettingsForm } from './hooks/useSettingsForm'
 import { SettingsForm } from './components/SettingsForm'
@@ -8,8 +9,14 @@ import { SettingsForm } from './components/SettingsForm'
 /**
  * Loads the whole settings catalog. Errors are NOT swallowed — a rejection propagates to
  * `AdminErrorBoundary`, exactly like `productsLoader`.
+ *
+ * Admin-only (`SiteSettingsController` is `[Authorize(Roles = "Admin")]`); a TourManager who types
+ * the URL is sent back to the dashboard rather than shown a raw 403.
  */
 export async function settingsLoader() {
+  await ensureAuthReady()
+  if (!canManageSettings(getAuthState().user?.role)) throw redirect('/admin')
+
   const settings = await getAllSiteSettings()
   return { settings }
 }

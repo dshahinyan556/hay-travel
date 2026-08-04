@@ -1,12 +1,12 @@
 /**
- * Admin Site Settings API — one function per backend endpoint, all routed through `apiFetch`.
+ * Admin Site Settings API — one function per backend endpoint, all routed through `authFetch`.
  *
  * Backend route base is `api/SiteSettings`. The public read (`GetPublic`, one locale, public
  * keys only) is deliberately NOT here: it belongs to the public site and will get its own
  * module under `shared/api/` when stage 5.2 needs it.
  */
 
-import { apiFetch } from '@/shared/lib/http'
+import { authFetch } from '@/shared/auth'
 import type { SiteSettingInfoModel, SiteSettingUpdateModel } from '@/shared/types/attours'
 
 /**
@@ -16,7 +16,7 @@ import type { SiteSettingInfoModel, SiteSettingUpdateModel } from '@/shared/type
  * DB row yet comes back with `id: 0` and the catalog default.
  */
 export function getAllSiteSettings(): Promise<SiteSettingInfoModel[]> {
-  return apiFetch<SiteSettingInfoModel[]>('api/SiteSettings/GetAll')
+  return authFetch<SiteSettingInfoModel[]>('api/SiteSettings/GetAll')
 }
 
 /**
@@ -29,7 +29,7 @@ export function getAllSiteSettings(): Promise<SiteSettingInfoModel[]> {
 export function updateSiteSettings(
   models: SiteSettingUpdateModel[],
 ): Promise<SiteSettingInfoModel[]> {
-  return apiFetch<SiteSettingInfoModel[]>('api/SiteSettings/Update', {
+  return authFetch<SiteSettingInfoModel[]>('api/SiteSettings/Update', {
     method: 'PUT',
     body: JSON.stringify(models),
   })

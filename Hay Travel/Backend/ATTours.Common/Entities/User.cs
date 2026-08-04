@@ -11,10 +11,13 @@ namespace ATTours.Common.Entities
         public string LastName { get; set; }
         public string Username { get; set; }
         public string Email { get; set; }
+        public string PhoneNumber { get; set; }
 
-        // Односторонний хеш (BCrypt — см. docs/user-management.md; пакет ещё не подключён,
-        // хеширование появится вместе с login/register).
+        // Односторонний хеш (BCrypt, см. IPasswordHasher/BCryptPasswordHasher).
         public string Password { get; set; }
+
+        // Пока false — вход запрещён (403 EmailNotVerified), даже при верном пароле.
+        public bool IsEmailVerified { get; set; }
 
         public int FailedLoginAttempts { get; set; }
 
@@ -27,7 +30,11 @@ namespace ATTours.Common.Entities
         public int RoleId { get; set; }
         public UserRole Role { get; set; }
 
-        // Ноль или один активный recovery-запрос — новый перезаписывает старый.
-        public PasswordRecovery PasswordRecovery { get; set; }
+        // Не больше одного активного одноразового токена на UserTokenType (ADR 006):
+        // максимум две строки — verify-email и password-reset.
+        public ICollection<UserToken> Tokens { get; set; } = [];
+
+        // Живые сессии: по одной строке на устройство/браузер, с ротацией.
+        public ICollection<RefreshToken> RefreshTokens { get; set; } = [];
     }
 }

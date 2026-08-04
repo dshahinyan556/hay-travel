@@ -3,7 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- `viewport-fit=cover` lets the page draw under the iOS notch/Dynamic Island/home-indicator
+         instead of Safari auto-reserving that space — required for `env(safe-area-inset-*)` to
+         report real values anywhere in the app (Header's top padding, MobileTabBar's bottom
+         padding). Without it those env() calls always resolve to 0. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!--
       Tells the browser this page implements both colour schemes itself. Without this, some
       mobile browsers (notably Chrome for Android's "force dark" / "darken web pages" setting)

@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { useLoaderData, useRevalidator } from 'react-router'
+import { redirect, useLoaderData, useRevalidator } from 'react-router'
 import { Tabs, type TabItem } from '@/shared/ui'
+import { canManageCatalog, ensureAuthReady, getAuthState } from '@/shared/auth'
 import {
   getExpenseTemplates,
   getPlaces,
@@ -15,8 +16,15 @@ import { RegionsTab } from './regions/RegionsTab'
 /** Loads all four catalog lists in parallel. Errors are NOT swallowed — a rejection propagates
  * to `AdminErrorBoundary`, same contract as `productsLoader`/`settingsLoader`. Revalidated as a
  * whole after every mutation on any tab (catalogs are small — a handful to a few dozen rows
- * each — so refetching all four costs nothing and keeps `tourCount`/cross-tab state honest). */
+ * each — so refetching all four costs nothing and keeps `tourCount`/cross-tab state honest).
+ *
+ * Admin-only: this SCREEN writes to the catalogs, which is `canManageCatalog`. Note the reads
+ * below are wider than that (`canViewCatalog`) — the tour form needs them for a TourManager too,
+ * so the guard belongs here, on the write surface, not on the API module. */
 export async function catalogLoader() {
+  await ensureAuthReady()
+  if (!canManageCatalog(getAuthState().user?.role)) throw redirect('/admin')
+
   const [places, expenseTemplates, noteTemplates, regions] = await Promise.all([
     getPlaces(),
     getExpenseTemplates(),

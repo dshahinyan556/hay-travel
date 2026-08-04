@@ -1,10 +1,12 @@
 using ATTours.BusinessServices.Services.InfoServices;
 using ATTours.BusinessServices.Services.UpdateServices;
+using ATTours.ClientAPI.Authorization;
 using ATTours.Common.DTO.Info;
 using ATTours.Common.DTO.Request;
 using ATTours.Common.Entities;
 using ATTours.Common.Extensions;
 using AutoMapper;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ATTours.ClientAPI.Controllers
@@ -16,8 +18,11 @@ namespace ATTours.ClientAPI.Controllers
         // Административный список: оба языка, TourCount по правилу публичной витрины.
         // Имя/слаг/SortOrder региона заведены сидом (SeedArmenianRegions) и здесь не редактируются;
         // единственное редактируемое поле — тизер (Blurb), см. UpdateBlurb.
+        // Оба языка сразу — это админская проекция, публичному сайту она не нужна
+        // (у него GetRegionsClient). Тур-менеджеру доступна: регионы выбираются в редакторе тура.
         [HttpGet]
         [Route("GetAll")]
+        [Authorize(Roles = ApiRoles.TourManagerOrAdmin)]
         public async Task<List<RegionInfoModel>> GetAllAsync()
         {
             using var info = new RegionInfo();
@@ -30,6 +35,7 @@ namespace ATTours.ClientAPI.Controllers
         // Правит только RegionTranslationType.Blurb (RU+EN) у одного региона.
         [HttpPut]
         [Route("UpdateBlurb")]
+        [Authorize(Roles = ApiRoles.Admin)]
         public async Task UpdateBlurbAsync([FromBody] UpdateRegionBlurbModel model)
         {
             using var updateService = new RegionBlurbUpdateService();

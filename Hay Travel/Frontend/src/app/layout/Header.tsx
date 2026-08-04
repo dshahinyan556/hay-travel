@@ -5,6 +5,7 @@ import { getLogoUrl } from '@/shared/api/siteSettings'
 import { MountainIcon } from '@/shared/ui/icons'
 import { ThemeToggle } from './ThemeToggle'
 import { LanguageSwitch } from './LanguageSwitch'
+import { UserMenu } from './UserMenu'
 
 /**
  * Public site header: a floating capsule nav, detached from the viewport edge on every side
@@ -42,7 +43,10 @@ export function Header() {
   }, [])
 
   return (
-    <header className="sticky top-0 z-30 w-full px-3 pt-3 pb-3 sm:px-4 sm:pb-4">
+    <header
+      className="sticky top-0 z-30 w-full px-3 pb-3 sm:px-4 sm:pb-4"
+      style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+    >
       <div className="mx-auto flex w-full max-w-6xl items-center gap-4 rounded-full border border-edge/70 bg-panel/85 px-4 py-2.5 shadow-lg shadow-black/20 backdrop-blur-md sm:px-6">
         <NavLink to="/" className="flex items-center gap-2">
           {logoUrl ? (
@@ -82,12 +86,8 @@ export function Header() {
         <div className="ml-auto flex items-center gap-2">
           <LanguageSwitch />
           <ThemeToggle />
-          <NavLink
-            to="/login"
-            className="btn-motion hidden rounded-full bg-gold-fill px-4 py-1.5 text-sm font-medium text-gold-on hover:bg-gold-fill-hover lg:inline-block"
-          >
-            {t('nav.login')}
-          </NavLink>
+          {/* Renders the same gold "Войти" pill when signed out, an account dropdown when in. */}
+          <UserMenu />
         </div>
       </div>
     </header>

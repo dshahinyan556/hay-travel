@@ -34,6 +34,9 @@ function parseStatusFilter(value: string): StatusFilter {
 interface ProductsToolbarProps {
   view: ProductsView
   onViewChange: (view: ProductsView) => void
+  /** Admin-only (`SetFeatured`/`ReorderFeatured`) — hides the «Избранные» tab entirely for a
+   * TourManager, who could only look at a list they cannot change. */
+  canFeature: boolean
   activeCount: number
   featuredCount: number
   archivedCount: number
@@ -82,6 +85,7 @@ function ViewTab({
 export function ProductsToolbar({
   view,
   onViewChange,
+  canFeature,
   activeCount,
   featuredCount,
   archivedCount,
@@ -101,12 +105,14 @@ export function ProductsToolbar({
             count={activeCount}
             onClick={() => onViewChange('active')}
           />
-          <ViewTab
-            selected={view === 'featured'}
-            label="Избранные"
-            count={featuredCount}
-            onClick={() => onViewChange('featured')}
-          />
+          {canFeature && (
+            <ViewTab
+              selected={view === 'featured'}
+              label="Избранные"
+              count={featuredCount}
+              onClick={() => onViewChange('featured')}
+            />
+          )}
           <ViewTab
             selected={view === 'archived'}
             label="Архив"
