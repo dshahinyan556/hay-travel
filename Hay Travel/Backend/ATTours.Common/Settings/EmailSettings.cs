@@ -3,7 +3,7 @@ using Microsoft.Extensions.Configuration;
 namespace ATTours.Common.Settings
 {
     // Секция "Email" конфигурации. Provider выбирает реализацию IEmailSender в DI (ADR 005):
-    // "SendGrid" при заданном ключе, иначе "Dev" (письмо только логируется).
+    // "SendGrid"/"Brevo" при заданном соответствующем ключе, иначе "Dev" (письмо только логируется).
     public class EmailSettings : ApplicationSettingsBase<EmailSettings>
     {
         private const string SectionName = "Email";
@@ -13,6 +13,8 @@ namespace ATTours.Common.Settings
         public string Provider => Section[nameof(Provider)] ?? "Dev";
 
         public string SendGridApiKey => Section[nameof(SendGridApiKey)];
+
+        public string BrevoApiKey => Section[nameof(BrevoApiKey)];
 
         public string FromEmail => Section[nameof(FromEmail)] ?? "no-reply@haytravel.local";
 
@@ -28,5 +30,9 @@ namespace ATTours.Common.Settings
         public bool IsSendGridConfigured =>
             string.Equals(Provider, "SendGrid", StringComparison.OrdinalIgnoreCase)
             && !string.IsNullOrWhiteSpace(SendGridApiKey);
+
+        public bool IsBrevoConfigured =>
+            string.Equals(Provider, "Brevo", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(BrevoApiKey);
     }
 }

@@ -25,19 +25,26 @@ namespace ATTours.ClientAPI.DependencyInjection
             services.AddSingleton<IJwtTokenService, JwtTokenService>();
 
             services.AddHttpClient(nameof(SendGridEmailSender));
+            services.AddHttpClient(nameof(BrevoEmailSender));
             services.AddSingleton<IEmailSender>(serviceProvider =>
             {
                 var emailSettings = serviceProvider.GetRequiredService<EmailSettings>();
 
+                if (emailSettings.IsSendGridConfigured)
+                    return new SendGridEmailSender(
+                        emailSettings,
+                        serviceProvider.GetRequiredService<ILogger<SendGridEmailSender>>(),
+                        serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(SendGridEmailSender)));
+
+                if (emailSettings.IsBrevoConfigured)
+                    return new BrevoEmailSender(
+                        emailSettings,
+                        serviceProvider.GetRequiredService<ILogger<BrevoEmailSender>>(),
+                        serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(BrevoEmailSender)));
+
                 // Пока провайдер не настроен, письма только логируются, а токен возвращается
                 // в ответе API — иначе локально нечем пройти verify/reset.
-                if (!emailSettings.IsSendGridConfigured)
-                    return new DevEmailSender(emailSettings, serviceProvider.GetRequiredService<ILogger<DevEmailSender>>());
-
-                return new SendGridEmailSender(
-                    emailSettings,
-                    serviceProvider.GetRequiredService<ILogger<SendGridEmailSender>>(),
-                    serviceProvider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(SendGridEmailSender)));
+                return new DevEmailSender(emailSettings, serviceProvider.GetRequiredService<ILogger<DevEmailSender>>());
             });
 
             // Scoped: AuthService владеет собственным DbContext и обязан быть освобождён
