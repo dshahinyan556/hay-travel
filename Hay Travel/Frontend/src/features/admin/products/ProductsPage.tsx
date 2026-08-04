@@ -11,6 +11,7 @@ import {
 } from '@/features/admin/api/adminTours'
 import { Button, Modal, Spinner, buttonClassName } from '@/shared/ui'
 import { ApiError } from '@/shared/lib/http'
+import { canDeleteTours, canFeatureTours, useAuth } from '@/shared/auth'
 import type { TourInfoModel } from '@/shared/types/attours'
 import { tourTitleRu } from '@/features/admin/ui/TourTableParts'
 import {
@@ -52,6 +53,12 @@ export function ProductsPage() {
   const { active, archived } = useLoaderData<typeof productsLoader>()
   const navigate = useNavigate()
   const revalidator = useRevalidator()
+  const { user } = useAuth()
+
+  // Admin-only actions on the backend (`DeleteTour`, `SetFeatured`, `ReorderFeatured`). Hiding
+  // them for a TourManager is UX — the API rejects them regardless.
+  const canDelete = canDeleteTours(user?.role)
+  const canFeature = canFeatureTours(user?.role)
 
   const [view, setView] = useState<ProductsView>('active')
   const [filters, setFilters] = useState<ProductFilters>(emptyFilters)
@@ -171,6 +178,7 @@ export function ProductsPage() {
       <ProductsToolbar
         view={view}
         onViewChange={setView}
+        canFeature={canFeature}
         activeCount={active.length}
         featuredCount={featured.length}
         archivedCount={archived.length}
@@ -191,6 +199,8 @@ export function ProductsPage() {
           pendingId={pendingId}
           isBusy={isBusy}
           canFeatureMore={canFeatureMore}
+          canDelete={canDelete}
+          canFeature={canFeature}
           onOpen={openEdit}
           onTogglePublish={togglePublish}
           onToggleFeatured={toggleFeatured}

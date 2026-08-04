@@ -58,6 +58,25 @@ namespace ATTours.Helper.Enums
         SchemaValidationError = 2102,
         #endregion
 
+        #region AuthErrors
+        [Description("Invalid credentials.")]
+        InvalidCredentials = 2200,
+        [Description("Account is temporarily locked.")]
+        AccountLocked = 2201,
+        [Description("Email is not verified.")]
+        EmailNotVerified = 2202,
+        [Description("Verification token is invalid or expired.")]
+        VerificationTokenInvalid = 2203,
+        [Description("Password reset token is invalid or expired.")]
+        ResetTokenInvalid = 2204,
+        [Description("Username is already taken.")]
+        UsernameTaken = 2205,
+        [Description("Role not found.")]
+        RoleNotFound = 2206,
+        [Description("Refresh token is invalid or expired.")]
+        RefreshTokenInvalid = 2207,
+        #endregion
+
         [Description("Endpoint not existing")]
         EndpointNotExisting = 3000,
 

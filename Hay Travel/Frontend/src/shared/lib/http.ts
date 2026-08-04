@@ -7,7 +7,17 @@
  * goes through `apiFetch` — call sites never touch `fetch` or the base URL directly.
  */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined
+/**
+ * Base URL of the API.
+ *
+ * Three-state on purpose:
+ *  - unset  → configuration error, `apiFetch` throws with an actionable message (dev forgot `.env`);
+ *  - a URL  → absolute cross-origin calls (local dev against `http://localhost:5253`);
+ *  - EMPTY  → relative, same-origin paths (`/api/…`). That is the production setup: `netlify.toml`
+ *    rewrites `/api/*` to the Azure backend, which keeps the refresh cookie first-party (see
+ *    `.env.production`).
+ */
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim()
 
 /** Thrown when the server responds with a non-2xx status. Carries the HTTP status and,
  * when the body could be parsed, the raw payload for callers that want to inspect it. */
@@ -34,7 +44,7 @@ const METHODS_WITH_BODY = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
  * @throws {ApiError} when the response status is not ok.
  */
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  if (!BASE_URL) {
+  if (BASE_URL === undefined) {
     throw new Error(
       'VITE_API_BASE_URL is not set. Create a `.env` file (see `.env.example`) with the API base URL.',
     )

@@ -7,6 +7,25 @@
   # default image never silently breaks the build.
   NODE_VERSION = "22"
 
+# API proxy — MUST stay above the SPA fallback below (Netlify applies the first matching
+# rule, and `/*` would otherwise swallow `/api/...` and serve index.html).
+#
+# Why proxy instead of calling Azure directly: the refresh-token cookie is httpOnly + Secure
+# + `SameSite=Lax` with `Path=/api/Auth`. Lax cookies are not sent on cross-site requests, and
+# haytravel.netlify.app → *.azurewebsites.net IS cross-site, so a direct call would drop the
+# cookie and silent refresh / logout would never work in production (and Safari/Firefox ITP
+# would block the third-party cookie outright). Proxying makes the API same-origin, so the
+# cookie is first-party.
+#
+# `status = 200` (rewrite, not redirect) is what keeps it same-origin: the browser never sees
+# the Azure URL. `force = true` guarantees the rule wins even if a real file ever existed at
+# that path.
+[[redirects]]
+  from = "/api/*"
+  to = "https://haytravel-api-bvbmardzh5b6a3hs.eastasia-01.azurewebsites.net/api/:splat"
+  status = 200
+  force = true
+
 # Required for React Router client-side routing on a static host: without this,
 # a direct visit or page refresh on e.g. /tours/dilijan-armyanskaya-shveycariya
 # returns Netlify's default 404 instead of index.html.

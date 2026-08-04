@@ -13,6 +13,12 @@ interface ProductsTableProps {
   /** Active view only: false once 6 tours are already featured — disables the heart button on
    * tours that aren't featured yet (removing an already-featured one is always allowed). */
   canFeatureMore: boolean
+  /** Role gate for `DeleteTour` (Admin only) — hides the permanent-delete action in the archive
+   * view. A TourManager can still archive and restore, which is reversible. */
+  canDelete: boolean
+  /** Role gate for `SetFeatured`/`ReorderFeatured` (Admin only) — hides the heart toggle and the
+   * reorder controls. */
+  canFeature: boolean
   /** Open a product for editing (row click / title click). */
   onOpen: (tour: TourInfoModel) => void
   /** Active view: toggle publication. */
@@ -140,6 +146,8 @@ export function ProductsTable({
   pendingId,
   isBusy,
   canFeatureMore,
+  canDelete,
+  canFeature,
   onOpen,
   onTogglePublish,
   onToggleFeatured,
@@ -149,7 +157,9 @@ export function ProductsTable({
   onDelete,
 }: ProductsTableProps) {
   const isActiveView = view === 'active'
-  const isFeaturedView = view === 'featured'
+  // Without `canFeature` the featured view isn't reachable (its tab is hidden) — but guard the
+  // column here too, so the reorder controls can never render without the permission to use them.
+  const isFeaturedView = view === 'featured' && canFeature
 
   return (
     <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
@@ -238,11 +248,13 @@ export function ProductsTable({
                   <div className="flex items-center justify-end gap-1">
                     {isActiveView && (
                       <>
-                        <FeaturedToggle
-                          isFeatured={tour.isFeatured}
-                          disabled={isBusy || (!tour.isFeatured && !canFeatureMore)}
-                          onToggle={() => onToggleFeatured(tour)}
-                        />
+                        {canFeature && (
+                          <FeaturedToggle
+                            isFeatured={tour.isFeatured}
+                            disabled={isBusy || (!tour.isFeatured && !canFeatureMore)}
+                            onToggle={() => onToggleFeatured(tour)}
+                          />
+                        )}
                         <RowAction
                           onClick={() => onArchive(tour)}
                           disabled={isBusy}
@@ -265,12 +277,14 @@ export function ProductsTable({
                           disabled={isBusy}
                           label="↩ Восстановить"
                         />
-                        <RowAction
-                          onClick={() => onDelete(tour)}
-                          disabled={isBusy}
-                          label="Удалить"
-                          tone="danger"
-                        />
+                        {canDelete && (
+                          <RowAction
+                            onClick={() => onDelete(tour)}
+                            disabled={isBusy}
+                            label="Удалить"
+                            tone="danger"
+                          />
+                        )}
                       </>
                     )}
                   </div>

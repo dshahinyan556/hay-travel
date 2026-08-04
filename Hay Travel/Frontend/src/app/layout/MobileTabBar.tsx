@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
+import { useAuth } from '@/shared/auth'
 import { CompassIcon, GuideIcon, HomeIcon, MapIcon } from '@/shared/ui/icons'
 
 /**
@@ -20,11 +21,16 @@ import { CompassIcon, GuideIcon, HomeIcon, MapIcon } from '@/shared/ui/icons'
  */
 export function MobileTabBar() {
   const { t } = useLocale()
+  const { user } = useAuth()
+
   const tabItems = [
     { to: '/', label: t('nav.home'), end: true, Icon: HomeIcon },
     { to: '/trips', label: t('nav.trips'), end: false, Icon: CompassIcon },
     { to: '/regions', label: t('nav.regionsShort'), end: false, Icon: MapIcon },
-    { to: '/login', label: t('nav.login'), end: false, Icon: GuideIcon },
+    // One tab, two labels — `/auth` already renders either the sign-in tabs or the account panel,
+    // so a fifth tab (or a second destination) would only duplicate that branch in the nav. `end`
+    // stays false so the tab also reads as active on `/auth/change-password` & co.
+    { to: '/auth', label: user ? t('nav.account') : t('nav.login'), end: false, Icon: GuideIcon },
   ] as const
 
   return (

@@ -31,9 +31,17 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
             builder.HasIndex(x => x.Email)
                 .IsUnique();
 
+            builder.Property(x => x.PhoneNumber)
+                .IsRequired()
+                .HasMaxLength(15);
+
             builder.Property(x => x.Password)
                 .IsRequired()
                 .HasMaxLength(256);
+
+            builder.Property(x => x.IsEmailVerified)
+                .IsRequired()
+                .HasDefaultValue(false);
 
             builder.Property(x => x.FailedLoginAttempts)
                 .IsRequired()
@@ -48,10 +56,16 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
                 .HasForeignKey(x => x.RoleId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // 1:1 опциональный — отсутствие строки PasswordRecovery значит "нет активного запроса".
-            builder.HasOne(x => x.PasswordRecovery)
+            // 1:many, но фактически не больше одной строки на UserTokenType — ограничение
+            // держит unique-индекс (UserId, Type) в UserTokenConfiguration (ADR 006).
+            builder.HasMany(x => x.Tokens)
                 .WithOne(x => x.User)
-                .HasForeignKey<PasswordRecovery>(x => x.UserId)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(x => x.RefreshTokens)
+                .WithOne(x => x.User)
+                .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         }
     }

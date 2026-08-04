@@ -19,9 +19,9 @@
         "--project",
         "D:\\Davo\\Claude AI Agent\\Hay Travel\\Backend\\ATTours.ClientAPI\\ATTours.ClientAPI.csproj",
         "--urls",
-        "http://localhost:5254"
+        "http://localhost:5253"
       ],
-      "port": 5254,
+      "port": 5253,
       "autoPort": true
     }
   ]

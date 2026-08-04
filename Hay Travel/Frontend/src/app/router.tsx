@@ -78,9 +78,52 @@ export const router = createBrowserRouter([
             loader: m.regionsLoader,
           })),
       },
+      // Auth lives under one `/auth` prefix. `AuthPage` itself is three states (login tabs /
+      // sign-up tabs / "you are already signed in"), the rest are steps of the email flows.
+      {
+        path: 'auth',
+        lazy: () => import('@/features/auth').then((m) => ({ Component: m.AuthPage })),
+      },
+      {
+        path: 'auth/check-email',
+        lazy: () => import('@/features/auth').then((m) => ({ Component: m.CheckEmailPage })),
+      },
+      {
+        path: 'auth/verify',
+        lazy: () => import('@/features/auth').then((m) => ({ Component: m.VerifyEmailPage })),
+      },
+      {
+        path: 'auth/forgot-password',
+        lazy: () => import('@/features/auth').then((m) => ({ Component: m.ForgotPasswordPage })),
+      },
+      {
+        path: 'auth/reset-password',
+        lazy: () => import('@/features/auth').then((m) => ({ Component: m.ResetPasswordPage })),
+      },
+      {
+        path: 'auth/change-password',
+        lazy: () => import('@/features/auth').then((m) => ({ Component: m.ChangePasswordPage })),
+      },
+      // `/login` was the old URL of the (presentation-only) auth screen and may be bookmarked.
+      // Redirect-only route, same pattern as `/tours` above: `replace` keeps it out of history so
+      // Back doesn't bounce forward again. The query string carries over, so a `?returnTo=` on an
+      // old link still works.
       {
         path: 'login',
-        lazy: () => import('@/features/auth').then((m) => ({ Component: m.AuthPage })),
+        loader: ({ request }) => replace(`/auth${new URL(request.url).search}`),
+      },
+      // The backend builds its email links from `Email:VerifyUrlBase` / `Email:ResetUrlBase`,
+      // which are configured as `<site>/verify-email` and `<site>/reset-password` (+ `?token=`) —
+      // NOT the `/auth/*` paths above. Rather than change deployed backend configuration (and
+      // break every link already sitting in someone's inbox), those two URLs are kept alive as
+      // redirects that carry the query string through untouched.
+      {
+        path: 'verify-email',
+        loader: ({ request }) => replace(`/auth/verify${new URL(request.url).search}`),
+      },
+      {
+        path: 'reset-password',
+        loader: ({ request }) => replace(`/auth/reset-password${new URL(request.url).search}`),
       },
       { path: '*', element: <NotFoundPage /> },
     ],
@@ -111,6 +154,11 @@ export const router = createBrowserRouter([
         path: 'catalog',
         lazy: () =>
           import('@/features/admin').then((m) => ({ Component: m.CatalogPage, loader: m.catalogLoader })),
+      },
+      {
+        path: 'users',
+        lazy: () =>
+          import('@/features/admin').then((m) => ({ Component: m.UsersPage, loader: m.usersLoader })),
       },
       {
         path: 'settings',

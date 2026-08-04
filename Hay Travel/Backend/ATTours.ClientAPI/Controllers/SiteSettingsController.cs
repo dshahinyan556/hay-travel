@@ -1,10 +1,12 @@
 using ATTours.BusinessServices.Services.InfoServices;
 using ATTours.BusinessServices.Services.UpdateServices;
+using ATTours.ClientAPI.Authorization;
 using ATTours.Common.DTO.Info;
 using ATTours.Common.DTO.Request;
 using ATTours.Common.Entities;
 using ATTours.Common.Enums;
 using AutoMapper;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ATTours.ClientAPI.Controllers
@@ -16,8 +18,11 @@ namespace ATTours.ClientAPI.Controllers
         // Полный каталог настроек с сохранёнными значениями и обоими языками.
         // Отдельного Init нет: этот метод сам играет роль init-скелета — ключи,
         // которых ещё нет в БД, приходят с Id = 0 и дефолтами каталога.
+        // Отдаёт и непубличные ключи, поэтому только админ. Тур-менеджеру настройки сайта
+        // не нужны: в редакторе тура они не участвуют. Публичный срез — в GetPublic.
         [HttpGet]
         [Route("GetAll")]
+        [Authorize(Roles = ApiRoles.Admin)]
         public async Task<List<SiteSettingInfoModel>> GetAllAsync()
         {
             using var info = new SiteSettingsInfo();
@@ -29,6 +34,7 @@ namespace ATTours.ClientAPI.Controllers
         // (состав ключей задаёт каталог в коде, ADR 002).
         [HttpPut]
         [Route("Update")]
+        [Authorize(Roles = ApiRoles.Admin)]
         public async Task<List<SiteSettingInfoModel>> UpdateAsync([FromBody] List<SiteSettingUpdateModel> models)
         {
             var entities = mapper.Map<List<SiteSetting>>(models);

@@ -4,6 +4,15 @@
 Сделано в этой сессии: **только схема БД (Entity + EF-конфигурация + миграция), без единой
 строчки бизнес-логики/контроллеров.** Ссылка сюда — из `CHANGELOG.md`.
 
+## Доработка (2026-08-02): `User.PhoneNumber`
+
+По запросу Давида добавлено поле `PhoneNumber` (`nvarchar(15)`, required, только цифры, без
+unique-индекса) — миграция `AddUserPhoneNumber` (additive `AddColumn`, для NOT NULL пустой
+дефолт `""`, таблица `User` была пустой) применена к dev-БД `ATTours` **и** к Azure SQL
+(`haytravel-sql`/`free-sql-db-5065137`, через `dotnet ef database update --connection`, т.к.
+firewall уже пускал текущую машину по правилу `AllowDevMachine`). Синхронно поле добавлено в
+форму регистрации `AuthPage.tsx` (см. «Что НЕ сделано» ниже).
+
 ## Что сделано (2026-08-02)
 
 Три новые таблицы в `ATTours.Common/Entities` (+ `Infrastructure/EntityConfiguration`),
@@ -36,6 +45,7 @@
 | `LastName` | `nvarchar(128)` nullable | |
 | `Username` | `nvarchar(64)` required, unique index | |
 | `Email` | `nvarchar(256)` required, unique index | |
+| `PhoneNumber` | `nvarchar(15)` required | только цифры (без `+`/пробелов/дефисов), обрезка на фронте; без unique-индекса |
 | `Password` | `nvarchar(256)` required | односторонний хеш, см. «Хеширование пароля» ниже |
 | `FailedLoginAttempts` | int, default 0 | инкремент на бэкенде при неудачном логине (логика ещё не написана) |
 | `LockedUntil` | `datetime2` nullable, **UTC** | выставляется по достижении лимита (5) попыток; см. «Блокировка» ниже |
@@ -84,8 +94,12 @@
 - Enforcement прав `TourManager`/`Admin` на бэкенде (авторизация вообще отсутствует в проекте,
   см. `admin-panel.md` — "Авторизации пока нет, но seam заложен").
 - Форма регистрации на публичном сайте (редирект с брони → регистрация): FirstName, LastName,
-  Email, Password, Confirm Password (confirm — только фронтовая валидация, на бэкенде не
-  хранится). Это отдельная будущая задача, здесь только зафиксирован её будущий контракт полей.
+  Email, PhoneNumber, Password, Confirm Password (confirm — только фронтовая валидация, на
+  бэкенде не хранится). Это отдельная будущая задача (эндпоинта Register всё ещё нет), здесь
+  только зафиксирован её будущий контракт полей. Поле телефона уже добавлено в presentation-only
+  `AuthPage.tsx` (2026-08-02): обязательное, `type="tel"`, фильтрация нецифровых символов на
+  вводе (`onInput`, не нативный `maxLength` — он режет сырую строку до фильтрации и портит ввод с
+  разделителями), обрезка до 15 цифр.
 - Логика инкремента `FailedLoginAttempts`/выставления `LockedUntil`/проверки блокировки при логине.
 - Генерация/валидация/TTL токена password recovery, отправка письма.
 

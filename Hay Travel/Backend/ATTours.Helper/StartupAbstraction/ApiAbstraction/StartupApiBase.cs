@@ -32,6 +32,10 @@ namespace ATTours.Helper.StartupAbstraction.ApiAbstraction
         {
             app.UseCors(x => ConfigureCorPolicy(x));
 
+            // Точка расширения для конвейера конкретного API (аутентификация/авторизация):
+            // после CORS и маршрутизации, но до выполнения эндпоинтов.
+            ConfigureAdditionalMiddleware(app);
+
             if (!env.IsProduction())
             {
                 app.UseSwagger();
@@ -42,6 +46,10 @@ namespace ATTours.Helper.StartupAbstraction.ApiAbstraction
             {
                 endpoints.MapControllers();
             });
+        }
+
+        protected virtual void ConfigureAdditionalMiddleware(IApplicationBuilder app)
+        {
         }
 
         protected virtual CorsPolicyBuilder ConfigureCorPolicy(CorsPolicyBuilder corPolicyBuilder)

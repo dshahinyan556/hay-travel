@@ -24,6 +24,7 @@ const ru = {
   'nav.regions': 'Карта регионов',
   'nav.regionsShort': 'Карта',
   'nav.login': 'Войти',
+  'nav.account': 'Аккаунт',
   'nav.mainAriaLabel': 'Основная навигация',
 
   // ── Footer ────────────────────────────────────────────────────────────────────────────────
@@ -188,21 +189,90 @@ const ru = {
   'error.body': 'Попробуйте обновить страницу или вернуться позже.',
   'error.reload': 'Обновить',
 
-  // ── Auth (presentational only, see AuthPage doc comment) ─────────────────────────────────
+  // ── Auth ─────────────────────────────────────────────────────────────────────────────────
+  // Covers all six screens under `/auth` (`features/auth`). The ADMIN panel is Russian-only by
+  // design and does NOT read these — `features/admin/users` keeps its own literals, the same way
+  // `catalogErrors.ts` does.
   'auth.welcomeBack': 'С возвращением',
   'auth.createAccount': 'Создать аккаунт',
   'auth.subtitleLogin': 'Войдите, чтобы видеть свои брони и избранное.',
   'auth.subtitleRegister': 'Сохраняйте избранные маршруты и следите за бронями.',
   'auth.tabLogin': 'Вход',
   'auth.tabRegister': 'Регистрация',
-  'auth.name': 'Имя',
+  'auth.firstName': 'Имя',
+  'auth.lastName': 'Фамилия (необязательно)',
+  'auth.username': 'Логин',
+  'auth.usernameOrEmail': 'Логин или email',
   'auth.email': 'Email',
+  'auth.phone': 'Телефон',
   'auth.password': 'Пароль',
+  'auth.confirmPassword': 'Повторите пароль',
   'auth.forgotPassword': 'Забыли пароль?',
   'auth.submitLogin': 'Войти',
   'auth.submitRegister': 'Зарегистрироваться',
+  'auth.submitting': 'Отправляем…',
   'auth.terms': 'Продолжая, вы соглашаетесь с условиями сервиса.',
   'auth.backHome': 'Вернуться на главную',
+
+  // Registration → «письмо отправлено»
+  'auth.checkEmailTitle': 'Проверьте почту',
+  'auth.checkEmailBody':
+    'Мы отправили ссылку для подтверждения на {email}. Перейдите по ней, чтобы активировать аккаунт — без этого вход невозможен.',
+  /** Fallback address for a direct visit to `/auth/check-email`, which carries no router state. */
+  'auth.yourEmail': 'вашу почту',
+  'auth.devTokenHint': 'Режим разработки: письма не отправляются, подтвердите по ссылке ниже.',
+  'auth.devTokenOpen': 'Подтвердить сейчас',
+
+  // Verify email
+  'auth.verifyTitle': 'Подтверждение почты',
+  'auth.verifyPending': 'Проверяем ссылку…',
+  'auth.verifySuccess': 'Почта подтверждена. Теперь можно войти.',
+  'auth.verifyAction': 'Войти',
+
+  // Forgot password
+  'auth.forgotTitle': 'Восстановление пароля',
+  'auth.forgotSubtitle': 'Укажите email — пришлём ссылку для установки нового пароля.',
+  'auth.forgotSubmit': 'Отправить ссылку',
+  'auth.forgotSent':
+    'Если такой аккаунт существует, письмо со ссылкой уже отправлено. Проверьте почту.',
+
+  // Reset password
+  'auth.resetTitle': 'Новый пароль',
+  'auth.resetSubmit': 'Сохранить пароль',
+  'auth.resetSuccess': 'Пароль изменён. Войдите с новым паролем.',
+
+  // Change password
+  'auth.changePasswordTitle': 'Смена пароля',
+  'auth.currentPassword': 'Текущий пароль',
+  'auth.newPassword': 'Новый пароль',
+  'auth.changeSubmit': 'Сменить пароль',
+  'auth.changeSuccess': 'Пароль обновлён.',
+  'auth.forceChangeNotice': 'Прежде чем продолжить, нужно сменить пароль.',
+
+  // Account (signed in)
+  'auth.accountTitle': 'Ваш аккаунт',
+  'auth.accountMenu': 'Меню аккаунта',
+  'auth.accountRole': 'Роль',
+  'auth.role.regular': 'Пользователь',
+  'auth.role.tourManager': 'Тур-менеджер',
+  'auth.role.admin': 'Администратор',
+  'auth.goToPanel': 'Панель',
+  'auth.logout': 'Выйти',
+
+  // Errors
+  'auth.error.invalidCredentials': 'Неверный логин или пароль.',
+  'auth.error.accountLocked':
+    'Аккаунт временно заблокирован из-за неудачных попыток входа. Попробуйте через 15 минут.',
+  'auth.error.emailNotVerified': 'Почта не подтверждена — перейдите по ссылке из письма.',
+  'auth.error.verificationTokenInvalid': 'Ссылка недействительна или устарела.',
+  'auth.error.resetTokenInvalid': 'Ссылка для смены пароля недействительна или устарела.',
+  'auth.error.usernameTaken': 'Такой логин уже занят.',
+  'auth.error.validation': 'Проверьте правильность заполнения полей.',
+  'auth.error.network': 'Нет связи с сервером. Проверьте соединение и попробуйте ещё раз.',
+  'auth.error.generic': 'Что-то пошло не так. Попробуйте ещё раз.',
+  'auth.error.passwordTooShort': 'Пароль должен быть не короче {min} символов.',
+  'auth.error.passwordMismatch': 'Пароли не совпадают.',
+  'auth.error.usernameTooShort': 'Логин должен быть не короче {min} символов.',
 } as const
 
 export type TranslationKey = keyof typeof ru
@@ -217,6 +287,7 @@ const en: Record<TranslationKey, string> = {
   'nav.regions': 'Region map',
   'nav.regionsShort': 'Map',
   'nav.login': 'Log in',
+  'nav.account': 'Account',
   'nav.mainAriaLabel': 'Main navigation',
 
   'footer.navigation': 'Navigation',
@@ -370,14 +441,71 @@ const en: Record<TranslationKey, string> = {
   'auth.subtitleRegister': 'Save favourite routes and track your bookings.',
   'auth.tabLogin': 'Log in',
   'auth.tabRegister': 'Sign up',
-  'auth.name': 'Name',
+  'auth.firstName': 'First name',
+  'auth.lastName': 'Last name (optional)',
+  'auth.username': 'Username',
+  'auth.usernameOrEmail': 'Username or email',
   'auth.email': 'Email',
+  'auth.phone': 'Phone',
   'auth.password': 'Password',
+  'auth.confirmPassword': 'Repeat password',
   'auth.forgotPassword': 'Forgot password?',
   'auth.submitLogin': 'Log in',
   'auth.submitRegister': 'Sign up',
+  'auth.submitting': 'Sending…',
   'auth.terms': 'By continuing, you agree to the terms of service.',
   'auth.backHome': 'Back to home',
+
+  'auth.checkEmailTitle': 'Check your email',
+  'auth.checkEmailBody':
+    'We sent a confirmation link to {email}. Follow it to activate your account — you cannot log in until you do.',
+  'auth.yourEmail': 'your email',
+  'auth.devTokenHint': 'Development mode: no email is actually sent, use the link below.',
+  'auth.devTokenOpen': 'Confirm now',
+
+  'auth.verifyTitle': 'Email confirmation',
+  'auth.verifyPending': 'Checking the link…',
+  'auth.verifySuccess': 'Email confirmed. You can log in now.',
+  'auth.verifyAction': 'Log in',
+
+  'auth.forgotTitle': 'Password recovery',
+  'auth.forgotSubtitle': 'Enter your email and we will send a link to set a new password.',
+  'auth.forgotSubmit': 'Send the link',
+  'auth.forgotSent': 'If that account exists, the link is already on its way. Check your email.',
+
+  'auth.resetTitle': 'New password',
+  'auth.resetSubmit': 'Save password',
+  'auth.resetSuccess': 'Password changed. Log in with the new one.',
+
+  'auth.changePasswordTitle': 'Change password',
+  'auth.currentPassword': 'Current password',
+  'auth.newPassword': 'New password',
+  'auth.changeSubmit': 'Change password',
+  'auth.changeSuccess': 'Password updated.',
+  'auth.forceChangeNotice': 'You must change your password before continuing.',
+
+  'auth.accountTitle': 'Your account',
+  'auth.accountMenu': 'Account menu',
+  'auth.accountRole': 'Role',
+  'auth.role.regular': 'Customer',
+  'auth.role.tourManager': 'Tour manager',
+  'auth.role.admin': 'Administrator',
+  'auth.goToPanel': 'Panel',
+  'auth.logout': 'Log out',
+
+  'auth.error.invalidCredentials': 'Wrong username or password.',
+  'auth.error.accountLocked':
+    'The account is temporarily locked after too many failed attempts. Try again in 15 minutes.',
+  'auth.error.emailNotVerified': 'Email is not confirmed — follow the link we sent you.',
+  'auth.error.verificationTokenInvalid': 'This link is invalid or has expired.',
+  'auth.error.resetTokenInvalid': 'This password reset link is invalid or has expired.',
+  'auth.error.usernameTaken': 'That username is already taken.',
+  'auth.error.validation': 'Please check the fields and try again.',
+  'auth.error.network': 'No connection to the server. Check your network and try again.',
+  'auth.error.generic': 'Something went wrong. Please try again.',
+  'auth.error.passwordTooShort': 'The password must be at least {min} characters long.',
+  'auth.error.passwordMismatch': 'The passwords do not match.',
+  'auth.error.usernameTooShort': 'The username must be at least {min} characters long.',
 }
 
 export const DICTIONARIES = { ru, en } satisfies Record<'ru' | 'en', Record<TranslationKey, string>>

@@ -1,7 +1,10 @@
 /**
  * Admin Reference Catalog API — one function per backend endpoint, all routed through
- * `apiFetch`. Backend route bases: `api/Place`, `api/ExpenseTemplate`, `api/TourNoteTemplate`,
+ * `authFetch`. Backend route bases: `api/Place`, `api/ExpenseTemplate`, `api/TourNoteTemplate`,
  * `api/Region`.
+ *
+ * `GetAll` here is TourManager+Admin (the tour form needs to read these to fill its pickers);
+ * every write is Admin-only, enforced server-side and mirrored by `canManageCatalog`.
  *
  * Regions have no write endpoints on the backend (they are fixed, seeded reference data —
  * `docs/backend-stage3-sync.md` §3.2), so only `getRegions` exists here.
@@ -10,7 +13,7 @@
  * row in its list rather than refetching everything.
  */
 
-import { apiFetch } from '@/shared/lib/http'
+import { authFetch } from '@/shared/auth'
 import type {
   ExpenseTemplateCreateModel,
   ExpenseTemplateInfoModel,
@@ -26,18 +29,18 @@ import type {
 /* -------------------------------------------------------------------------- */
 
 export function getPlaces(): Promise<PlaceInfoModel[]> {
-  return apiFetch<PlaceInfoModel[]>('api/Place/GetAll')
+  return authFetch<PlaceInfoModel[]>('api/Place/GetAll')
 }
 
 export function createPlace(model: PlaceCreateModel): Promise<PlaceInfoModel> {
-  return apiFetch<PlaceInfoModel>('api/Place/Create', {
+  return authFetch<PlaceInfoModel>('api/Place/Create', {
     method: 'POST',
     body: JSON.stringify(model),
   })
 }
 
 export function updatePlace(model: PlaceInfoModel): Promise<PlaceInfoModel> {
-  return apiFetch<PlaceInfoModel>('api/Place/Update', {
+  return authFetch<PlaceInfoModel>('api/Place/Update', {
     method: 'PUT',
     body: JSON.stringify(model),
   })
@@ -46,7 +49,7 @@ export function updatePlace(model: PlaceInfoModel): Promise<PlaceInfoModel> {
 /** Rejects with `ApiError` carrying `errorCode: CatalogEntryInUse` (2010) when the place is
  * still referenced by a route point. */
 export function deletePlace(id: number): Promise<void> {
-  return apiFetch<void>(`api/Place/Delete?id=${id}`, { method: 'DELETE' })
+  return authFetch<void>(`api/Place/Delete?id=${id}`, { method: 'DELETE' })
 }
 
 /* -------------------------------------------------------------------------- */
@@ -54,13 +57,13 @@ export function deletePlace(id: number): Promise<void> {
 /* -------------------------------------------------------------------------- */
 
 export function getExpenseTemplates(): Promise<ExpenseTemplateInfoModel[]> {
-  return apiFetch<ExpenseTemplateInfoModel[]>('api/ExpenseTemplate/GetAll')
+  return authFetch<ExpenseTemplateInfoModel[]>('api/ExpenseTemplate/GetAll')
 }
 
 export function createExpenseTemplate(
   model: ExpenseTemplateCreateModel,
 ): Promise<ExpenseTemplateInfoModel> {
-  return apiFetch<ExpenseTemplateInfoModel>('api/ExpenseTemplate/Create', {
+  return authFetch<ExpenseTemplateInfoModel>('api/ExpenseTemplate/Create', {
     method: 'POST',
     body: JSON.stringify(model),
   })
@@ -69,7 +72,7 @@ export function createExpenseTemplate(
 export function updateExpenseTemplate(
   model: ExpenseTemplateInfoModel,
 ): Promise<ExpenseTemplateInfoModel> {
-  return apiFetch<ExpenseTemplateInfoModel>('api/ExpenseTemplate/Update', {
+  return authFetch<ExpenseTemplateInfoModel>('api/ExpenseTemplate/Update', {
     method: 'PUT',
     body: JSON.stringify(model),
   })
@@ -78,7 +81,7 @@ export function updateExpenseTemplate(
 /** Rejects with `ApiError` carrying `errorCode: CatalogEntryInUse` (2010) when still referenced
  * by an additional expense. */
 export function deleteExpenseTemplate(id: number): Promise<void> {
-  return apiFetch<void>(`api/ExpenseTemplate/Delete?id=${id}`, { method: 'DELETE' })
+  return authFetch<void>(`api/ExpenseTemplate/Delete?id=${id}`, { method: 'DELETE' })
 }
 
 /* -------------------------------------------------------------------------- */
@@ -86,13 +89,13 @@ export function deleteExpenseTemplate(id: number): Promise<void> {
 /* -------------------------------------------------------------------------- */
 
 export function getTourNoteTemplates(): Promise<TourNoteTemplateInfoModel[]> {
-  return apiFetch<TourNoteTemplateInfoModel[]>('api/TourNoteTemplate/GetAll')
+  return authFetch<TourNoteTemplateInfoModel[]>('api/TourNoteTemplate/GetAll')
 }
 
 export function createTourNoteTemplate(
   model: TourNoteTemplateCreateModel,
 ): Promise<TourNoteTemplateInfoModel> {
-  return apiFetch<TourNoteTemplateInfoModel>('api/TourNoteTemplate/Create', {
+  return authFetch<TourNoteTemplateInfoModel>('api/TourNoteTemplate/Create', {
     method: 'POST',
     body: JSON.stringify(model),
   })
@@ -101,7 +104,7 @@ export function createTourNoteTemplate(
 export function updateTourNoteTemplate(
   model: TourNoteTemplateInfoModel,
 ): Promise<TourNoteTemplateInfoModel> {
-  return apiFetch<TourNoteTemplateInfoModel>('api/TourNoteTemplate/Update', {
+  return authFetch<TourNoteTemplateInfoModel>('api/TourNoteTemplate/Update', {
     method: 'PUT',
     body: JSON.stringify(model),
   })
@@ -110,7 +113,7 @@ export function updateTourNoteTemplate(
 /** Rejects with `ApiError` carrying `errorCode: CatalogEntryInUse` (2010) when still referenced
  * by a tour note. */
 export function deleteTourNoteTemplate(id: number): Promise<void> {
-  return apiFetch<void>(`api/TourNoteTemplate/Delete?id=${id}`, { method: 'DELETE' })
+  return authFetch<void>(`api/TourNoteTemplate/Delete?id=${id}`, { method: 'DELETE' })
 }
 
 /* -------------------------------------------------------------------------- */
@@ -119,13 +122,13 @@ export function deleteTourNoteTemplate(id: number): Promise<void> {
 
 /** Both languages, `tourCount` included — the admin list, not the public single-locale one. */
 export function getRegions(): Promise<RegionInfoModel[]> {
-  return apiFetch<RegionInfoModel[]>('api/Region/GetAll')
+  return authFetch<RegionInfoModel[]>('api/Region/GetAll')
 }
 
 /** Name/slug/order stay fixed (seeded reference data) — this only edits the teaser (`blurb`)
  * shown on the public map/region panel. Void response: caller revalidates the region list. */
 export function updateRegionBlurb(id: number, blurbRu: string, blurbEn: string): Promise<void> {
-  return apiFetch<void>('api/Region/UpdateBlurb', {
+  return authFetch<void>('api/Region/UpdateBlurb', {
     method: 'PUT',
     body: JSON.stringify({ id, blurbRu, blurbEn }),
   })
