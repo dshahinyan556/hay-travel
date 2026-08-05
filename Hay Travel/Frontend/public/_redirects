@@ -1,1 +1,26 @@
-/*    /index.html   200
+# ВСЕ redirect-правила живут здесь, а не в `netlify.toml`.
+#
+# Почему: этот файл копируется в `dist/` и читается Netlify из publish-директории ВСЕГДА —
+# независимо от того, как настроен base directory в Netlify UI. Правила из `_redirects`
+# обрабатываются РАНЬШЕ правил из `netlify.toml`, поэтому держать их в двух местах опасно:
+# `/*` отсюда перехватывал `/api/*` и прокси-правило из `netlify.toml` никогда не срабатывало
+# (прод отдавал index.html на каждый API-запрос — из-за этого рефреш страницы разлогинивал).
+#
+# Порядок строк важен: побеждает ПЕРВОЕ совпавшее правило.
+
+# 1. Прокси API на Azure. Обязан стоять выше SPA-fallback.
+#
+# Почему прокси, а не прямой вызов Azure: refresh-token cookie — httpOnly + Secure +
+# `SameSite=Lax` с `Path=/api/Auth`. Lax-cookie не отправляется в cross-site запросах, а
+# haytravel.netlify.app → *.azurewebsites.net это именно cross-site. Прямой вызов потерял бы
+# cookie, и silent refresh / logout в проде не работали бы вообще (а Safari/Firefox ITP
+# заблокировали бы третьесторонний cookie сразу). Прокси делает API same-origin — cookie
+# становится first-party.
+#
+# `200` = rewrite, а не redirect: браузер никогда не видит Azure-URL, origin остаётся своим.
+# `!` (force) = правило выигрывает, даже если по этому пути окажется реальный файл.
+/api/*  https://haytravel-api-bvbmardzh5b6a3hs.eastasia-01.azurewebsites.net/api/:splat  200!
+
+# 2. SPA-fallback для React Router: без него прямой заход или F5 на, например,
+#    /tours/dilijan-armyanskaya-shveycariya вернул бы 404 Netlify вместо index.html.
+/*  /index.html  200
