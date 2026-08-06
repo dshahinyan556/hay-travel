@@ -58,13 +58,12 @@ export function Header() {
                 <MountainIcon size={22} />
               </span>
               {/*
-                Hidden below `sm` (2026-08 currency pass): with `CurrencySwitch` added the capsule
-                spends ~180px on utility controls at 375px, and the wordmark's own ~140px no longer
-                fits next to it. The `MountainIcon` stays, so the brand and the link back to `/` are
-                both still there. The custom-logo `<img>` branch above is already `h-7 sm:h-8` and
-                needs no equivalent.
+                Always visible (2026-08-07): an earlier version hid this below `sm` to make room for
+                `CurrencySwitch` at 375px — visible brand disappearing on mobile read as a bug, not a
+                tradeoff, so it stays and shrinks instead. Utility-cluster gaps/padding were tightened
+                to compensate (see below) rather than sacrificing the wordmark.
               */}
-              <span className="text-gold-sheen hidden font-display text-xl leading-none font-semibold tracking-wide sm:inline sm:text-2xl">
+              <span className="text-gold-sheen font-display text-base leading-none font-semibold tracking-wide sm:text-2xl">
                 Hay Travel
               </span>
             </>
@@ -91,7 +90,7 @@ export function Header() {
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
           {/*
             Currency first, and on EVERY viewport — no `lg:` gate. On a travel catalog "what does
             this cost in my money" is a higher-intent question than theme or language, and mobile is

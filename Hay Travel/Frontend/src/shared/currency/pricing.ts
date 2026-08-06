@@ -1,12 +1,16 @@
 /**
  * Pricing math — PURE. No store, no React, no i18n, no formatting.
  *
- * ── Order of operations (non-negotiable) ──────────────────────────────────────────────────────
- *   tier in AMD → multiply by guests in AMD → apply the prepayment share in AMD →
- *   convert ONCE → round ONCE.
+ * The stored price (`Tour.TotalPrice`/`TourDay.Price`) is a FLAT price for the booking — for up to
+ * 4 guests, not a per-person rate. Guest count only selects which TIER applies; it is never a
+ * multiplier. (An earlier version of this file multiplied the tiered amount by guest count, which
+ * silently turned every flat group price into a per-person rate — fixed 2026-08-07.)
  *
- * Never convert per person and multiply the rounded result, and never round twice: for RUB
- * (`roundingStep = 100`) a per-person round on a 16-guest booking drifts by up to 800 ₽.
+ * ── Order of operations (non-negotiable) ──────────────────────────────────────────────────────
+ *   tier in AMD → apply the prepayment share in AMD → convert ONCE → round ONCE.
+ *
+ * Never convert first and round the result, and never round twice: rounding happens exactly once,
+ * as the last step.
  *
  * The group-tier rule lives HERE and nowhere else (sync-doc §6.4). `useTierPrice`, and anything
  * added later, compose these functions; they never re-express the rule.

@@ -148,8 +148,6 @@ const ru = {
   'gallery.counter': '{current} / {total}',
 
   // ── Booking card ──────────────────────────────────────────────────────────────────────────
-  'booking.priceFrom': 'цена от',
-  'booking.perPerson': 'за человека',
   'booking.smallGroup': 'малая группа',
   'booking.dateLabel': 'Дата выезда',
   'booking.dateMissing': 'Выберите дату выезда',
@@ -415,8 +413,6 @@ const en: Record<TranslationKey, string> = {
   'gallery.close': 'Close',
   'gallery.counter': '{current} / {total}',
 
-  'booking.priceFrom': 'from',
-  'booking.perPerson': 'per person',
   'booking.smallGroup': 'small group',
   'booking.dateLabel': 'Departure date',
   'booking.dateMissing': 'Pick a departure date',
