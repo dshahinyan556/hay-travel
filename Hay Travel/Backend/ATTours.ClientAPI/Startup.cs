@@ -42,6 +42,11 @@ namespace ATTours.ClientAPI
         protected override void ConfigureAdditionalMiddleware(IApplicationBuilder app)
         {
             app.UseAuthentication();
+
+            // B7 (2026-08-06): между Authentication и Authorization — активность считается по
+            // факту валидного токена, а не только по успешно пройденной ролевой проверке.
+            app.UseMiddleware<UserActivityTrackingMiddleware>();
+
             app.UseAuthorization();
         }
 

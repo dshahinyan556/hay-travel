@@ -14,6 +14,7 @@ export type {
   LoginRequest,
   MessageResultModel,
   RegisterRequest,
+  UserDetailInfoModel,
   UserInfoModel,
 } from './types'
 

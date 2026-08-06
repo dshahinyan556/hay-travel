@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import { Outlet, ScrollRestoration, useLoaderData, useLocation } from 'react-router'
 import { AdminSidebar } from './AdminSidebar'
 import { AdminAccessDenied } from './AdminAccessDenied'
@@ -28,6 +28,27 @@ export function AdminLayout() {
   useEffect(() => {
     setDrawerOpen(false)
   }, [location.key])
+
+  // `/admin` is always light, regardless of the public site's stored dark/light preference — see
+  // the identical guard in `index.html`'s pre-paint script for why. That inline script only runs
+  // once, on the very first document load: it does NOT re-run on an in-app (`react-router`) nav
+  // from the public site into `/admin`, so a visitor who arrives here via a client-side link while
+  // `data-theme='dark'` is already set needs this effect to correct it on mount — `useLayoutEffect`
+  // (not `useEffect`) so it lands before the browser paints this layout, avoiding a one-frame flash
+  // of the dark palette on that nav. The `storage` listener is defense-in-depth beyond that —
+  // nothing in `/admin` today reacts to another tab's theme change (`ThemeToggle`/`useTheme` only
+  // mount inside the public `Header`), but if that ever changes, this keeps `/admin` pinned to
+  // light for as long as this layout stays mounted instead of silently drifting dark. Deliberately
+  // does not restore the public theme on unmount: leaving `/admin` remounts `RootLayout` →
+  // `Header` → `useTheme`, which re-applies the stored preference on its own.
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = 'light'
+    function forceLight() {
+      document.documentElement.dataset.theme = 'light'
+    }
+    window.addEventListener('storage', forceLight)
+    return () => window.removeEventListener('storage', forceLight)
+  }, [])
 
   // Lock background scroll while the drawer is open.
   useEffect(() => {

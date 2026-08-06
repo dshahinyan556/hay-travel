@@ -12,9 +12,17 @@ namespace ATTours.BusinessServices.Email
         public static string BuildResetUrl(EmailSettings settings, string token)
             => AppendToken(settings.ResetUrlBase, token);
 
+        // Email-change flow (B8, 2026-08-06). Шаг 3-4: ссылка на НОВЫЙ email.
+        public static string BuildEmailChangeConfirmUrl(EmailSettings settings, string token)
+            => AppendToken(settings.EmailChangeConfirmUrlBase, token);
+
         public static string VerifySubject => "Подтверждение регистрации — Hay Travel";
 
         public static string ResetSubject => "Восстановление пароля — Hay Travel";
+
+        public static string EmailChangeCodeSubject => "Код подтверждения смены почты — Hay Travel";
+
+        public static string EmailChangeConfirmSubject => "Подтверждение нового адреса почты — Hay Travel";
 
         public static string BuildVerifyBody(string toName, string verifyUrl)
             => $"Здравствуйте, {toName}!\n\n" +
@@ -25,6 +33,16 @@ namespace ATTours.BusinessServices.Email
             => $"Здравствуйте, {toName}!\n\n" +
                $"Для смены пароля перейдите по ссылке: {resetUrl}\n\n" +
                "Ссылка действует 1 час. Если вы не запрашивали смену пароля, просто проигнорируйте это письмо.";
+
+        public static string BuildEmailChangeCodeBody(string toName, string code)
+            => $"Здравствуйте, {toName}!\n\n" +
+               $"Код подтверждения для смены адреса почты: {code}\n\n" +
+               "Код действует 15 минут. Если вы не запрашивали смену почты, просто проигнорируйте это письмо.";
+
+        public static string BuildEmailChangeConfirmBody(string toName, string confirmUrl)
+            => $"Здравствуйте, {toName}!\n\n" +
+               $"Чтобы подтвердить новый адрес почты, перейдите по ссылке: {confirmUrl}\n\n" +
+               "Ссылка действует 1 час. Если вы не запрашивали смену почты, просто проигнорируйте это письмо.";
 
         // База может уже содержать query (?lang=ru) — тогда токен присоединяется через '&'.
         private static string AppendToken(string urlBase, string token)

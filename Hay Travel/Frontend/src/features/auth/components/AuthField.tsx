@@ -1,14 +1,18 @@
 /**
  * One labelled input on the auth screens.
  *
- * UNCONTROLLED on purpose. The phone field filters non-digits by rewriting `input.value` in an
- * `onInput` handler (native `maxLength` can't be used: it truncates the raw string BEFORE the
- * filter runs, so pasting "+374 55 123456" would lose the tail). React would fight that write on
- * a controlled input, so the forms read their values from `FormData` at submit time instead —
- * which also means typing never re-renders the form.
+ * UNCONTROLLED on purpose (still true after the F1 redesign): typing never re-renders the form —
+ * values are read from `FormData` at submit time. The password field's show/hide toggle is the
+ * one bit of local state this component owns; it only ever flips the underlying `<input>`'s
+ * `type` and the eye icon, never touches `.value`, so it does not fight the uncontrolled input.
  *
- * Styling matches the public site's dark-luxury palette; the admin panel uses `shared/ui/Input`.
+ * Styling matches the public site's dark-luxury palette (role tokens — `bg-panel-raised`,
+ * `ring-edge-strong`, `text-gold-ink`, …); the admin panel uses `shared/ui/Input`.
  */
+
+import { useState } from 'react'
+import type { ReactNode } from 'react'
+import { EyeIcon, EyeOffIcon } from '@/shared/ui/icons'
 
 interface AuthFieldProps {
   /** `FormData` key — the forms read values by name at submit. */
@@ -23,10 +27,16 @@ interface AuthFieldProps {
   minLength?: number
   defaultValue?: string
   autoFocus?: boolean
-  /** Strip everything but digits as the user types (and on paste), then clamp to `maxLength`. */
-  onlyDigits?: boolean
   /** Field-level validation message, already translated. */
   error?: string
+  /** Leading icon, already sized (e.g. `<UserIcon size={16} />`). Purely decorative — the icon
+   * components themselves carry `aria-hidden`. */
+  icon?: ReactNode
+  /** Controlled show/hide, for a password field that shares ONE eye toggle with a sibling field
+   * (e.g. register's password + confirm-password). Omit to keep this field's own independent
+   * local toggle — every other password field on the auth screens still works that way. */
+  revealed?: boolean
+  onToggleRevealed?: () => void
 }
 
 export function AuthField({
@@ -40,39 +50,61 @@ export function AuthField({
   minLength,
   defaultValue,
   autoFocus,
-  onlyDigits,
   error,
+  icon,
+  revealed: revealedProp,
+  onToggleRevealed,
 }: AuthFieldProps) {
   const errorId = `${name}-error`
+  const isPassword = type === 'password'
+  const [localRevealed, setLocalRevealed] = useState(false)
+  const isControlled = revealedProp !== undefined
+  const revealed = isControlled ? revealedProp : localRevealed
+  const toggleRevealed = onToggleRevealed ?? (() => setLocalRevealed((value) => !value))
 
   return (
     <label className="block">
-      <span className="text-xs text-ink-muted">{label}</span>
-      <input
-        name={name}
-        type={type}
-        required={required}
-        autoComplete={autoComplete}
-        inputMode={inputMode}
-        maxLength={onlyDigits ? undefined : maxLength}
-        minLength={minLength}
-        defaultValue={defaultValue}
-        autoFocus={autoFocus}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
-        onInput={
-          onlyDigits
-            ? (e) => {
-                const input = e.currentTarget
-                input.value = input.value.replace(/\D/g, '').slice(0, maxLength)
-              }
-            : undefined
-        }
-        className={[
-          'mt-1.5 w-full rounded-xl bg-panel-raised px-3.5 py-2.5 text-sm text-ink ring-1 transition-colors focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none',
-          error ? 'ring-danger' : 'ring-edge-strong',
-        ].join(' ')}
-      />
+      <span className="text-[11px] font-semibold tracking-[.14em] text-ink-muted uppercase">
+        {label}
+      </span>
+      <div
+        // `group` scopes the icon's focus colour to THIS control's own input (`group-focus-within`)
+        // rather than the nearest ancestor with that class — there is no other `group` nested here.
+        className={`group mt-1.5 flex h-[46px] items-center gap-2.5 rounded-xl bg-panel-raised px-3.5 ring-1 transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] focus-within:ring-2 focus-within:ring-focus ${
+          error ? 'ring-danger' : 'ring-edge-strong hover:ring-gold-line'
+        }`}
+      >
+        {icon && (
+          <span className="shrink-0 text-ink-muted transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] group-focus-within:text-gold-ink">
+            {icon}
+          </span>
+        )}
+        <input
+          name={name}
+          type={isPassword ? (revealed ? 'text' : 'password') : type}
+          required={required}
+          autoComplete={autoComplete}
+          inputMode={inputMode}
+          maxLength={maxLength}
+          minLength={minLength}
+          defaultValue={defaultValue}
+          autoFocus={autoFocus}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+          className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-muted"
+        />
+        {isPassword && (
+          <button
+            type="button"
+            onClick={toggleRevealed}
+            aria-label={revealed ? 'Скрыть пароль' : 'Показать пароль'}
+            aria-pressed={revealed}
+            className="icon-press -mr-1 flex shrink-0 cursor-pointer items-center rounded-full p-1 text-ink-muted hover:text-gold-ink focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
+          >
+            {revealed ? <EyeOffIcon size={17} /> : <EyeIcon size={17} />}
+          </button>
+        )}
+      </div>
       {error && (
         <span id={errorId} className="mt-1 block text-xs text-danger">
           {error}

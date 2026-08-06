@@ -75,6 +75,22 @@ namespace ATTours.Helper.Enums
         RoleNotFound = 2206,
         [Description("Refresh token is invalid or expired.")]
         RefreshTokenInvalid = 2207,
+        [Description("Email change code is invalid or expired.")]
+        EmailChangeCodeInvalid = 2208,
+        [Description("Email change link is invalid or expired.")]
+        EmailChangeLinkInvalid = 2209,
+        [Description("The old email address has not been confirmed yet, or the confirmation has expired.")]
+        EmailChangeNotConfirmed = 2210,
+        [Description("This email address is already taken.")]
+        EmailAlreadyTaken = 2211,
+        [Description("You cannot delete your own account.")]
+        CannotDeleteSelf = 2212,
+        [Description("Account has been deleted.")]
+        AccountDeleted = 2213,
+        [Description("The Admin role can only be changed directly in the database.")]
+        AdminRoleImmutable = 2214,
+        [Description("An Admin account can only be deleted directly in the database.")]
+        AdminAccountImmutable = 2215,
         #endregion
 
         [Description("Endpoint not existing")]

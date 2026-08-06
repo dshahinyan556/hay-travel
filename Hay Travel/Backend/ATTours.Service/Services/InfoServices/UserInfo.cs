@@ -22,9 +22,18 @@ namespace ATTours.BusinessServices.Services.InfoServices
         {
         }
 
+        // !IsDeleted (B4/B13, 2026-08-06): единственное место, от которого наследуют и
+        // список (GetAllAsync/GetUsersAsync), и деталь (GetByIdAsync) — без этого фильтра
+        // soft-delete был бы косметическим, удалённые пользователи оставались бы в UI.
+        //
+        // Where() после Include() возвращает суженный IQueryableRepository<User> (интерфейс
+        // не покрывает ковариантный возврат) — вызываем ради побочного эффекта (мутирует тот
+        // же LocalEntities) и возвращаем исходную includable-ссылку, не результат вызова.
         protected override IEntityQueryableRepository<User> GetEntityQueryableRepository()
         {
-            return base.GetEntityQueryableRepository().Include(x => x.Role);
+            var repository = base.GetEntityQueryableRepository().Include(x => x.Role);
+            repository.Where(x => !x.IsDeleted);
+            return repository;
         }
 
         public async Task<User> GetByIdAsync(int id, CancellationToken cancellationToken = default)

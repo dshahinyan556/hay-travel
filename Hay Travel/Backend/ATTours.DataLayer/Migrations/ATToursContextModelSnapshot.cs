@@ -77,6 +77,69 @@ namespace ATTours.DataLayer.Migrations
                     b.ToTable("AdditionalExpenseTranslation", (string)null);
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.EmailChangeRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("NewEmailExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("NewEmailRequestedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("NewEmailToken")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("OldEmailCode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<DateTime?>("OldEmailConfirmedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("OldEmailExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("OldEmailRequestedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PendingNewEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("RequestIp")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime?>("UsedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NewEmailToken")
+                        .IsUnique()
+                        .HasFilter("[NewEmailToken] IS NOT NULL");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("EmailChangeRequest", (string)null);
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.ExpenseTemplate", b =>
                 {
                     b.Property<int>("Id")
@@ -183,6 +246,32 @@ namespace ATTours.DataLayer.Migrations
                         .IsUnique();
 
                     b.ToTable("Place", (string)null);
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.PlaceImage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("PlaceId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlaceId");
+
+                    b.ToTable("PlaceImage", (string)null);
                 });
 
             modelBuilder.Entity("ATTours.Common.Entities.PlaceTranslation", b =>
@@ -707,10 +796,22 @@ namespace ATTours.DataLayer.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("IsEmailVerified")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("LastActiveAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("LastLoginIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<string>("LastName")
                         .HasMaxLength(128)
@@ -725,9 +826,17 @@ namespace ATTours.DataLayer.Migrations
                         .HasColumnType("nvarchar(256)");
 
                     b.Property<string>("PhoneNumber")
-                        .IsRequired()
                         .HasMaxLength(15)
                         .HasColumnType("nvarchar(15)");
+
+                    b.Property<DateTime>("RegisteredAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.Property<string>("RegisteredIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<int>("RoleId")
                         .HasColumnType("int");
@@ -740,12 +849,14 @@ namespace ATTours.DataLayer.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("RoleId");
 
                     b.HasIndex("Username")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("User", (string)null);
                 });
@@ -868,6 +979,17 @@ namespace ATTours.DataLayer.Migrations
                     b.Navigation("AdditionalExpense");
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.EmailChangeRequest", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.User", "User")
+                        .WithOne("EmailChangeRequest")
+                        .HasForeignKey("ATTours.Common.Entities.EmailChangeRequest", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.ExpenseTemplateTranslation", b =>
                 {
                     b.HasOne("ATTours.Common.Entities.ExpenseTemplate", "ExpenseTemplate")
@@ -899,6 +1021,17 @@ namespace ATTours.DataLayer.Migrations
                         .IsRequired();
 
                     b.Navigation("Region");
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.PlaceImage", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.Place", "Place")
+                        .WithMany("Images")
+                        .HasForeignKey("PlaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Place");
                 });
 
             modelBuilder.Entity("ATTours.Common.Entities.PlaceTranslation", b =>
@@ -1110,6 +1243,8 @@ namespace ATTours.DataLayer.Migrations
 
             modelBuilder.Entity("ATTours.Common.Entities.Place", b =>
                 {
+                    b.Navigation("Images");
+
                     b.Navigation("RoutePoints");
 
                     b.Navigation("Translations");
@@ -1170,6 +1305,8 @@ namespace ATTours.DataLayer.Migrations
 
             modelBuilder.Entity("ATTours.Common.Entities.User", b =>
                 {
+                    b.Navigation("EmailChangeRequest");
+
                     b.Navigation("RefreshTokens");
 
                     b.Navigation("Tokens");

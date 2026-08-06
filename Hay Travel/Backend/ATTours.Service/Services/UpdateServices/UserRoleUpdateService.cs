@@ -25,7 +25,11 @@ namespace ATTours.BusinessServices.Services.UpdateServices
         private IEntityRepository<UserRole>? roleRepository;
         private IEntityRepository<UserRole> RoleRepository => roleRepository ??= new EntityRepository<UserRole>(Context);
 
-        public async Task<User> ChangeRoleAsync(int userId, int roleId, int actingUserId)
+        // actingUserId больше не нужен (B6, 2026-08-06): self-guard существовал только внутри
+        // GuardAdminDemotionAsync и полностью поглощён безусловным GuardAdminDemotion ниже —
+        // держать неиспользуемый параметр не имеет смысла. Сигнатура — внутренний C#-контракт
+        // (не REST), править вызывающего в UsersController безопасно в рамках этой же правки.
+        public async Task<User> ChangeRoleAsync(int userId, int roleId)
         {
             var user = await EntityRepository.AsQueryable()
                                              .Include(x => x.Role)
@@ -41,7 +45,7 @@ namespace ATTours.BusinessServices.Services.UpdateServices
             if (user.RoleId == roleId)
                 return user;
 
-            await GuardAdminDemotionAsync(user, role, actingUserId);
+            GuardAdminDemotion(user, role);
 
             user.RoleId = role.Id;
             user.Role = role;
@@ -50,24 +54,19 @@ namespace ATTours.BusinessServices.Services.UpdateServices
             return user;
         }
 
-        // Снятие роли Admin — единственный необратимый сценарий: админ может запереть
-        // сам себя или оставить систему вообще без администратора.
-        private async Task GuardAdminDemotionAsync(User user, UserRole newRole, int actingUserId)
+        // Роль Admin неизменна через этот эндпоинт (B6, 2026-08-06) — снятие роли Admin у
+        // кого угодно кем угодно запрещено безусловно. Это полностью поглощает прежние два
+        // частных случая (self/last-admin): оба были лишь подмножеством "цель — Admin",
+        // поэтому старая GuardAdminDemotionAsync с их отдельными сообщениями удалена —
+        // недостижимый код хуже, чем один guard на всё правило.
+        private static void GuardAdminDemotion(User user, UserRole newRole)
         {
             var isAdminDemotion = user.Role.Type == RoleType.Admin && newRole.Type != RoleType.Admin;
             if (!isAdminDemotion)
                 return;
 
-            if (user.Id == actingUserId)
-                throw new ErrorModelException(GlobalErrorCode.InvalidEntityRelation, HttpStatusCode.BadRequest,
-                    "You cannot remove the Admin role from yourself.");
-
-            var adminCount = await EntityRepository.AsQueryable()
-                                                   .Where(x => x.Role.Type == RoleType.Admin)
-                                                   .CountAsync(cancellationToken);
-            if (adminCount <= 1)
-                throw new ErrorModelException(GlobalErrorCode.InvalidEntityRelation, HttpStatusCode.BadRequest,
-                    "The last Admin cannot be demoted.");
+            throw new ErrorModelException(GlobalErrorCode.AdminRoleImmutable, HttpStatusCode.Forbidden,
+                "The Admin role can only be changed directly in the database.");
         }
     }
 }

@@ -20,10 +20,10 @@ const typeOptions = [
   { value: String(TourNoteType.NotIncluded), label: 'Не включено' },
 ]
 
-function initialValues(item: TourNoteTemplateInfoModel | null): NoteTemplateFormValues {
+function initialValues(item: TourNoteTemplateInfoModel | null, defaultType: TourNoteType): NoteTemplateFormValues {
   if (!item) {
     return {
-      type: String(TourNoteType.OrganizationalDetail),
+      type: String(defaultType),
       name: { ru: '', en: '' },
     }
   }
@@ -44,14 +44,18 @@ function validate(values: NoteTemplateFormValues): FormErrors {
 
 interface NoteTemplateFormProps {
   item: TourNoteTemplateInfoModel | null
+  /** Pre-selected type for a brand-new note (ignored when editing `item`) — the type the admin
+   * had active in the list's tab filter when they clicked "Добавить заметку", so the form opens
+   * already scoped to what they were looking at instead of always defaulting to the first type. */
+  defaultType: TourNoteType
   isSubmitting: boolean
   error: string | null
   onSubmit: (values: NoteTemplateFormValues) => void
   onCancel: () => void
 }
 
-export function NoteTemplateForm({ item, isSubmitting, error, onSubmit, onCancel }: NoteTemplateFormProps) {
-  const [values, setValues] = useState<NoteTemplateFormValues>(() => initialValues(item))
+export function NoteTemplateForm({ item, defaultType, isSubmitting, error, onSubmit, onCancel }: NoteTemplateFormProps) {
+  const [values, setValues] = useState<NoteTemplateFormValues>(() => initialValues(item, defaultType))
   const [attempted, setAttempted] = useState(false)
 
   const errors = validate(values)

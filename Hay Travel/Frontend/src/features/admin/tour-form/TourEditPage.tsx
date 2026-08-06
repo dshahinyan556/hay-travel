@@ -93,7 +93,6 @@ function TourEditView({
         hasAttemptedSubmit={hasAttemptedSubmit}
         isSubmitting={isSubmitting}
         submitError={error}
-        isDirty={isDirty}
         typeLocked
         catalogSuggestions={catalogSuggestions}
         regions={regions}

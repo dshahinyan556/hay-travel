@@ -11,20 +11,17 @@
 
 import type { TourType } from '@/features/admin/lib/enums'
 import type { Localized } from '@/features/admin/types/localized'
+import type { ImageListItem } from '@/features/admin/ui/ImageListEditor'
 
 /** `Localized` now lives in `types/localized.ts` — it is shared with the settings screen
  * (ADR 004). Re-exported here so every existing `from '@/features/admin/types/form'` import
  * keeps working. */
 export type { Localized }
 
-/** One gallery image of a day. `sortOrder` on the wire is derived from array index. */
-export interface GalleryItemFormState {
-  /** Client-only stable id for React keys and array operations. */
-  key: string
-  /** Present only when editing an existing record (from InitUpdate). */
-  serverId?: number
-  url: string
-}
+/** One gallery image of a day. Shape now lives in `ui/ImageListEditor.tsx` (also backs the
+ * Place catalog's multi-image field) — re-exported here so every existing
+ * `from '@/features/admin/types/form'` import keeps working. */
+export type GalleryItemFormState = ImageListItem
 
 /** An ordered, bilingual list item. Shared shape for the three "repeater of a single
  * bilingual text" fields: a day's route points, and the tour's organizational details and

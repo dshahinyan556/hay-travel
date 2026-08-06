@@ -26,7 +26,9 @@ namespace ATTours.BusinessServices.Services.InfoServices
         {
             return base.GetEntityQueryableRepository()
                        .Include(x => x.Translations)
-                       .Include(x => x.Region);
+                       .Include(x => x.Region)
+                       // Множественные фото (B10, 2026-08-06).
+                       .Include(x => x.Images);
         }
 
         public async Task<Place> GetByIdAsync(int id, CancellationToken cancellationToken = default)

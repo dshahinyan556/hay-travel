@@ -11,3 +11,27 @@
 # Netlify processes `_redirects` BEFORE `netlify.toml`, so splitting the rules across both
 # files means the SPA fallback in `_redirects` swallows `/api/*` before the proxy rule here is
 # ever reached. Keeping every rule in one file, in one order, removes that trap.
+
+# Edge Functions are a DIFFERENT mechanism from `[[redirects]]`/`_redirects`: they run as
+# middleware *around* the redirect-resolution step (call `context.next()` to get the response
+# `_redirects` would have produced, optionally transform it, return it), rather than as a
+# competing rule evaluated at the same level. Declaring one here does not reintroduce the
+# `_redirects`-vs-`netlify.toml` ordering bug documented above — that bug was specifically about
+# two [[redirects]] rule sets racing each other, which isn't what this is.
+#
+# seo-meta (F10/B12): injects the admin-set SEO settings (title/description/OG tags, see
+# `Настройки → SEO`) into the raw HTML `<head>` so messenger/crawler previews reflect them —
+# see `netlify/edge-functions/seo-meta.ts` for the full rationale and implementation notes.
+# `excludedPath` keeps it off API calls, the hashed build output and static public assets, so it
+# only ever runs for actual document (HTML) requests.
+[[edge_functions]]
+  path = "/*"
+  excludedPath = [
+    "/api/*",
+    "/assets/*",
+    "/placeholders/*",
+    "/favicon.svg",
+    "/robots.txt",
+    "/sitemap.xml",
+  ]
+  function = "seo-meta"

@@ -1,15 +1,15 @@
 import { useState } from 'react'
-import { Card, Tabs, UnsavedChangesModal } from '@/shared/ui'
+import { Card, Tabs } from '@/shared/ui'
 import type { TabItem } from '@/shared/ui'
 import { TourType } from '@/features/admin/lib/enums'
 import type { CatalogSuggestions, TourFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
 import type { TourFormValidation } from '@/features/admin/tour-form/lib/validation'
 import type { RegionInfoModel } from '@/shared/types/attours'
+import { ImageListEditor } from '@/features/admin/ui/ImageListEditor'
 import { TourFormHeader } from './TourFormHeader'
 import { TourDaysEditor } from './TourDaysEditor'
 import { LocalizedListEditor } from './LocalizedListEditor'
-import { GalleryImagesEditor } from './GalleryImagesEditor'
 import { AdditionalExpensesEditor } from './AdditionalExpensesEditor'
 import { FormActions } from './FormActions'
 
@@ -20,8 +20,6 @@ interface TourFormProps {
   hasAttemptedSubmit: boolean
   isSubmitting: boolean
   submitError: string | null
-  /** True once the form differs from its initial state — gates the tab-switch confirm modal. */
-  isDirty: boolean
   /** True in edit mode — locks the tour/excursion type toggle (type is immutable after creation). */
   typeLocked?: boolean
   /** Existing catalog entries offered as autocomplete — see `CatalogSuggestions`. */
@@ -52,7 +50,6 @@ export function TourForm({
   hasAttemptedSubmit,
   isSubmitting,
   submitError,
-  isDirty,
   typeLocked,
   catalogSuggestions,
   regions,
@@ -74,19 +71,6 @@ export function TourForm({
   // The "days" tab disappears for an excursion; if the current selection no longer exists
   // (e.g. after flipping the type on create), fall back to the first available tab.
   const effectiveTab = tabs.some((t) => t.id === activeTab) ? activeTab : (tabs[0].id as TabId)
-
-  // Switching tabs never loses anything — every tab reads from the same `state` — but the admin
-  // asked for a confirmation anyway so a mid-edit field doesn't silently scroll out of view.
-  // Held here (not routed through a guard) because it's not a navigation, just a local tab click.
-  const [pendingTab, setPendingTab] = useState<TabId | null>(null)
-
-  function requestTabChange(id: string): void {
-    if (isDirty && id !== effectiveTab) {
-      setPendingTab(id as TabId)
-    } else {
-      setActiveTab(id as TabId)
-    }
-  }
 
   return (
     <form
@@ -142,7 +126,7 @@ export function TourForm({
 
             <div className="flex flex-col gap-2">
               <h4 className="text-sm font-semibold text-neutral-800">Галерея</h4>
-              <GalleryImagesEditor
+              <ImageListEditor
                 items={singleDay.gallery}
                 onAdd={() => actions.addGallery(singleDay.key)}
                 onRemove={(key) => actions.removeGallery(singleDay.key, key)}
@@ -157,7 +141,7 @@ export function TourForm({
       )}
 
       <Card className="!p-0">
-        <Tabs tabs={tabs} activeId={effectiveTab} onChange={requestTabChange} label="Разделы тура" />
+        <Tabs tabs={tabs} activeId={effectiveTab} onChange={(id) => setActiveTab(id as TabId)} label="Разделы тура" />
 
         <div className="p-6">
           {effectiveTab === 'days' && !isExcursion && (
@@ -260,18 +244,6 @@ export function TourForm({
         hasAttemptedSubmit={hasAttemptedSubmit}
         submitError={submitError}
         onSubmit={onSubmit}
-      />
-
-      <UnsavedChangesModal
-        open={pendingTab !== null}
-        onCancel={() => setPendingTab(null)}
-        onConfirm={() => {
-          if (pendingTab) setActiveTab(pendingTab)
-          setPendingTab(null)
-        }}
-        title="Перейти в другой раздел?"
-        message="В этом разделе есть несохранённые изменения. Они не потеряются при переходе — не забудьте нажать «Сохранить», прежде чем уйти со страницы."
-        confirmLabel="Перейти"
       />
     </form>
   )

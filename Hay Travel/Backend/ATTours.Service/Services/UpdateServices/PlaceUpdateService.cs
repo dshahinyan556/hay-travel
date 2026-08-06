@@ -34,6 +34,8 @@ namespace ATTours.BusinessServices.Services.UpdateServices
 
             var existing = await EntityRepository.AsQueryable()
                                                  .Include(x => x.Translations)
+                                                 // Множественные фото (B10, 2026-08-06).
+                                                 .Include(x => x.Images)
                                                  .SingleOrDefaultAsync(x => x.Id == incoming.Id, CancellationToken)
                            ?? throw new ErrorModelException(GlobalErrorCode.PlaceNotFound, HttpStatusCode.NotFound, $"Place with id {incoming.Id} not found.");
 
@@ -45,6 +47,7 @@ namespace ATTours.BusinessServices.Services.UpdateServices
             existing.SortOrder = incoming.SortOrder;
 
             ReconcileTranslations(existing.Translations, incoming.Translations);
+            ReconcileImages(existing.Images, incoming.Images);
         }
 
         // Сверка переводов по Id: Id == 0 -> add, совпадающий Id -> update, отсутствующий во
@@ -73,6 +76,34 @@ namespace ATTours.BusinessServices.Services.UpdateServices
             }
 
             foreach (var stale in existing.Where(t => t.Id != default && !touchedIds.Contains(t.Id)).ToList())
+                existing.Remove(stale);
+        }
+
+        // Сверка фото по Id (B10, 2026-08-06): тот же приём, что ReconcileTranslations выше —
+        // Id == 0 -> add, совпадающий Id -> update, отсутствующий во входящих -> remove.
+        private static void ReconcileImages(ICollection<PlaceImage> existing, ICollection<PlaceImage> incoming)
+        {
+            var incomingItems = incoming ?? [];
+            var existingById = existing.Where(i => i.Id != default).ToDictionary(i => i.Id);
+            var touchedIds = new HashSet<int>();
+
+            foreach (var incomingItem in incomingItems)
+            {
+                if (incomingItem.Id == default)
+                {
+                    existing.Add(incomingItem);
+                    continue;
+                }
+
+                if (existingById.TryGetValue(incomingItem.Id, out var target))
+                {
+                    target.Url = incomingItem.Url;
+                    target.SortOrder = incomingItem.SortOrder;
+                    touchedIds.Add(incomingItem.Id);
+                }
+            }
+
+            foreach (var stale in existing.Where(i => i.Id != default && !touchedIds.Contains(i.Id)).ToList())
                 existing.Remove(stale);
         }
     }

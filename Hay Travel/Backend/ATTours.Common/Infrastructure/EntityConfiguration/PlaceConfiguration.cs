@@ -29,6 +29,12 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
                 .HasForeignKey(x => x.PlaceId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // Фото точки (B10, 2026-08-06) — Place владеет своими изображениями (Cascade).
+            builder.HasMany(x => x.Images)
+                .WithOne(x => x.Place)
+                .HasForeignKey(x => x.PlaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             // Регион нельзя удалить, пока он используется хотя бы одной точкой (как TourRegion->Region).
             builder.HasOne(x => x.Region)
                 .WithMany()

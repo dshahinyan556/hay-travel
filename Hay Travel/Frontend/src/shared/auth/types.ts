@@ -152,3 +152,35 @@ export interface ChangeRoleRequest {
   userId: number
   roleId: number
 }
+
+/**
+ * `UserDetailInfoModel` — returned only by `GET api/Users/{id}` (B13). A flat sibling of
+ * `UserInfoModel`, not an extension of it on the wire (the backend DTO isn't a subclass either,
+ * see `ATTours.Common/DTO/Auth/UserDetailInfoModel.cs`) — duplicates the base fields and adds the
+ * four detail-only ones (IP/activity/registration), which deliberately never ship with the list
+ * endpoint (see B13's reasoning in `admin-fixes-checklist-2026-08-06.txt`).
+ *
+ * `phoneNumber` is nullable here (unlike `UserInfoModel.phoneNumber` below, which predates B1 and
+ * was not revisited as part of F4 — flagged as a pre-existing gap, not fixed here).
+ */
+export interface UserDetailInfoModel {
+  id: number
+  firstName: string
+  lastName: string | null
+  username: string
+  email: string
+  phoneNumber: string | null
+  roleId: number
+  role: RoleType
+  isEmailVerified: boolean
+  isLocked: boolean
+  /** Last authenticated request, throttled server-side to at most once per 5 minutes (B7).
+   * `null` when the account has never made one since the field was introduced. */
+  lastActiveAtUtc: string | null
+  registeredAtUtc: string
+  /** `null` for accounts that registered before B2 shipped (no synthetic backfill). */
+  registeredIp: string | null
+  /** Misleadingly named on the backend (see B2's note): IP of the last AUTHENTICATED request,
+   * not literally the last login. `null` until the first authenticated request after B7. */
+  lastLoginIp: string | null
+}

@@ -1,10 +1,19 @@
 import { useEffect, useState } from 'react'
 import { DragHandle, Input, SortableList } from '@/shared/ui'
-import type { GalleryItemFormState } from '@/features/admin/types/form'
 import { AddButton, RemoveButton } from './RepeaterControls'
 
-interface GalleryImagesEditorProps {
-  items: GalleryItemFormState[]
+/** One row of an image-list repeater — a tour day's gallery, or a catalog Place's photos.
+ * `sortOrder` on the wire is derived from array index. */
+export interface ImageListItem {
+  /** Client-only stable id for React keys and array operations. */
+  key: string
+  /** Present only when editing an existing record (from InitUpdate). */
+  serverId?: number
+  url: string
+}
+
+interface ImageListEditorProps {
+  items: ImageListItem[]
   onAdd: () => void
   onRemove: (key: string) => void
   /** Drag-and-drop reorder: move the image at `fromIndex` to `toIndex`. */
@@ -13,9 +22,9 @@ interface GalleryImagesEditorProps {
 }
 
 /** Stable identity for the drag list — rows are addressed by their form key, never by index. */
-const imageId = (item: GalleryItemFormState): string => item.key
+const imageId = (item: ImageListItem): string => item.key
 
-/** Small thumbnail beside a gallery row; falls back to a placeholder on empty/broken URL. */
+/** Small thumbnail beside an image row; falls back to a placeholder on empty/broken URL. */
 function Thumb({ url }: { url: string }) {
   const trimmed = url.trim()
   const [failed, setFailed] = useState(false)
@@ -44,17 +53,11 @@ function Thumb({ url }: { url: string }) {
 }
 
 /**
- * Repeater for a day's gallery image URLs. Each row shows a preview thumbnail, the URL input
- * and a remove button; order maps to the backend `sortOrder` and is changed by dragging the
- * row's handle (the row itself stays clickable — it holds the URL input).
+ * Repeater for a list of image URLs. Each row shows a preview thumbnail, the URL input and a
+ * remove button; order maps to the backend `sortOrder` and is changed by dragging the row's
+ * handle (the row itself stays clickable — it holds the URL input).
  */
-export function GalleryImagesEditor({
-  items,
-  onAdd,
-  onRemove,
-  onReorder,
-  onChangeUrl,
-}: GalleryImagesEditorProps) {
+export function ImageListEditor({ items, onAdd, onRemove, onReorder, onChangeUrl }: ImageListEditorProps) {
   return (
     <div className="flex flex-col gap-2">
       {items.length > 0 && (

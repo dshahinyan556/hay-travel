@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes } from 'react'
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline-danger'
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
 const variantClasses: Record<ButtonVariant, string> = {
@@ -8,6 +8,10 @@ const variantClasses: Record<ButtonVariant, string> = {
   secondary: 'bg-neutral-100 text-neutral-900 hover:bg-neutral-200',
   ghost: 'bg-transparent text-neutral-900 hover:bg-neutral-100',
   danger: 'bg-rose-600 text-white hover:bg-rose-700',
+  // A less destructive sibling of `danger` (F4's "опасная зона" — e.g. force password reset next
+  // to permanent delete): same red family, lower visual weight. Added for F4 per the approved
+  // mockup's handoff table (`hay-travel-ux-proposal.html` §3), exact classes as specified there.
+  'outline-danger': 'border border-rose-300 bg-white text-rose-700 hover:bg-rose-50',
 }
 
 const sizeClasses: Record<ButtonSize, string> = {

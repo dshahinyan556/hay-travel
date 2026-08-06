@@ -13,6 +13,7 @@ const SITE_SETTING_GROUP_HERO = 1
 const SITE_SETTING_GROUP_CONTACTS = 2
 const SITE_SETTING_GROUP_SOCIAL = 3
 const SITE_SETTING_GROUP_BRANDING = 4
+const SITE_SETTING_GROUP_SEO = 5
 const SITE_SETTING_GROUP_CONTENT = 6
 
 export interface HeroContent {
@@ -134,6 +135,22 @@ export async function getContentText(): Promise<ContentText> {
     }
   } catch {
     return { footerTagline: '', catalogTitle: '', catalogSubtitle: '', featuredHeading: '' }
+  }
+}
+
+/** '' means no custom favicon has been uploaded in Settings → SEO — callers fall back to the
+ * static `/favicon.svg` already wired up in `index.html`. Also '' if the backend catalog
+ * doesn't have a `seo.faviconUrl` key yet (B9 is a separate backend task); an unknown key is
+ * indistinguishable from a blank one here, which is exactly the fallback behaviour we want.
+ * Never throws — see `useFavicon` (shared/hooks), the only caller. */
+export async function getFaviconUrl(): Promise<string> {
+  try {
+    const res = await apiFetch<SiteSettingsPublicModel>(
+      `api/SiteSettings/GetPublic?languageCode=${LANGUAGE_CODE_BY_LOCALE[getStoredLocale()]}&group=${SITE_SETTING_GROUP_SEO}`,
+    )
+    return res.values['seo.faviconUrl'] ?? ''
+  } catch {
+    return ''
   }
 }
 

@@ -21,5 +21,15 @@ namespace ATTours.ClientAPI.Extensions
 
             return userId;
         }
+
+        // Небросающий аналог GetUserId — нужен в middleware (B7), где throw недопустим:
+        // отсутствие/невалидный claim там означает "пропустить трекинг", а не 401.
+        public static bool TryGetUserId(this ClaimsPrincipal principal, out int userId)
+        {
+            var rawValue = principal.FindFirstValue(ClaimTypes.NameIdentifier)
+                           ?? principal.FindFirstValue(JwtRegisteredClaimNames.Sub);
+
+            return int.TryParse(rawValue, out userId);
+        }
     }
 }

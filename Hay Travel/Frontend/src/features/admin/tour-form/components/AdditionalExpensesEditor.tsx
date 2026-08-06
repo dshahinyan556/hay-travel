@@ -1,7 +1,7 @@
 import { Input, SuggestInput } from '@/shared/ui'
 import type { ExpenseFormState, Localized } from '@/features/admin/types/form'
 import type { LangKey } from '@/features/admin/tour-form/reducer/tourFormReducer'
-import { AddButton, RemoveButton } from './RepeaterControls'
+import { AddButton, RemoveButton } from '@/features/admin/ui/RepeaterControls'
 
 interface AdditionalExpensesEditorProps {
   items: ExpenseFormState[]
