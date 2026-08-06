@@ -1,8 +1,10 @@
 import { Link, useLoaderData, type LoaderFunctionArgs } from 'react-router'
 import { getTourInfo, getToursByRegion } from '@/shared/api/tours'
+import { getContentText, type ContentText } from '@/shared/api/siteSettings'
 import { REGION_BY_SLUG } from '@/shared/data/armeniaRegions'
 import type { Tour, TourDetail } from '@/shared/types/tour'
-import { formatDuration, formatPrice } from '@/shared/lib/format'
+import { formatDuration } from '@/shared/lib/format'
+import { useMoney } from '@/shared/currency'
 import { getStoredLocale } from '@/shared/lib/locale'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { translate } from '@/shared/i18n/translate'
@@ -21,14 +23,26 @@ export async function tourDetailLoader({ params }: LoaderFunctionArgs) {
   // "Similar" = shares the first region. Cheap, and genuinely relevant for a geography-driven
   // catalog; the tour itself is filtered out below. A tour with no regions at all has nothing
   // to be "similar" by, so it skips the extra request entirely.
-  const related = tour.regionSlugs[0] ? await getToursByRegion(tour.regionSlugs[0]) : []
-  return { tour, related: related.filter((t) => t.id !== tour.id).slice(0, 3) }
+  //
+  // `getContentText` rides along in the same `Promise.all` rather than serially: it never rejects
+  // (same contract `ToursPage`/`HomePage` already rely on), so it cannot take this page down, and
+  // it carries the 7+ invitation copy `BookingCard` needs.
+  const [related, content] = await Promise.all([
+    tour.regionSlugs[0] ? getToursByRegion(tour.regionSlugs[0]) : Promise.resolve<readonly Tour[]>([]),
+    getContentText(),
+  ])
+  return { tour, related: related.filter((t) => t.id !== tour.id).slice(0, 3), content }
 }
 
 export function TourDetailPage() {
-  const { tour, related } = useLoaderData() as { tour: TourDetail; related: readonly Tour[] }
+  const { tour, related, content } = useLoaderData() as {
+    tour: TourDetail
+    related: readonly Tour[]
+    content: ContentText
+  }
   const regions = tour.regionSlugs.map((slug) => REGION_BY_SLUG[slug])
   const { locale, t } = useLocale()
+  const money = useMoney()
   const regionName = (region: { ru: string; en: string }) => (locale === 'en' ? region.en : region.ru)
 
   return (
@@ -183,8 +197,11 @@ export function TourDetailPage() {
                             </span>
                             {expense.label}
                           </span>
+                          {/* AMD line items from the backend; converted through the same path as
+                              every other price, but NOT tiered — an entrance fee does not scale
+                              with group size. */}
                           {expense.amount !== null && (
-                            <span className="shrink-0 text-ink-dim">{formatPrice(expense.amount, locale)}</span>
+                            <span className="shrink-0 text-ink-dim">{money.format(expense.amount)}</span>
                           )}
                         </li>
                       ))}
@@ -203,7 +220,13 @@ export function TourDetailPage() {
               itself would drag its pinned position along for the duration of the transition.
             */}
             <Reveal rise={24}>
-              <BookingCard tour={tour} />
+              {/* The local fallback is only used when the admin has not filled the setting in: a
+                  blank value would leave the 7+ branch with an empty price area and no explanation
+                  of why the price disappeared. Same reasoning as `fallbackHero()`. */}
+              <BookingCard
+                tour={tour}
+                largeGroupInvitation={content.largeGroupInvitation || t('booking.largeGroupFallback')}
+              />
             </Reveal>
           </aside>
         </div>
@@ -214,7 +237,7 @@ export function TourDetailPage() {
               <h2 className="font-display text-2xl text-ink">
                 {t('tourDetail.moreIn', { region: regionName(regions[0]) })}
                 <span className="ml-2 align-middle text-sm text-ink-muted">
-                  {formatPrice(related[0].priceFrom, locale)} {t('tourDetail.andUp')}
+                  {money.format(related[0].priceFrom)} {t('tourDetail.andUp')}
                 </span>
               </h2>
             </Reveal>

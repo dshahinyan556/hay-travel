@@ -34,12 +34,9 @@ export function formatDuration(days: number, nights: number, locale: Locale = 'r
   return `${days} ${daysLabel} · ${nights} ${nightsLabel}`
 }
 
-/** Bare amount, e.g. `$290`. The "цена от"/"from" caption is rendered separately by the card.
- * USD only: the backend has no currency concept, and every product priced through the admin is
- * USD in practice — nothing to branch on. */
-export function formatPrice(price: number, locale: Locale = 'ru'): string {
-  return `$${price.toLocaleString(locale === 'en' ? 'en-US' : 'ru-RU')}`
-}
+/* `formatPrice` was DELETED (ADR 009): it printed a `$` over an amount that is actually stored in
+   drams. Prices now go through `useMoney()` from `@/shared/currency`, which converts to the
+   visitor's currency and rounds with the step the backend ships per currency. */
 
 /** `12 туров`/`12 tours`, `1 тур`/`1 tour` — used by the map tooltip and the region panel counter. */
 export function formatTourCount(count: number, locale: Locale = 'ru'): string {

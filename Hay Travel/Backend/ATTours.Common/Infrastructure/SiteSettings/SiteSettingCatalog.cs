@@ -86,6 +86,23 @@ namespace ATTours.Common.Infrastructure.SiteSettings
             // sortOrder 22 — следующий свободный номер в конце списка (SortOrder глобальный по
             // всему каталогу), не 17.5/переномерация 18-21 (B9, 2026-08-06).
             new("seo.faviconUrl",      SiteSettingGroup.Seo,      SettingValueType.ImageUrl,      isTranslatable: false, isPublic: true, sortOrder: 22),
+
+            // ---- Content (продолжение) ----
+            // sortOrder 23 — следующий свободный номер в конце глобальной последовательности
+            // (то же правило, что описано у seo.faviconUrl), не 21.5 и не перенумерация.
+            // Текст-приглашение для групп 7+: с этого размера группы цена на сайте не
+            // показывается, вместо неё выводится это приглашение оставить заявку
+            // (ADR 008 / currency-pricing-sync §6, F5.1). Живёт в настройках, а не в i18n
+            // фронта, чтобы Давид правил формулировку в админке без редеплоя.
+            // Дефолты ниже — рабочая заглушка, финальный текст задаётся в
+            // «Настройки -> Тексты сайта».
+            new("content.largeGroupInvitation", SiteSettingGroup.Content, SettingValueType.MultilineText, isTranslatable: true, isPublic: true, sortOrder: 23,
+                defaultValue: "Для групп от 7 человек мы рассчитываем стоимость индивидуально. Оставьте заявку — мы изучим её и вернёмся к вам с ценой.",
+                defaultTranslations: new Dictionary<LanguageCode, string>
+                {
+                    [LanguageCode.Russian] = "Для групп от 7 человек мы рассчитываем стоимость индивидуально. Оставьте заявку — мы изучим её и вернёмся к вам с ценой.",
+                    [LanguageCode.English] = "For groups of 7 or more we quote the price individually. Send us a request — we will review it and get back to you with a price.",
+                }),
         ];
 
         // Ключи сравниваются точно (Ordinal): ключ — часть контракта API,
