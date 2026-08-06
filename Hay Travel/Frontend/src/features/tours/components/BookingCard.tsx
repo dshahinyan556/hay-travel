@@ -99,17 +99,24 @@ export function BookingCard({
       className="rounded-2xl bg-panel p-5 ring-1 ring-edge"
     >
       {/* `aria-live`: crossing 6→7 with the counter swaps a price for a sentence — that has to be
-          announced, not silently substituted. */}
+          announced, not silently substituted.
+
+          Single price display, not two: this used to show the same total twice (a "per person"
+          figure up here that was actually wrong — multiplied by guest count — plus an "Итого" row
+          further down). The price is FLAT for the whole booking (up to 4 guests), so there is only
+          ever one number to show; the deposit line lives right under it instead of in a separate
+          block. */}
       <div aria-live="polite" className="flex items-end justify-between gap-3 border-b border-edge pb-4">
         {price.hidden ? (
-          // Body copy, not the price treatment: it is a sentence, not a number. The "цена от"
-          // caption is dropped here — there is no price for it to label.
+          // Body copy, not the price treatment: it is a sentence, not a number.
           <p className="text-sm leading-relaxed text-ink-dim">{largeGroupInvitation}</p>
         ) : (
           <div>
-            <p className="text-[10px] tracking-wide text-ink-muted">{t('booking.priceFrom')}</p>
-            <p className="font-display text-3xl text-gold-ink">{price.perPerson}</p>
-            <p className="mt-0.5 text-xs text-ink-muted">{t('booking.perPerson')}</p>
+            <p className="text-[10px] tracking-wide text-ink-muted">{t('booking.total')}</p>
+            <p className="text-3xl font-semibold tabular-nums text-gold-ink">{price.total}</p>
+            <p className="mt-1 text-xs text-ink-muted">
+              {t('booking.prepayment')} <span className="text-gold-ink">{price.prepayment}</span>
+            </p>
           </div>
         )}
         {!price.hidden && (
@@ -176,21 +183,6 @@ export function BookingCard({
           </button>
         </div>
       </div>
-
-      {/* Removed entirely at 7+, not blanked and not shown as "—": there is no total, and an empty
-          definition list is noise for a screen reader. */}
-      {!price.hidden && (
-        <dl className="mt-4 space-y-1.5 border-t border-edge pt-4 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-ink-muted">{t('booking.total')}</dt>
-            <dd className="text-ink">{price.total}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-ink-muted">{t('booking.prepayment')}</dt>
-            <dd className="text-gold-ink">{price.prepayment}</dd>
-          </div>
-        </dl>
-      )}
 
       {/* Kept and ENABLED at 7+, only the copy changes: disabling it would delete the only path to
           the action the invitation text just asked for. The underlying flow is already "a request

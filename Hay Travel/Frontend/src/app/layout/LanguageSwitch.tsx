@@ -29,7 +29,7 @@ export function LanguageSwitch() {
             // A segment control switches STATE, so it stays a pure colour cross-fade on
             // `--dur-micro` (2.4 §5) — no lift, no press: the pill must not appear to move
             // relative to the one next to it.
-            'relative inline-flex min-h-9 items-center rounded-full px-2.5 text-[11px] font-medium tracking-wide transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)]',
+            'relative inline-flex min-h-9 items-center rounded-full px-2 text-[11px] font-medium tracking-wide transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] sm:px-2.5',
             'before:absolute before:-top-1 before:-bottom-1 before:content-[\'\'] first:before:-left-3 first:before:right-0 last:before:left-0 last:before:-right-3',
             active === locale.code ? 'bg-wine-tint text-gold-light' : 'text-ink-muted hover:text-gold',
           ].join(' ')}
