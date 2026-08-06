@@ -27,6 +27,7 @@
 | GET | `GetToursClient?languageCode=` | — | `TourInfoModel[]` (одна локаль) |
 | GET | `GetFeaturedToursClient?languageCode=` | — | `TourCardModel[]` (`IsFeatured && IsActive && !IsArchived`, `OrderBy(FeaturedSortOrder)`) |
 | GET | `GetTourInfo?id=&languageCode=` | — | `TourInfoModel` (одна локаль) |
+| GET | `api/ExchangeRate/GetCurrent` | — (анонимный) | `ExchangeRatesModel {baseCurrency, lastUpdatedUtc, rateDateUtc, isStale, rates[]}` |
 
 ## Ключевые правила
 - **Модели**: `*CreateModel` — без Id (id-less); `*InfoModel` — с Id. `TourInfoModel` отдаёт `IsActive`, `IsArchived`, `IsFeatured`, `FeaturedSortOrder`, `TotalPrice`.
@@ -45,5 +46,39 @@
 ## Настройки сайта (`api/SiteSettings`) — группа `Content` (2026-08-02)
 `SiteSettingGroup.Content = 6` — тексты публичного сайта вне Hero, раньше хардкод во фронте: `content.footerTagline`, `content.catalogTitle`, `content.catalogSubtitle`, `content.featuredHeading`. Как и остальные группы, состав ключей — только в `SiteSettingCatalog.cs` (ADR 002), без миграции. **Отличие от старых ключей**: у этих (и заодно у `contacts.phone`/`contacts.email`/`contacts.address`, которые раньше никуда не были подключены на публичном сайте) впервые заполнены `defaultValue`/`defaultTranslations` в определении — раньше у всех ключей дефолт был пустой строкой, и единственным фолбэком был захардкоженный текст на фронте (`hero.fallback.*` в `dictionary.ts`). Теперь дефолт — часть бэкенд-каталога: `SiteSettingsInfo.ResolveValue`/`CreateFromDefinition` уже умели это (правило `перевод ?? Value ?? DefaultValue`), просто раньше никто не передавал непустой `defaultValue`. Практический эффект: admin видит реальный текст сразу, публичный сайт никогда не показывает пустоту до первого сохранения в админке, и фронт для этих ключей больше не хранит собственную копию текста-по-умолчанию.
 
+## Курсы валют (`api/ExchangeRate`) — 2026-08-06
+Публичный сайт научился показывать цены в AMD/USD/EUR/RUB по выбору посетителя (см.
+`client-site.md`). Бэкенд отдаёт только курсы — конвертация, тирная наценка по кол-ву
+гостей и округление под валюту считаются **на фронте** (см. ADR 008); сервер не
+пересчитывает и не хранит «финальную» цену, т.к. брони/оплаты пока нет и доверенная цена
+никому не нужна.
+
+- **`ExchangeRate`** — таблица, по одной строке на USD/EUR/RUB (`Code`, `RatePerUnitAmd`
+  `decimal(18,6)`, `RateDateUtc`, `LastUpdatedUtc`, `LastAttemptUtc`). **AMD не хранится** —
+  это база (курс всегда 1), приходит в ответе из кодового каталога `CurrencyCatalog`
+  (там же — символ и `RoundingStep` на валюту: AMD/RUB→100, USD/EUR→1; фронт этот шаг
+  не хардкодит, читает из ответа).
+- **Обновление курсов — из ЦБ Армении (CBA)**, `ATTours.Service/ExchangeRates/
+  CbaExchangeRateClient.cs`: сырой `HttpClient` + вручную собранный SOAP 1.1-конверт на
+  `https://api.cba.am/exchangerates.asmx` (операция `ExchangeRatesLatest`), без WCF —
+  один метод с зафиксированным контрактом не оправдывает codegen-тулчейн. **Важная деталь
+  протокола**: CBA отдаёт `Rate` за `Amount` единиц валюты (не всегда 1 — есть валюты
+  с котировкой за 100/1000), реальный курс за 1 ед. = `Rate / Amount`.
+- **Протухание — 3 часа.** `ExchangeRateInfo` (по образцу `SiteSettingsInfo`/
+  `SiteSettingsUpdateService` — общий контекст без `using`, обновление-потом-перечитать):
+  если `LastUpdatedUtc` старше 3ч — синхронный ре-фетч у CBA и апсерт, иначе отдача из БД
+  как есть. **При сбое CBA — отдаётся последний известный курс с `isStale:true`**, не
+  ошибка: деньги нигде не двигаются, курс дрейфует <1%/сутки, а падение всего каталога
+  цен из-за стороннего сбоя — хуже, чем слегка устаревший курс. Троттлинг повторных
+  попыток к CBA — 10 минут (`LastAttemptUtc`), чтобы простой CBA не бомбардировался на
+  каждый заход посетителя. Жёсткая ошибка (503, `GlobalErrorCode.ExchangeRatesUnavailable
+  = 2012`) — только если строк в таблице вообще никогда не было и CBA тоже недоступен.
+- **`IMemoryCache` сознательно не добавлен** — таблица с 3-часовой проверкой уже и есть
+  кэш, при текущем масштабе (один инстанс) доп. слой почти ничего не даёт.
+- **Новый ключ настроек**: `content.largeGroupInvitation` (группа `Content`, `sortOrder:
+  23`, RU+EN, `SiteSettingCatalog.cs`) — текст для групп от 7 человек («рассчитаем
+  стоимость индивидуально»), показывается на публичном сайте вместо цены, редактируется
+  в админке без деплоя.
+
 ## Миграции
-Актуальные (в `ATTours.DataLayer/Migrations`): `InitialCreate`, `AddRoutePoint`, `AddOrganizationalDetailAndRestriction`, `ChangeTourDayChildrenToCascade`, `AddTourIsArchived`, `AddSiteSettings`, `AddRegionAndTourRegion`, `SeedArmenianRegions`, `MergeRestrictionAndOrganizationalDetailIntoTourNote`, `AddReferenceCatalogs`, `AddTourFeatured`, `SeedRegionBlurbs`.
+Актуальные (в `ATTours.DataLayer/Migrations`): `InitialCreate`, `AddRoutePoint`, `AddOrganizationalDetailAndRestriction`, `ChangeTourDayChildrenToCascade`, `AddTourIsArchived`, `AddSiteSettings`, `AddRegionAndTourRegion`, `SeedArmenianRegions`, `MergeRestrictionAndOrganizationalDetailIntoTourNote`, `AddReferenceCatalogs`, `AddTourFeatured`, `SeedRegionBlurbs`, `AddExchangeRate`.

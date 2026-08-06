@@ -44,8 +44,18 @@ export interface UseTourFilters {
   isFiltered: boolean
 }
 
-/** Step of the price slider — the derived price range is aligned to it. */
-export const PRICE_STEP = 10
+/**
+ * Step the derived AMD price range is aligned to.
+ *
+ * AMD, like every price in the URL and in `Tour.priceFrom`. It was `10` while the site pretended
+ * prices were USD — against real dram values in the tens of thousands that made the alignment a
+ * no-op. The DISPLAY step of the filter inputs is a different number entirely: it comes from the
+ * active currency's `roundingStep` (see `PriceSortControl`), which the backend ships per currency.
+ */
+export const PRICE_STEP = 1000
+
+/** The ceiling is rounded up to this so the range ends on a tidy dram figure. */
+const PRICE_CEILING_ALIGNMENT = 5000
 
 /**
  * Catalog filter state, stored in the URL rather than component state.
@@ -220,16 +230,15 @@ export interface PriceRange {
 }
 
 /**
- * Price bounds for the slider, both derived from data so the control can never clip the real
- * range. A hardcoded floor of 50 used to make the two cheapest excursions ($35 and $45)
- * impossible to filter out at all.
+ * Price bounds for the filter, in AMD, both derived from data so the control can never clip the
+ * real range. A hardcoded floor used to make the cheapest excursions impossible to filter out at
+ * all.
  */
 export function usePriceRange(tours: readonly Tour[]): PriceRange {
   return useMemo(() => {
     if (tours.length === 0) return { floor: 0, ceiling: 0 }
     const prices = tours.map((t) => t.priceFrom)
-    // Ceiling rounds up to the next 50 so the slider ends on a tidy number.
-    const ceiling = Math.ceil(Math.max(...prices) / 50) * 50
+    const ceiling = Math.ceil(Math.max(...prices) / PRICE_CEILING_ALIGNMENT) * PRICE_CEILING_ALIGNMENT
     // Floor rounds down to a whole step: a range input can only land on `min + n * step`, so an
     // unaligned floor would make `max` itself unreachable — and reaching max is how the filter
     // is cleared.

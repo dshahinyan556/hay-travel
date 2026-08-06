@@ -36,5 +36,6 @@ namespace ATTours.DataLayer
         public DbSet<UserToken> UserTokens { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
         public DbSet<EmailChangeRequest> EmailChangeRequests { get; set; }
+        public DbSet<ExchangeRate> ExchangeRates { get; set; }
     }
 }

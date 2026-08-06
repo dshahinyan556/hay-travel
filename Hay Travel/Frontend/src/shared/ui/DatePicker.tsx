@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useFocusTrap, useIsCompactViewport } from '@/shared/hooks'
+import { addMonths, formatISODate, parseISODate, stripTime } from '@/shared/lib/date'
 import type { Locale } from '@/shared/lib/locale'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { Popover } from './Popover'
@@ -25,39 +26,10 @@ const WEEKDAYS_FULL: Record<Locale, string[]> = {
   en: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
 }
 
-const ISO_RE = /^(\d{4})-(\d{2})-(\d{2})$/
+/* `parseISODate`/`formatISODate`/`stripTime`/`addMonths` moved to `shared/lib/date` so `BookingCard`
+   can compute the 3-month booking window with the same day-of-month clamp and the same
+   local-time-not-UTC formatting. The helpers below stay private: only this grid needs them. */
 
-/**
- * Parses a `YYYY-MM-DD` string with `Date`'s LOCAL-time constructor (`new Date(y, m, d)`), never
- * `new Date(isoString)` or anything UTC-based. `new Date('2026-07-27')` parses as UTC midnight,
- * which local-renders as the 26th in any timezone west of UTC — the exact trap this file's
- * assignment warns about. Also rejects overflow (`2026-02-30`) instead of letting `Date` roll it
- * over to March 2nd.
- */
-function parseISODate(value: string): Date | null {
-  const match = ISO_RE.exec(value)
-  if (!match) return null
-  const year = Number(match[1])
-  const month = Number(match[2])
-  const day = Number(match[3])
-  const date = new Date(year, month - 1, day)
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
-    return null
-  }
-  return date
-}
-
-/** Inverse of `parseISODate` — local getters, not `toISOString` (which is UTC). */
-function formatISODate(date: Date): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
-
-function stripTime(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
-}
 function isBeforeDay(a: Date, b: Date): boolean {
   return stripTime(a).getTime() < stripTime(b).getTime()
 }
@@ -69,13 +41,6 @@ function isSameDay(a: Date, b: Date): boolean {
 }
 function addDays(date: Date, delta: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + delta)
-}
-/** Clamps the day-of-month so e.g. 31 Jan + 1 month lands on 28/29 Feb, not 3 Mar. */
-function addMonths(date: Date, delta: number): Date {
-  const day = date.getDate()
-  const firstOfTarget = new Date(date.getFullYear(), date.getMonth() + delta, 1)
-  const daysInTarget = new Date(firstOfTarget.getFullYear(), firstOfTarget.getMonth() + 1, 0).getDate()
-  return new Date(firstOfTarget.getFullYear(), firstOfTarget.getMonth(), Math.min(day, daysInTarget))
 }
 function startOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1)

@@ -38,6 +38,13 @@ const ru = {
   'theme.light': 'Светлая тема',
   'theme.dark': 'Тёмная тема',
 
+  // ── Currency switch ───────────────────────────────────────────────────────────────────────
+  // Currency NAMES are deliberately not translated: an option row is a symbol plus its ISO code,
+  // which reads identically in every locale.
+  'currency.switchAriaLabel': 'Валюта отображения цен',
+  'currency.optionAriaLabel': '{code}',
+  'currency.unavailable': 'Курсы валют временно недоступны — цены показаны в драмах',
+
   // ── Home page ─────────────────────────────────────────────────────────────────────────────
   'home.hero.season': 'Сезон 2026 открыт',
   'home.hero.regionsCta': 'Карта регионов',
@@ -153,6 +160,14 @@ const ru = {
   'booking.prepayment': 'Предоплата 20%',
   'booking.submit': 'Забронировать',
   'booking.submitHint': 'Бронь без оплаты — подтвердим и пришлём детали',
+  // 7+ гостей: цена не показывается, кнопка остаётся активной — это единственный путь к действию,
+  // о котором просит текст приглашения.
+  'booking.submitLargeGroup': 'Оставить заявку',
+  'booking.submitHintLargeGroup': 'Рассчитаем стоимость для вашей группы и свяжемся с вами',
+  // Используется ТОЛЬКО если настройка `content.largeGroupInvitation` пустая: иначе блок цены
+  // просто исчез бы без объяснения.
+  'booking.largeGroupFallback':
+    'Для групп от 7 человек мы считаем стоимость индивидуально — оставьте заявку, и мы вернёмся с ценой.',
   'booking.submittedTitle': 'Заявка отправлена',
   'booking.submittedBody': 'Мы свяжемся с вами в течение дня и подтвердим даты. Предоплата — после подтверждения.',
   'booking.editSubmission': 'Изменить заявку',
@@ -304,6 +319,10 @@ const en: Record<TranslationKey, string> = {
   'theme.light': 'Light theme',
   'theme.dark': 'Dark theme',
 
+  'currency.switchAriaLabel': 'Display currency',
+  'currency.optionAriaLabel': '{code}',
+  'currency.unavailable': 'Exchange rates are unavailable — prices are shown in drams',
+
   'home.hero.season': '2026 season is open',
   'home.hero.regionsCta': 'Region map',
   'home.featured.allCatalog': 'View all',
@@ -408,6 +427,10 @@ const en: Record<TranslationKey, string> = {
   'booking.prepayment': '20% deposit',
   'booking.submit': 'Book now',
   'booking.submitHint': 'No payment now — we’ll confirm and send the details',
+  'booking.submitLargeGroup': 'Request a quote',
+  'booking.submitHintLargeGroup': 'We’ll price your group and get back to you',
+  'booking.largeGroupFallback':
+    'For groups of 7 and more we quote individually — send a request and we’ll come back with a price.',
   'booking.submittedTitle': 'Request sent',
   'booking.submittedBody': 'We’ll get in touch within a day to confirm dates. The deposit is due after confirmation.',
   'booking.editSubmission': 'Edit request',

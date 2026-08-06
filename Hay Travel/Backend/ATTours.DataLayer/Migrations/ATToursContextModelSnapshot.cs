@@ -140,6 +140,40 @@ namespace ATTours.DataLayer.Migrations
                     b.ToTable("EmailChangeRequest", (string)null);
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.ExchangeRate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<DateTime>("LastAttemptUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("LastUpdatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("RateDateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("RatePerUnitAmd")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("ExchangeRate", (string)null);
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.ExpenseTemplate", b =>
                 {
                     b.Property<int>("Id")

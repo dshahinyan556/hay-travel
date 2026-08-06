@@ -116,6 +116,12 @@ export interface ContentText {
   catalogTitle: string
   catalogSubtitle: string
   featuredHeading: string
+  /**
+   * Shown in `BookingCard` instead of a price once the group reaches 7 people — see
+   * `docs/currency-pricing-sync.md` §F5.1. Admin-editable (`Настройки → Тексты сайта`) rather than
+   * a frontend constant, because it is copy David will want to tune without a redeploy.
+   */
+  largeGroupInvitation: string
 }
 
 /** Footer tagline, catalog (/trips) heading + subtitle, and the home "избранное" section
@@ -132,9 +138,16 @@ export async function getContentText(): Promise<ContentText> {
       catalogTitle: res.values['content.catalogTitle'] ?? '',
       catalogSubtitle: res.values['content.catalogSubtitle'] ?? '',
       featuredHeading: res.values['content.featuredHeading'] ?? '',
+      largeGroupInvitation: res.values['content.largeGroupInvitation'] ?? '',
     }
   } catch {
-    return { footerTagline: '', catalogTitle: '', catalogSubtitle: '', featuredHeading: '' }
+    return {
+      footerTagline: '',
+      catalogTitle: '',
+      catalogSubtitle: '',
+      featuredHeading: '',
+      largeGroupInvitation: '',
+    }
   }
 }
 
