@@ -1,5 +1,6 @@
 import { Outlet, ScrollRestoration } from 'react-router'
 import { useRevalidateOnLocaleChange } from '@/shared/i18n/useRevalidateOnLocaleChange'
+import { useFavicon } from '@/shared/hooks'
 import { Header } from './Header'
 import { Footer } from './Footer'
 import { MobileTabBar } from './MobileTabBar'
@@ -18,6 +19,9 @@ import { MobileTabBar } from './MobileTabBar'
 export function RootLayout() {
   // Public site only: `/admin` mounts its own layout, never this one.
   useRevalidateOnLocaleChange()
+  // Admin-set favicon (F11) — real visitors only, see the hook's doc comment for the crawler
+  // counterpart (`netlify/edge-functions/seo-meta.ts`).
+  useFavicon()
 
   return (
     // Public palette is scoped here, not on `body` — `/admin` must stay on its own light shell.

@@ -1,5 +1,6 @@
 using ArmeniaTours.DataLayer;
 using ATTours.BusinessServices.DataConversion.Core.Bases;
+using ATTours.BusinessServices.Services;
 using ATTours.BusinessServices.Services.InfoServices;
 using ATTours.BusinessServices.Services.ValidationServices;
 using ATTours.Common.Entities;
@@ -9,6 +10,7 @@ using ATTours.Common.Settings;
 using ATTours.ContextRepository.RepositoryImplementation.Relational;
 using ATTours.Exceptions;
 using ATTours.Helper.Enums;
+using Microsoft.EntityFrameworkCore;
 using System.Net;
 
 namespace ATTours.BusinessServices.Services.UpdateServices
@@ -85,7 +87,7 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                     (target, src) => { target.RegionId = src.RegionId; target.SortOrder = src.SortOrder; });
             }
 
-            ReconcileTourDays(existing, incoming);
+            await ReconcileTourDays(existing, incoming);
 
             // Compute-on-write: пересчёт после всех day-диффов.
             existing.TotalPrice = existing.TourDetails.Sum(td => td.TourDay.Price);
@@ -96,11 +98,15 @@ namespace ATTours.BusinessServices.Services.UpdateServices
 
         // Дни подключены к туру через join TourDetail (композитный ключ, без своего Id),
         // поэтому сверяются отдельно по TourDay.Id.
-        private void ReconcileTourDays(Tour existing, Tour incoming)
+        private async Task ReconcileTourDays(Tour existing, Tour incoming)
         {
             var existingDetailsByDayId = existing.TourDetails.ToDictionary(td => td.TourDay.Id);
             var incomingDayIds = new HashSet<int>();
             var tourDayRepository = new EntityRepository<TourDay>(Context);
+
+            // B11 (2026-08-06): (день, новые точки маршрута этого дня) — накапливаем по ходу
+            // цикла, копируем фото Place одним батч-запросом после него (не N+1 на точку).
+            var newRoutePointsByDay = new List<(TourDay Day, List<RoutePoint> NewRoutePoints)>();
 
             foreach (var incomingDetail in incoming.TourDetails)
             {
@@ -116,6 +122,11 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                         TourDay = incomingDay,
                         SortOrder = sortOrder
                     });
+
+                    // B11: день целиком новый — все его точки маршрута новые по определению
+                    // (как при Create), даже если сам тур обновляется.
+                    newRoutePointsByDay.Add((incomingDay,
+                        incomingDay.RoutePoints.Where(rp => rp.PlaceId.HasValue).ToList()));
                     continue;
                 }
 
@@ -140,6 +151,14 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                         (tt, ss) => { tt.LanguageCode = ss.LanguageCode; tt.Value = ss.Value; });
                 });
 
+                // B11: новые точки этого дня — ровно те, что ReconcileCollection выше только что
+                // добавил в existingDay.RoutePoints (incomingItem.Id == default -> existing.Add(incomingItem),
+                // тот же объект). Существующие точки (Id != default) не трогаем, даже если у них
+                // поменялся PlaceId — буквальное требование пункта.
+                var newRoutePoints = incomingDay.RoutePoints.Where(rp => rp.Id == default && rp.PlaceId.HasValue).ToList();
+                if (newRoutePoints.Count > 0)
+                    newRoutePointsByDay.Add((existingDay, newRoutePoints));
+
                 incomingDayIds.Add(incomingDay.Id);
             }
 
@@ -151,6 +170,32 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                 existing.TourDetails.Remove(staleDetail);
                 tourDayRepository.Delete(staleDetail.TourDay);
             }
+
+            await CopyRoutePointImagesIntoGalleriesAsync(newRoutePointsByDay);
+        }
+
+        // B11 (2026-08-06): та же копирующая логика, что TourCreationService использует для
+        // Create — подгружает Place (+Images) для всех собранных новых точек одним запросом и
+        // дописывает GalleryImage в галерею соответствующего дня. Не incomingDay для «новых
+        // дней» — day здесь и есть incomingDay (он персистится напрямую, existing.TourDetails
+        // ссылается на тот же объект), не отдельная существующая копия.
+        private async Task CopyRoutePointImagesIntoGalleriesAsync(List<(TourDay Day, List<RoutePoint> NewRoutePoints)> newRoutePointsByDay)
+        {
+            var placeIds = newRoutePointsByDay.SelectMany(x => x.NewRoutePoints)
+                                              .Select(rp => rp.PlaceId!.Value)
+                                              .Distinct()
+                                              .ToList();
+
+            if (placeIds.Count == 0)
+                return;
+
+            var placesById = await Context.Set<Place>()
+                                          .Include(p => p.Images)
+                                          .Where(p => placeIds.Contains(p.Id))
+                                          .ToDictionaryAsync(p => p.Id, CancellationToken);
+
+            foreach (var (day, newRoutePoints) in newRoutePointsByDay)
+                RoutePointGalleryImageCopier.AppendImagesForNewRoutePoints(day, newRoutePoints, placesById);
         }
 
         // Сверяет коллекцию детей по Id: Id==0 → add, совпадающий Id → applyUpdate,

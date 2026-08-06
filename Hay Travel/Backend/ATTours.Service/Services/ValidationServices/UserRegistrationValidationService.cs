@@ -46,9 +46,15 @@ namespace ATTours.BusinessServices.Services.ValidationServices
                                 .SingleOrDefaultAsync(user => user.Email == email, cancellationToken);
         }
 
+        // Non-required (B1, 2026-08-06): null/пусто пропускает проверку целиком — телефон
+        // необязателен. Если значение всё же пришло, оно валидируется строгим regex'ом
+        // (минимум 1 цифра оправдан — раз уж что-то прислали, это должно быть похоже на номер).
         private static void ValidatePhoneNumber(User user)
         {
-            if (string.IsNullOrWhiteSpace(user.PhoneNumber) || !PhoneNumberRegex.IsMatch(user.PhoneNumber))
+            if (string.IsNullOrWhiteSpace(user.PhoneNumber))
+                return;
+
+            if (!PhoneNumberRegex.IsMatch(user.PhoneNumber))
                 throw new ErrorModelException(GlobalErrorCode.RegexDoesNotMatch, HttpStatusCode.BadRequest,
                     "Phone number must contain only digits and be at most 15 characters long.");
         }

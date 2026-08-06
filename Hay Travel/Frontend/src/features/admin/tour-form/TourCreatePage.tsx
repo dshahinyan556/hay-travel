@@ -87,7 +87,6 @@ function TourCreateView({
         hasAttemptedSubmit={hasAttemptedSubmit}
         isSubmitting={isSubmitting}
         submitError={error}
-        isDirty={isDirty}
         catalogSuggestions={catalogSuggestions}
         regions={regions}
         onSubmit={submit}

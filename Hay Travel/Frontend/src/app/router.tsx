@@ -161,6 +161,14 @@ export const router = createBrowserRouter([
           import('@/features/admin').then((m) => ({ Component: m.UsersPage, loader: m.usersLoader })),
       },
       {
+        path: 'users/:id',
+        lazy: () =>
+          import('@/features/admin').then((m) => ({
+            Component: m.UserDetailPage,
+            loader: m.userDetailLoader,
+          })),
+      },
+      {
         path: 'settings',
         lazy: () =>
           import('@/features/admin').then((m) => ({ Component: m.SettingsPage, loader: m.settingsLoader })),

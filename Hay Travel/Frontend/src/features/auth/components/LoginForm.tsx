@@ -1,6 +1,7 @@
 import { Link } from 'react-router'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import type { LoginRequest } from '@/shared/auth'
+import { LockIcon, UserIcon } from '@/shared/ui/icons'
 import { AuthField } from './AuthField'
 import { AuthError, AuthSubmitButton } from './AuthShell'
 
@@ -43,6 +44,7 @@ export function LoginForm({ onSubmit, error, isSubmitting, forgotPasswordHref }:
         type="text"
         autoComplete="username"
         maxLength={256}
+        icon={<UserIcon size={16} />}
       />
       <AuthField
         name="password"
@@ -50,6 +52,7 @@ export function LoginForm({ onSubmit, error, isSubmitting, forgotPasswordHref }:
         type="password"
         autoComplete="current-password"
         maxLength={128}
+        icon={<LockIcon size={16} />}
       />
 
       <div className="text-right">

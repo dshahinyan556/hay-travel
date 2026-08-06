@@ -1,7 +1,8 @@
 /**
- * Small, shared controls for the form's list repeaters (route points, gallery, expenses,
- * details, restrictions, days). Kept in one place so every repeater has identical affordances
- * and hit areas without copy-pasted markup.
+ * Small, shared controls for admin forms' list repeaters (tour route points, gallery, expenses,
+ * details, restrictions, days; catalog Place photos). Kept in one place so every repeater has
+ * identical affordances and hit areas without copy-pasted markup. Lives in `features/admin/ui/`
+ * (not `tour-form/`) because it is used by both the tour form and the Place catalog form.
  *
  * Reordering is NOT here: it is drag-and-drop via the shared `SortableList`/`DragHandle`
  * primitive (`shared/ui/SortableList.tsx`), which replaced the old ▲/▼ buttons.

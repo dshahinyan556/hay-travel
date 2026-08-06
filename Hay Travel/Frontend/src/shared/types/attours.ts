@@ -210,6 +210,19 @@ export interface SiteSettingUpdateModel {
  * doesn't need a second request to show a human-readable region. `translations[].type` is
  * always 0 (the entry has one text field: its name).
  */
+/** One photo of a route-point catalog entry (B10, 2026-08-06). `Place.imageUrl` remains a
+ * separate cover/legacy field alongside this list — it is not replaced by it. */
+export interface PlaceImageInfoModel {
+  id: number
+  url: string
+  sortOrder: number
+}
+
+export interface PlaceImageCreateModel {
+  url: string
+  sortOrder: number
+}
+
 export interface PlaceInfoModel {
   id: number
   slug: string
@@ -220,6 +233,7 @@ export interface PlaceInfoModel {
   imageUrl: string
   sortOrder: number
   translations: TranslatableInfoModel[]
+  images: PlaceImageInfoModel[]
 }
 
 export interface PlaceCreateModel {
@@ -230,6 +244,7 @@ export interface PlaceCreateModel {
   imageUrl: string
   sortOrder: number
   translations: TranslatableCreateModel[]
+  images: PlaceImageCreateModel[]
 }
 
 /** An additional-expense catalog entry. Just a name + sort order. */

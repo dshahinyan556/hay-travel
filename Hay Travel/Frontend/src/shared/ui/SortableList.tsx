@@ -21,7 +21,7 @@ import { CSS } from '@dnd-kit/utilities'
 
 /**
  * Mouse/touch/keyboard reorder primitive built on `@dnd-kit`. Replaces the old ▲/▼
- * `ReorderButtons` pattern (see `features/admin/tour-form/components/RepeaterControls.tsx`) with
+ * `ReorderButtons` pattern (see `features/admin/ui/RepeaterControls.tsx`) with
  * drag-and-drop, without dictating row markup — this is the SAME mechanic behind two visually
  * different call sites:
  *  - catalog list tables, where a row is a `<tr>` and only a handle cell should be draggable;

@@ -102,19 +102,29 @@ export function AuthPage() {
       subtitle={isRegister ? t('auth.subtitleRegister') : t('auth.subtitleLogin')}
       note={isRegister ? t('auth.terms') : undefined}
     >
-      <div className="flex rounded-full p-0.5 ring-1 ring-edge">
+      {/*
+        Segmented control, same treatment as the filter toggles elsewhere in the app
+        (`ProductsToolbar.ViewTab`, `TourTypeToggle`): colour cross-fade on the shared
+        `--dur-micro`/`--ease-in-out-soft` tokens (index.css, "colour swap, toggles" — the same
+        pair `shared/ui/Tabs` already uses) plus a `shadow-sm` elevation pop on the selected
+        segment. Colour durations are NOT collapsed under `prefers-reduced-motion` (index.css
+        ~250-260) — this is a tint, not travel, so nothing here needs its own reduced-motion
+        branch.
+      */}
+      <div role="radiogroup" aria-label={t('auth.modeToggleLabel')} className="flex rounded-full p-0.5 ring-1 ring-edge">
         {(['login', 'register'] as const).map((value) => (
           <button
             key={value}
             type="button"
+            role="radio"
             onClick={() => {
               setMode(value)
               setError(null)
             }}
-            aria-pressed={mode === value}
+            aria-checked={mode === value}
             className={[
-              'flex-1 rounded-full px-4 py-2 text-sm transition-colors',
-              mode === value ? 'bg-wine text-gold-light' : 'text-ink-dim hover:text-gold-ink',
+              'flex-1 cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)]',
+              mode === value ? 'bg-wine text-gold-light shadow-sm' : 'text-ink-dim hover:text-gold-ink',
             ].join(' ')}
           >
             {value === 'login' ? t('auth.tabLogin') : t('auth.tabRegister')}

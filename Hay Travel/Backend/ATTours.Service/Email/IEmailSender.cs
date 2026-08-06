@@ -10,5 +10,11 @@ namespace ATTours.BusinessServices.Email
         Task SendEmailVerificationAsync(string toEmail, string toName, string token, CancellationToken cancellationToken = default);
 
         Task SendPasswordResetAsync(string toEmail, string toName, string token, CancellationToken cancellationToken = default);
+
+        // Email-change flow (B8, 2026-08-06). Шаг 1: числовой код на ТЕКУЩИЙ (старый) адрес.
+        Task SendEmailChangeOldEmailCodeAsync(string toEmail, string toName, string code, CancellationToken cancellationToken = default);
+
+        // Email-change flow (B8, 2026-08-06). Шаг 3: ссылка-подтверждение на НОВЫЙ адрес.
+        Task SendEmailChangeConfirmationAsync(string toEmail, string toName, string token, CancellationToken cancellationToken = default);
     }
 }

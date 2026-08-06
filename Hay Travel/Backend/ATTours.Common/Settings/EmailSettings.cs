@@ -25,6 +25,10 @@ namespace ATTours.Common.Settings
 
         public string ResetUrlBase => Section[nameof(ResetUrlBase)] ?? "http://localhost:5173/reset-password";
 
+        // Email-change flow (B8, 2026-08-06) — ссылка шага 4, ведёт на страницу подтверждения
+        // нового адреса (фронту ещё предстоит завести этот роут).
+        public string EmailChangeConfirmUrlBase => Section[nameof(EmailChangeConfirmUrlBase)] ?? "http://localhost:5173/confirm-email-change";
+
         // SendGrid включается только когда он явно выбран И ключ реально задан —
         // иначе тихо падали бы все письма.
         public bool IsSendGridConfigured =>

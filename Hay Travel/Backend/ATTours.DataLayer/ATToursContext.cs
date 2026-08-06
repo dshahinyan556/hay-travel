@@ -26,6 +26,7 @@ namespace ATTours.DataLayer
         public DbSet<TourRegion> TourRegions { get; set; }
         public DbSet<Place> Places { get; set; }
         public DbSet<PlaceTranslation> PlaceTranslations { get; set; }
+        public DbSet<PlaceImage> PlaceImages { get; set; }
         public DbSet<ExpenseTemplate> ExpenseTemplates { get; set; }
         public DbSet<ExpenseTemplateTranslation> ExpenseTemplateTranslations { get; set; }
         public DbSet<TourNoteTemplate> TourNoteTemplates { get; set; }
@@ -34,5 +35,6 @@ namespace ATTours.DataLayer
         public DbSet<UserRole> UserRoles { get; set; }
         public DbSet<UserToken> UserTokens { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
+        public DbSet<EmailChangeRequest> EmailChangeRequests { get; set; }
     }
 }

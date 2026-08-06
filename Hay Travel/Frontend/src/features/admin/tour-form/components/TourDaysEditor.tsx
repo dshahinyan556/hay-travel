@@ -3,8 +3,8 @@ import { TourType } from '@/features/admin/lib/enums'
 import type { Localized, TourDayFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
 import { minDaysFor } from '@/features/admin/tour-form/reducer/tourFormReducer'
+import { AddButton } from '@/features/admin/ui/RepeaterControls'
 import { TourDayCard } from './TourDayCard'
-import { AddButton } from './RepeaterControls'
 
 interface TourDaysEditorProps {
   type: TourType

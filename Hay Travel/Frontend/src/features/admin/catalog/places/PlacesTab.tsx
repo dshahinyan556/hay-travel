@@ -72,12 +72,16 @@ export function PlacesTab({ places, regions, onMutated }: PlacesTabProps) {
           sortOrder: panel.place.sortOrder,
           ...shared,
           translations: writeLocalizedForUpdate(values.name),
+          // `id: serverId ?? 0` — same by-id reconcile convention as translations above and as
+          // GalleryImages in the tour form: 0 reads as "new row" server-side.
+          images: values.images.map((img, i) => ({ id: img.serverId ?? 0, url: img.url.trim(), sortOrder: i })),
         })
       } else {
         await createPlace({
           ...shared,
           sortOrder: nextSortOrder(places),
           translations: writeLocalized(values.name),
+          images: values.images.map((img, i) => ({ url: img.url.trim(), sortOrder: i })),
         })
       }
       setPanel(null)

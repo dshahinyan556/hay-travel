@@ -7,8 +7,14 @@
 import { ApiError } from '@/shared/lib/http'
 import { RoleType, type UserInfoModel } from '@/shared/auth'
 
-/** `GlobalErrorCode.InvalidEntityRelation` — both role guards report this one code. */
-const INVALID_ENTITY_RELATION = 2001
+/** `GlobalErrorCode` values this screen's mutations can report — the admin panel keeps its own
+ * local copy of the numeric codes it cares about rather than a shared dictionary (mirrors
+ * `catalogErrors.ts`/`ProductsPage.tsx`'s own `errorCodeOf`, the established pattern here; the
+ * i18n `AuthErrorCode` in `shared/auth` is for the public site's login/register forms only). */
+const ADMIN_ROLE_IMMUTABLE = 2214 // ChangeRole (B6) — target's current role is Admin.
+const CANNOT_DELETE_SELF = 2212 // Delete (B4).
+const ACCOUNT_DELETED = 2213 // Delete (B4) — target was already soft-deleted (stale page).
+const ADMIN_ACCOUNT_IMMUTABLE = 2215 // Delete — target's role is Admin (mirrors ADMIN_ROLE_IMMUTABLE).
 
 export const roleLabels: Record<RoleType, string> = {
   [RoleType.Regular]: 'Пользователь',
@@ -38,8 +44,17 @@ export function roleIdFor(role: RoleType, users: UserInfoModel[]): number {
 export function usersErrorMessage(err: unknown, action: string): string {
   if (err instanceof ApiError) {
     const code = errorCodeOf(err.body)
-    if (code === INVALID_ENTITY_RELATION) {
-      return 'Нельзя снять роль администратора: это последний администратор в системе.'
+    if (code === ADMIN_ROLE_IMMUTABLE) {
+      return 'Роль администратора можно снять только напрямую в базе данных.'
+    }
+    if (code === CANNOT_DELETE_SELF) {
+      return 'Нельзя удалить свою же учётную запись.'
+    }
+    if (code === ADMIN_ACCOUNT_IMMUTABLE) {
+      return 'Аккаунт администратора можно удалить только напрямую в базе данных.'
+    }
+    if (code === ACCOUNT_DELETED) {
+      return 'Этот пользователь уже удалён — обновите страницу.'
     }
     if (err.status === 403) {
       return `Не удалось ${action}: недостаточно прав.`
@@ -48,6 +63,30 @@ export function usersErrorMessage(err: unknown, action: string): string {
   }
   return `Не удалось ${action}: проверьте соединение и попробуйте ещё раз.`
 }
+
+/** Explanatory text under a disabled `RoleSelect` (F5) — same reasoning `isSelf` already gets,
+ * extended to any row whose CURRENT role is Admin (B6's unconditional backend guard). */
+export const ADMIN_ROLE_IMMUTABLE_HINT = 'Роль администратора можно снять только напрямую в базе'
+
+/** Copy for the user-detail screen (F4/F14) — kept next to the rest of this feature's Russian
+ * copy, same convention as `roleLabels`/`roleHints` above. */
+export const userDetailCopy = {
+  helpTitle: 'Карточка пользователя',
+  helpBody:
+    '«В сети» — приблизительный статус: считается по времени последнего авторизованного запроса ' +
+    'этого пользователя, обновляется не чаще раза в 5 минут, без отдельного опроса сервера. IP и ' +
+    'страна показываются только здесь, не в общем списке пользователей. Удаление — мягкое: аккаунт ' +
+    'скрывается из панели и перестаёт работать, но его данные не стираются физически; после удаления ' +
+    'тот же email/логин можно зарегистрировать заново.',
+  deleteTitle: (userLabel: string) => `Удалить пользователя «${userLabel}»?`,
+  deleteBody:
+    'Аккаунт будет деактивирован и скрыт из списка пользователей. Восстановить его из панели ' +
+    'администратора нельзя.',
+  deleteSelfHint: 'Свою же учётную запись удалить нельзя',
+  deleteAdminHint: 'Аккаунт администратора можно удалить только напрямую в базе',
+  resetTitle: (userLabel: string) => `Сбросить пароль «${userLabel}»?`,
+  resetBody: 'Пользователь будет обязан задать новый пароль при следующем входе.',
+} as const
 
 function errorCodeOf(body: unknown): number | undefined {
   if (typeof body !== 'object' || body === null) return undefined

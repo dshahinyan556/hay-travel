@@ -110,6 +110,76 @@ export function GuideIcon(props: IconProps) {
   )
 }
 
+/** Identity/name field — same geometry as `GuideIcon` (a head-and-shoulders silhouette), under a
+ * distinct name for the auth form's "name"/"username" fields, which are not about guided tours. */
+export function UserIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+    </Icon>
+  )
+}
+
+/** Login/handle field — an "@" glyph, distinct from `UserIcon` so a username field doesn't read
+ * as just another name field next to Имя/Фамилия. */
+export function AtIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M16 11.5v1.3a2.7 2.7 0 0 0 5.4 0v-1a9.4 9.4 0 1 0-3.7 7.5" />
+    </Icon>
+  )
+}
+
+export function MailIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+      <path d="m3.2 6 8.8 6 8.8-6" />
+    </Icon>
+  )
+}
+
+export function LockIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </Icon>
+  )
+}
+
+/** Handset silhouette — hand-drawn to match this set's stroke geometry rather than borrowed from
+ * an icon font (the WhatsApp glyph elsewhere in this file is filled/brand-specific; this one is a
+ * plain outline, for the phone FIELD itself rather than a contact channel). */
+export function PhoneIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M6.6 3.5c-1.7.3-2.9 1.9-2.6 3.6.9 5.7 5.6 10.4 11.3 11.3 1.7.3 3.3-.9 3.6-2.6l.3-1.7a1.5 1.5 0 0 0-.9-1.6l-3-1.3a1.5 1.5 0 0 0-1.7.4l-1 1.2a10 10 0 0 1-4.8-4.8l1.2-1a1.5 1.5 0 0 0 .4-1.7l-1.3-3a1.5 1.5 0 0 0-1.6-.9Z" />
+    </Icon>
+  )
+}
+
+export function EyeIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </Icon>
+  )
+}
+
+export function EyeOffIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M9.9 10a3 3 0 0 0 4.2 4.2" />
+      <path d="M6.8 6.8C4 8.6 2 12 2 12s3.6 7 10 7c1.4 0 2.6-.3 3.7-.8M10.6 5.2A10.8 10.8 0 0 1 12 5c6.4 0 10 7 10 7a15.5 15.5 0 0 1-3.4 4.3" />
+      <path d="M3.5 3.5l17 17" />
+    </Icon>
+  )
+}
+
 export function CheckIcon(props: IconProps) {
   return (
     <Icon {...props}>

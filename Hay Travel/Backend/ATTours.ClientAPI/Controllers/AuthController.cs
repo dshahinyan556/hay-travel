@@ -82,6 +82,34 @@ namespace ATTours.ClientAPI.Controllers
         public async Task<MessageResultModel> ChangePasswordAsync([FromBody] ChangePasswordModel model, CancellationToken cancellationToken)
             => await authService.ChangePasswordAsync(User.GetUserId(), model, Request.Cookies[RefreshTokenCookieName], cancellationToken);
 
+        // Email-change flow (B8, 2026-08-06). Шаг 1: код на ТЕКУЩИЙ email — без тела.
+        [HttpPost]
+        [Route("RequestEmailChange")]
+        [Authorize]
+        public async Task<MessageResultModel> RequestEmailChangeAsync(CancellationToken cancellationToken)
+            => await authService.RequestEmailChangeAsync(User.GetUserId(), BuildRequestContext(), cancellationToken);
+
+        // Шаг 2: подтверждение кода, присланного на старый email.
+        [HttpPost]
+        [Route("ConfirmEmailChangeCode")]
+        [Authorize]
+        public async Task<MessageResultModel> ConfirmEmailChangeCodeAsync([FromBody] ConfirmEmailChangeCodeModel model, CancellationToken cancellationToken)
+            => await authService.ConfirmEmailChangeCodeAsync(User.GetUserId(), model, cancellationToken);
+
+        // Шаг 3: новый email — генерит ссылку-подтверждение и шлёт её на НОВЫЙ адрес.
+        [HttpPost]
+        [Route("RequestNewEmail")]
+        [Authorize]
+        public async Task<MessageResultModel> RequestNewEmailAsync([FromBody] RequestNewEmailModel model, CancellationToken cancellationToken)
+            => await authService.RequestNewEmailAsync(User.GetUserId(), model, BuildRequestContext(), cancellationToken);
+
+        // Шаг 4: переход по ссылке из письма на новый email. AllowAnonymous — тот же паттерн,
+        // что VerifyEmail: ссылка может открыться в сессии без живого access-токена.
+        [HttpPost]
+        [Route("ConfirmEmailChange")]
+        public async Task<MessageResultModel> ConfirmEmailChangeAsync([FromBody] ConfirmEmailChangeModel model, CancellationToken cancellationToken)
+            => await authService.ConfirmEmailChangeAsync(model, cancellationToken);
+
         #region Helpers
 
         // Обрезка по длинам колонок UserToken.RequestIp/UserAgent: User-Agent приходит

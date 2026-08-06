@@ -3,8 +3,8 @@ import { DragHandle } from '@/shared/ui'
 import type { SortableRowRenderProps } from '@/shared/ui'
 import type { Localized, TourDayFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
+import { RemoveButton } from '@/features/admin/ui/RepeaterControls'
 import { TourDayFields } from './TourDayFields'
-import { RemoveButton } from './RepeaterControls'
 
 interface TourDayCardProps {
   day: TourDayFormState
@@ -45,7 +45,7 @@ function imagesLabel(count: number): string {
 /**
  * One collapsible day. Collapsed, the header is a one-line summary (День N · title · images ·
  * price); expanded, it reveals the day's price, bilingual fields, its route points
- * (`LocalizedListEditor`) and its gallery (`GalleryImagesEditor`). Only local UI state here
+ * (`LocalizedListEditor`) and its gallery (`ImageListEditor`, `features/admin/ui/`). Only local UI state here
  * (open/closed) — all data changes go through `actions`, keyed by `day.key`.
  *
  * Reordering is drag-and-drop by the header handle only (never the whole card — the body is full

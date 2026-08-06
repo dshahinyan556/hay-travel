@@ -22,5 +22,9 @@ namespace ATTours.Common.Entities
         public HashSet<PlaceTranslation> Translations { get; set; } = [];
         // Inverse — для конфигурации FK (Restrict) и проверки «в использовании» при удалении.
         public HashSet<RoutePoint> RoutePoints { get; set; } = [];
+        // Множественные фото (B10, 2026-08-06) — рядом с legacy-полем ImageUrl (cover), не
+        // вместо него. Place владеет своими изображениями (Cascade), в отличие от
+        // Place<->RoutePoint (Restrict, т.к. там Place — общий шаблон, а не родитель).
+        public HashSet<PlaceImage> Images { get; set; } = [];
     }
 }

@@ -81,6 +81,11 @@ namespace ATTours.Common.Infrastructure.SiteSettings
                     [LanguageCode.Russian] = "Маршруты, которые берут чаще всего",
                     [LanguageCode.English] = "Our most popular routes",
                 }),
+
+            // ---- Seo (продолжение) ----
+            // sortOrder 22 — следующий свободный номер в конце списка (SortOrder глобальный по
+            // всему каталогу), не 17.5/переномерация 18-21 (B9, 2026-08-06).
+            new("seo.faviconUrl",      SiteSettingGroup.Seo,      SettingValueType.ImageUrl,      isTranslatable: false, isPublic: true, sortOrder: 22),
         ];
 
         // Ключи сравниваются точно (Ordinal): ключ — часть контракта API,

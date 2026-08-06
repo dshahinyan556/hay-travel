@@ -1,0 +1,1097 @@
+ДОРАБОТКИ + БАГИ (админка/сайт) — чек-лист
+Дата старта: 2026-08-06
+Статус-легенда: [ ] не начато  [~] в работе  [x] готово  [!] заминка
+
+РЕШЕНИЯ ДАВИДА (2026-08-06, уточнено вопросами перед стартом):
+- Admin НЕ может понижать/менять роль другого Admin (по факту роль Admin становится
+  неизменной через UI-эндпоинт смены роли, кроме как напрямую в БД).
+- "Онлайн сейчас" — приблизительно, по LastActiveAtUtc (обновляется middleware на каждый
+  авторизованный запрос), без heartbeat/polling-инфраструктуры.
+- Удаление пользователя — soft-delete (IsDeleted), НО не должно мешать повторной регистрации
+  с тем же email/username/phone после удаления — уникальность обеспечить filtered-индексами
+  (WHERE IsDeleted=0) или эквивалентом на уровне приложения.
+- Favicon вкладки браузера — управляется через URL в Настройках (как ogImageUrl), а не через
+  прямую замену файла в репозитории.
+
+============================================================
+БЭКЕНД (.NET / ATTours)
+============================================================
+[x] B1. User: PhoneNumber required(15) → nullable (миграция + снятие required-валидации).
+
+        BACKEND-DEVELOPER (2026-08-06): реализовано 1:1 по спеке архитектора — все 3 места
+        (UserConfiguration.cs без .IsRequired(), RegisterModel.cs без [Required] с regex
+        `^\d{0,15}$`, UserRegistrationValidationService.ValidatePhoneNumber пропускает
+        null/пусто) + "" -> null нормализация в AuthService.RegisterAsync сразу после
+        mapper.Map<User>(model). Миграция `MakeUserPhoneNumberNullable` — чистый
+        AlterColumn(nullable: true), применена к LocalDB. Смоук-тест: POST /api/Auth/Register
+        без phoneNumber в теле -> 200, в БД PhoneNumber = NULL (не "").
+
+        АРХИТЕКТОР (2026-08-06): required-валидация телефона живёт в 3 местах — все три меняются:
+        1) ATTours.Common/Infrastructure/EntityConfiguration/UserConfiguration.cs — убрать
+           `.IsRequired()` у `PhoneNumber` (оставить `.HasMaxLength(15)`).
+        2) ATTours.Common/DTO/Auth/RegisterModel.cs — убрать `[Required]`; regex ослабить с
+           `^\d{1,15}$` на `^\d{0,15}$` (иначе пустая строка "" с фронта не пройдёт — регекс
+           требует минимум 1 цифру). `RegularExpressionAttribute` на `null` не падает по
+           умолчанию — одного снятия `[Required]` достаточно, чтобы номер можно было не слать.
+        3) ATTours.Service/Services/ValidationServices/UserRegistrationValidationService.cs —
+           `ValidatePhoneNumber`: если null/пусто — пропустить проверку целиком; иначе валидировать
+           строгим `^\d{1,15}$` (значение уже есть, минимум 1 цифра оправдан).
+        РЕКОМЕНДАЦИЯ: нормализовать `""` → `null` перед сохранением (AuthService.RegisterAsync,
+        сразу после `mapper.Map<User>(model)`), чтобы в БД не жили два представления "нет телефона".
+        Миграция (additive, ослабление ограничения, без риска данных): `AlterColumn`
+        User.PhoneNumber nvarchar(15) NOT NULL → NULL. Имя: `MakeUserPhoneNumberNullable`.
+        Других required-мест по телефону в коде не найдено — это весь surface.
+[x] B2. User: IsDeleted (soft-delete) + LastActiveAtUtc + RegisteredAtUtc(если нет) +
+        RegisteredIp/LastLoginIp — entity + миграция.
+
+        BACKEND-DEVELOPER (2026-08-06): реализовано 1:1 по спеке — 5 новых полей на User.cs +
+        Fluent-конфигурация в UserConfiguration.cs с ровно теми дефолтами, что указал
+        архитектор (IsDeleted HasDefaultValue(false), RegisteredAtUtc
+        HasDefaultValueSql("SYSUTCDATETIME()"), RegisteredIp/LastActiveAtUtc/LastLoginIp
+        nullable без дефолта). Миграция `AddUserSoftDeleteAndActivityTracking` — чистый
+        AddColumn x5, применена к LocalDB (таблица User на момент миграции содержала 4 живых
+        строки, бэкфилл прошёл без ошибок). AuthService.RegisterAsync проставляет
+        RegisteredAtUtc=DateTime.UtcNow и RegisteredIp=requestContext.IpAddress, IsDeleted=false.
+        ТЕХНИЧЕСКАЯ ДЕТАЛЬ реализации (не отклонение от спеки, только как было сделано): чтобы
+        не смешать B1/B2/B3 в один migration diff, все 3 миграции сгенерированы по отдельности
+        через временный `builder.Ignore(x => ...)` на B2-поля в момент генерации B1-миграции,
+        снятый сразу после — конечная схема идентична тому, что описал архитектор.
+
+        АРХИТЕКТОР (2026-08-06): `EntityBase` (ATTours.Common/Infrastructure/Abstractions/
+        EntityBase.cs) содержит ТОЛЬКО `Id` — готового `CreatedAt`-поля нигде нет,
+        `RegisteredAtUtc` ничего не дублирует.
+        Новые поля User (ATTours.Common/Entities/User.cs):
+          IsDeleted          bool,      required, default false
+          RegisteredAtUtc    DateTime,  required, UTC — выставляется один раз в
+                                         AuthService.RegisterAsync (там уже есть requestContext)
+          RegisteredIp       string?,   nvarchar(64), NULLABLE (не required — см. ниже)
+          LastActiveAtUtc    DateTime?, nullable, UTC — пишет только B7-middleware
+          LastLoginIp        string?,   nvarchar(64), nullable — пишет только B7-middleware.
+                                         Имя вводит в заблуждение: по факту это "IP последнего
+                                         АВТОРИЗОВАННОГО запроса", не только логина (так задаёт
+                                         B7). Оставляю имя как в чек-листе — переименовывать
+                                         самовольно не буду, если это не то — нужно решение Давида.
+        ВАЖНО (в отличие от исходной AddUserManagement-миграции): таблица User сейчас НЕ пустая —
+        auth в проде с 2026-08-04, в dev LocalDB тоже есть реальные регистрации. Поэтому:
+          - IsDeleted — `HasDefaultValue(false)`, NOT NULL — безопасно для старых строк.
+          - RegisteredAtUtc — NOT NULL с `.HasDefaultValueSql("SYSUTCDATETIME()")` — бэкфилл
+            старых строк текущим моментом (не настоящей датой регистрации — она неизвестна,
+            это осознанное приближение).
+          - RegisteredIp — NULLABLE именно потому, что для старых строк нет разумного
+            синтетического дефолта под IP; они так и останутся с NULL здесь — это факт, не баг.
+        Миграция: `AddUserSoftDeleteAndActivityTracking` (чистый additive AddColumn ×5).
+        Применять сначала к dev LocalDB, на Azure — только с отдельного разрешения Давида.
+[x] B3. Filtered unique-индексы на Email/Username (и телефон, если появится unique) —
+        WHERE IsDeleted=0, чтобы удалённый пользователь не блокировал повторную регистрацию.
+
+        АРХИТЕКТОР (2026-08-06): точный EF Core синтаксис в UserConfiguration.cs — заменить оба
+        существующих unique-индекса:
+          `builder.HasIndex(x => x.Username).IsUnique();`
+            → `builder.HasIndex(x => x.Username).IsUnique().HasFilter("[IsDeleted] = 0");`
+          `builder.HasIndex(x => x.Email).IsUnique();`
+            → `builder.HasIndex(x => x.Email).IsUnique().HasFilter("[IsDeleted] = 0");`
+        `HasFilter(string)` — сырой SQL-предикат, EF Core вставляет его как есть в
+        `CREATE UNIQUE INDEX ... WHERE [IsDeleted] = 0` (C#-выражение не транслируется) — имя
+        колонки должно буквально совпадать с колонкой в БД (`IsDeleted`, конвенция по
+        умолчанию). Телефон: unique-индекса на PhoneNumber СЕЙЧАС НЕТ (проверено в
+        UserConfiguration.cs) — часть пункта "(и телефон, если появится unique)" неактуальна,
+        действие не требуется.
+        Зависимость по порядку: индекс ссылается на колонку IsDeleted — B3 физически не может
+        предшествовать B2. РЕКОМЕНДАЦИЯ: 3 отдельные маленькие миграции, а не одна большая, в
+        порядке: 1) `MakeUserPhoneNumberNullable` (B1) 2) `AddUserSoftDeleteAndActivityTracking`
+        (B2, только колонки) 3) `FilterUserUniqueIndexesByIsDeleted` (B3, только индексы,
+        зависит от (2)) — легче ревьюить/откатывать по отдельности, тот же принцип, что уже
+        использован в исходной сессии user-management.
+
+        BACKEND-DEVELOPER (2026-08-06): сделано ровно так, как рекомендовал архитектор — 3
+        отдельные миграции в указанном порядке (MakeUserPhoneNumberNullable ->
+        AddUserSoftDeleteAndActivityTracking -> FilterUserUniqueIndexesByIsDeleted), каждая
+        применена к LocalDB по отдельности и проверена `dotnet ef migrations list` (все 3 —
+        applied, не Pending). Синтаксис HasFilter — 1:1 по спеке. Смоук-тест индексов не делал
+        отдельно (нет второго сценария "удалить -> зарегистрировать заново" в рамках smoke-теста
+        ниже — WHERE-предикат подтверждён по сгенерированному SQL миграции: `CREATE UNIQUE INDEX
+        ... WHERE [IsDeleted] = 0`, применён без ошибок к непустой таблице).
+[x] B4. Эндпоинт DeleteUser (soft) — Admin-only, нельзя удалить самого себя.
+
+        АРХИТЕКТОР (2026-08-06): route/verb — по конвенции существующих Delete-эндпоинтов
+        (PlaceController/TourInitializationController/ExpenseTemplateController/
+        TourNoteTemplateController): `[HttpDelete] [Route("Delete")]
+        DeleteUserAsync([FromQuery] int id, CancellationToken ct)` на UsersController (класс
+        уже `[Authorize(Roles="Admin")]`, повторять не нужно).
+        Новый сервис `UserDeletionService` (ATTours.Service/Services/DeleteServices,
+        `RepositoryCoreBase<User, ATToursContextFactory>`, тот же паттерн, что
+        UserRoleUpdateService): `DeleteAsync(int id, int actingUserId)`:
+          1. Грузит `Where(x => x.Id == id && !x.IsDeleted)` — 404
+             `GlobalErrorCode.RelationalEntityNotFound`, если нет/уже удалён (идемпотентно).
+          2. `id == actingUserId` → 400, новый код `GlobalErrorCode.CannotDeleteSelf` (=2212).
+          3. `user.IsDeleted = true`; отзывает ВСЕ активные RefreshToken пользователя (локальная
+             копия логики `AuthService.RevokeAllRefreshTokensAsync` — 3 строки, не тащить общий
+             helper ради одного второго вызывающего).
+          4. SaveChanges.
+        КРИТИЧНО (не в буквальном тексте B4, но обязательно, иначе soft-delete косметический):
+        `AuthService.LoginAsync` И `AuthService.RefreshAsync` должны ТАКЖЕ проверять
+        `user.IsDeleted`, тем же паттерном, что уже есть для LockedUntil/IsEmailVerified (тот же
+        порядок проверок, тот же `RevokeAndRejectAsync` в Refresh) — иначе ещё живой access-токен
+        (до 15 мин) и refresh-токен (до 14 дней) удалённого пользователя продолжат работать.
+        Новый код `GlobalErrorCode.AccountDeleted` (=2213, 401 — тот же стиль, что AccountLocked).
+        Список (`UserInfo.GetAllAsync`) и деталь (B13) обязаны фильтровать `!IsDeleted` — см. B13.
+
+        BACKEND-DEVELOPER (2026-08-06): реализовано 1:1 по спеке — `UserDeletionService`
+        (ATTours.Service/Services/DeleteServices) с ровно этим порядком проверок
+        (Where(Id==id && !IsDeleted) -> 404 -> self-guard 400/CannotDeleteSelf=2212 -> IsDeleted=
+        true + локальная копия revoke-all-refresh-tokens -> SaveChanges). Route/verb — 1:1
+        (DELETE api/Users/Delete?id=). КРИТИЧНАЯ часть выполнена: AuthService.LoginAsync
+        проверяет user.IsDeleted сразу после null-check (перед LockedUntil, тем же 401-стилем,
+        что AccountLocked), AuthService.RefreshAsync проверяет storedToken.User.IsDeleted тем же
+        RevokeAndRejectAsync-паттерном, что уже есть для LockedUntil/IsEmailVerified. Новый код
+        AccountDeleted=2213/401 добавлен в GlobalErrorCode.
+        СМОУК-ТЕСТ вживую (curl + sqlcmd против LocalDB, тестовые пользователи созданы и удалены
+        в рамках теста, реальные существующие пользователи (id 1/5/9) не тронуты): 1) DELETE
+        своего же id -> 400/2212 подтверждён. 2) DELETE чужого id как Admin -> 200, IsDeleted=1
+        в БД подтверждён. 3) POST /api/Auth/Login с логином/паролем только что удалённого
+        пользователя -> 401/2213 подтверждён. 4) POST /api/Auth/RefreshToken с ещё живой
+        refresh-cookie того же удалённого пользователя -> 401 (фактический код 2207
+        RefreshTokenInvalid, не 2213 — потому что UserDeletionService.DeleteAsync уже отозвал
+        этот refresh-токен синхронно в том же вызове до этого запроса; IsDeleted-проверка в
+        RefreshAsync существует и корректна, но в этом конкретном прогоне сработала более ранняя
+        ветка reuse-detection, т.к. токен уже был Revoked — это ожидаемо, не баг).
+        ИЗВЕСТНЫЙ ПРОБЕЛ (зафиксирован явно, НЕ в скоупе B4 по чек-листу, не чинил): access-токен
+        (JWT, до 15 мин), выданный ДО удаления, продолжает проходить Bearer-аутентификацию на
+        ЛЮБОМ другом эндпоинте, потому что JWT stateless и ни один эндпоинт кроме Login/Refresh
+        не сверяет IsDeleted по БД на каждый запрос (в т.ч. новый B7-middleware — он пишет
+        активность, но не блокирует запрос). Проверено: тем же access-токеном удалённого
+        пользователя POST /api/Auth/ChangePassword всё ещё доходит до бизнес-логики (падает по
+        другой причине — неверный текущий пароль, не по IsDeleted). Закрытие этого пробела
+        (проверка IsDeleted в каждом authorize-запросе, не только Login/Refresh) — отдельное
+        архитектурное решение вне буквального текста B4, требует подтверждения Давида (тот же
+        класс компромисса, что уже описан для B5 ниже про ForceToChangePass).
+[x] B5. Эндпоинт ForcePasswordReset (ставит ForceToChangePass=true, поле уже есть в схеме).
+
+        АРХИТЕКТОР (2026-08-06): route — тот же контроллер/паттерн, что Delete:
+        `[HttpPost] [Route("ForcePasswordReset")]
+        ForcePasswordResetAsync([FromQuery] int id, CancellationToken ct) -> UserInfoModel`
+        (возвращает обновлённого юзера, как ChangeRoleAsync — фронту не нужен второй GET).
+        Новый сервис `UserForcePasswordResetService` (тот же RepositoryCoreBase<User,...>
+        паттерн): грузит юзера (404 если нет/удалён), `ForceToChangePass = true`, SaveChanges.
+        Слишком мелкая/несвязанная операция, чтобы тащить в UserRoleUpdateService.
+        ПРОБЕЛ, который нужно явно зафиксировать (проверено чтением AuthService.LoginAsync
+        целиком): `ForceToChangePass` СЕЙЧАС только читается и кладётся в
+        `LoginResultModel.ForceChangePassword` — ничто на бэкенде не блокирует дальнейшие запросы,
+        пока флаг true. Пользователь может увидеть промпт "смените пароль" и проигнорировать его —
+        все остальные эндпоинты продолжат работать весь TTL сессии (15 мин access / 14 дней
+        refresh). B5 сам по себе (админ ставит флаг) этот пробел НЕ закрывает — только позволяет
+        попросить, не принудить. Настоящий enforcement (403 на все не-auth эндпоинты, пока флаг
+        true, до вызова ChangePassword) — отдельное решение, меняющее поведение ВСЕХ авторизованных
+        запросов, не строить без отдельного подтверждения Давида.
+
+        BACKEND-DEVELOPER (2026-08-06): реализовано 1:1 по спеке — `UserForcePasswordResetService`
+        (ATTours.Service/Services/UpdateServices), route POST api/Users/ForcePasswordReset?id=,
+        грузит юзера с Include(Role) + Where(!IsDeleted) (404 если нет/удалён), ставит
+        ForceToChangePass=true, возвращает UserInfoModel (как ChangeRoleAsync). Пробел про
+        отсутствие enforcement НЕ трогал — задокументирован архитектором выше, не строил без
+        подтверждения Давида, как и было указано.
+        СМОУК-ТЕСТ вживую: POST ...ForcePasswordReset?id=9 как Admin -> 200 с обновлённым
+        UserInfoModel; sqlcmd подтвердил ForceToChangePass=1 в БД; после теста откачено обратно
+        на 0 (это существующий тестовый пользователь `cyrtest002`, не мой, не должен был остаться
+        с изменённым состоянием).
+[x] B6. Guard в смене роли: если ЦЕЛЕВОЙ пользователь сейчас Admin — 403 (независимо от того,
+        кто меняет), в дополнение к уже существующему guard "нельзя менять себя".
+
+        АРХИТЕКТОР (2026-08-06): единственный существующий эндпоинт смены роли —
+        `PATCH api/Users/ChangeRole` (UsersController.ChangeRoleAsync →
+        UserRoleUpdateService.ChangeRoleAsync) — это то, что дёргает RoleSelect.tsx, других
+        кандидатов в коде нет.
+        Текущий guard (GuardAdminDemotionAsync) блокирует ТОЛЬКО два частных случая снятия роли
+        Admin: у самого себя, и у последнего админа (оба — 400 InvalidEntityRelation). НЕ
+        блокирует, например, Admin A понижающего Admin B, пока остаётся 3-й админ — это и
+        должен закрыть B6.
+        Новый guard (условие идентично уже посчитанному `isAdminDemotion`):
+          `if (user.Role.Type == RoleType.Admin && newRole.Type != RoleType.Admin) throw
+          new ErrorModelException(GlobalErrorCode.AdminRoleImmutable, HttpStatusCode.Forbidden, ...)`
+        Новый код `AdminRoleImmutable` (=2214, 403).
+        ВАЖНО: этот guard БЕЗУСЛОВНО запрещает снятие роли Admin у кого угодно кем угодно — значит
+        он ПОЛНОСТЬЮ ПОГЛОЩАЕТ оба старых частных случая (self/last-admin), они становятся
+        недостижимым кодом. РЕКОМЕНДАЦИЯ backend-developer: удалить старую
+        GuardAdminDemotionAsync-логику двух отдельных сообщений, заменить одним новым guard —
+        мёртвый код с недостижимыми сообщениями хуже, чем свести к одному месту.
+        ОТДЕЛЬНЫЙ ФЛАГ: в коде существует ТОЛЬКО self-guard в контексте потери роли Admin —
+        общего "нельзя менять свою роль на что угодно" guard'а для не-Admin случаев в коде НЕТ.
+        Если у Давида в голове общее правило "нельзя трогать себя вообще" — это отдельная,
+        сейчас нереализованная задача вне буквального текста B6, не строить без подтверждения.
+
+        BACKEND-DEVELOPER (2026-08-06): реализовано 1:1 по спеке — новый безусловный
+        `GuardAdminDemotion` (403/AdminRoleImmutable=2214), старая GuardAdminDemotionAsync с
+        двумя частными сообщениями (self/last-admin) полностью удалена, как рекомендовал
+        архитектор. ДОПОЛНИТЕЛЬНО (моё решение, не в буквальном тексте B6, но прямое следствие):
+        параметр `actingUserId` в `UserRoleUpdateService.ChangeRoleAsync` стал полностью
+        неиспользуемым после удаления self-guard'а внутри GuardAdminDemotionAsync — убрал его
+        из сигнатуры (внутренний C#-контракт между контроллером и сервисом, не REST-контракт;
+        обновил единственный вызывающий код в UsersController в той же правке), чтобы не
+        оставлять мёртвый параметр — тот же дух "не тащить недостижимый код", что и сама
+        рекомендация архитектора про GuardAdminDemotionAsync.
+        Новый код AdminRoleImmutable=2214/403 добавлен в GlobalErrorCode.
+        СМОУК-ТЕСТ вживую: PATCH ChangeRole на реального Admin-пользователя (id=1, снятие роли)
+        -> 403/2214 подтверждён; PATCH ChangeRole на обычного пользователя (не Admin) -> 200,
+        роль меняется как раньше (протестировано на существующем пользователе id=5, роль после
+        теста откачена обратно на исходную Regular).
+[x] B7. Middleware/фильтр, обновляющий LastActiveAtUtc + IP на каждый авторизованный запрос.
+
+        АРХИТЕКТОР (2026-08-06): новый файл `ATTours.ClientAPI/Middleware/
+        UserActivityTrackingMiddleware.cs` (обычный ASP.NET Core middleware, НЕ через
+        MiddlewareBase/InitializableMiddlewareBase — та абстракция специфична для
+        exception-chain), регистрируется в `Startup.ConfigureAdditionalMiddleware` МЕЖДУ
+        `app.UseAuthentication()` и `app.UseAuthorization()` — активность считается по факту
+        валидного токена, а не только по успешно пройденной ролевой проверке (если Давид хочет
+        строго "только успешные" — сдвинуть после UseAuthorization()).
+        Логика: `context.User.Identity?.IsAuthenticated != true` → skip. Нужен НЕбросающий аналог
+        `ClaimsPrincipalExtensions.GetUserId()` (у него throw — недопустимо в middleware) —
+        завести `TryGetUserId(out int userId)` рядом.
+        Запись — НЕ прямой DbContext в ClientAPI (нарушает границу слоёв): middleware вызывает
+        новый `UserActivityTrackingService` (ATTours.Service/Services,
+        RepositoryCoreBase<User, ATToursContextFactory>, метод
+        `TrackAsync(int userId, string ip, CancellationToken ct)`), который делает bulk
+        `ExecuteUpdateAsync` (без загрузки/трекинга полной сущности) с троттлингом — пишет,
+        только если LastActiveAtUtc == null или старше 5 минут:
+          `Where(u => u.Id == userId && (u.LastActiveAtUtc == null ||
+          u.LastActiveAtUtc < now.AddMinutes(-5))).ExecuteUpdateAsync(...)`
+        Компромисс (по вашей просьбе — мой вызов): "онлайн сейчас" может отставать до 5 минут на
+        активном пользователе — приемлемо для approximate-индикатора (сам чек-лист это и просит),
+        не подходит, если позже понадобится точный timestamp последнего клика.
+        IP: X-Forwarded-For (первое значение) → fallback RemoteIpAddress. ПОПУТНО НАЙДЕНО:
+        `AuthController.BuildRequestContext()` (существующий код, UserToken.RequestIp/
+        RefreshToken.CreatedByIp) СЕЙЧАС X-Forwarded-For не читает — за Azure/Netlify это,
+        вероятно, УЖЕ пишет IP прокси, а не реального клиента, в проде. Не дублировать парсинг
+        заголовка в двух местах — один раз подключить `app.UseForwardedHeaders(...)`
+        (Microsoft.AspNetCore.HttpOverrides) РАНО в pipeline (до UseAuthentication), тогда
+        RemoteIpAddress сам становится верным одновременно для B7 и для уже существующего
+        BuildRequestContext(). Нужна настройка KnownProxies/KnownNetworks под Azure App Service —
+        уточнить у Давида, не блокирует остальной B7.
+
+        BACKEND-DEVELOPER (2026-08-06): реализовано 1:1 по спеке — `UserActivityTrackingMiddleware`
+        (обычный middleware, не через MiddlewareBase), зарегистрирован в
+        Startup.ConfigureAdditionalMiddleware строго между UseAuthentication()/UseAuthorization().
+        `ClaimsPrincipalExtensions.TryGetUserId` заведён рядом с бросающим GetUserId, как и
+        просил чек-лист. `UserActivityTrackingService.TrackAsync` — bulk ExecuteUpdateAsync через
+        `Context.Set<User>()` (тот же приём, что уже используют PlaceDeletionService/
+        UserRegistrationValidationService — не "сырой DbContext в ClientAPI", доступ к
+        Set<TEntity>() идёт через IApplicationDbContext уже внутри Service-слоя), троттлинг
+        ровно как в спеке (LastActiveAtUtc == null || старше 5 мин). IP — X-Forwarded-For
+        (первое значение) -> fallback RemoteIpAddress, `app.UseForwardedHeaders`/
+        KnownProxies-Azure-настройку НЕ трогал (явно отложено чек-листом на решение Давида).
+        ОТКЛОНЕНИЕ от буквального текста спеки (моё решение, по делу мелкое): добавил
+        `!u.IsDeleted` в Where-условие TrackAsync (спека архитектора его не содержала) — не
+        даёт middleware писать LastActiveAtUtc для аккаунта, soft-deleted во время жизни его ещё
+        живого access-токена. Это НЕ закрывает известный пробел B4 (запрос всё равно пройдёт
+        дальше в контроллер/бизнес-логику) — чисто косметическая правка, чтобы "последняя
+        активность" удалённого юзера не обновлялась молча. Если Давид сочтёт это лишним —
+        тривиально убрать одно условие.
+        СМОУК-ТЕСТ вживую: залогинился под тестовым пользователем, дёрнул [Authorize]-эндпоинт
+        (ChangePassword с заведомо неверным паролем — бизнес-логика падает 401, но
+        аутентификация JWT проходит раньше middleware) -> sqlcmd подтвердил, что
+        LastActiveAtUtc/LastLoginIp реально записались в БД (IP = "::1" при локальном curl, как
+        и ожидалось без X-Forwarded-For).
+[x] B8. Change-email flow: код на СТАРЫЙ email → подтверждение кода → ввод нового email →
+        ссылка-подтверждение на НОВЫЙ email → переход по ссылке меняет Email.
+        (эндпоинты + токены/коды, переиспользовать паттерн PasswordRecovery где уместно)
+
+        АРХИТЕКТОР (2026-08-06): НЕ расширять UserToken (ADR 006) — его форма (один Token/
+        ExpiresAt/UsedAt на один Type) не подходит для 2-стадийного флоу, которому вдобавок
+        нужно пронести доп.значение (новый email) между стадиями; примешивать nullable
+        PendingNewEmail в таблицу, общую с verify-email/password-reset, ломает чистоту формы,
+        которую ADR 006 специально ввёл. Вместо этого — новая выделенная сущность, по той же
+        логике, по которой раньше была отдельная таблица PasswordRecovery (до генерализации).
+        Новая сущность `EmailChangeRequest : EntityBase` (ATTours.Common/Entities/
+        EmailChangeRequest.cs), 1:1 опционально с User (как раньше PasswordRecovery):
+          UserId               int FK -> User, UNIQUE индекс, ON DELETE CASCADE
+          OldEmailCode         nvarchar(10) required — короткий числовой код (рекомендация: 6
+                                цифр); НЕ переиспользовать RandomTokenGenerator.Create() (32-байтный
+                                base64 — не для ручного ввода), завести соседний
+                                RandomTokenGenerator.CreateNumericCode(6)
+          OldEmailRequestedAtUtc  DateTime required UTC
+          OldEmailExpiresAtUtc    DateTime required UTC (рекомендация: 15 мин, как у
+                                    существующего EmailTokenLifetimeMinutes)
+          OldEmailConfirmedAtUtc  DateTime? nullable UTC — ставится на шаге 2, отпирает шаг 3
+          PendingNewEmail       nvarchar(256) nullable — ставится на шаге 3
+          NewEmailToken         nvarchar(256) nullable, UNIQUE индекс (filtered WHERE NOT NULL) —
+                                  непрозрачный токен через существующий RandomTokenGenerator.Create()
+          NewEmailRequestedAtUtc / NewEmailExpiresAtUtc  DateTime? nullable UTC
+          RequestIp  nvarchar(64) required / UserAgent nvarchar(512) nullable — тот же аудит-
+                     контракт, что UserToken
+          UsedAtUtc  DateTime? nullable — ставится, когда NewEmailToken реально применён
+        Config `EmailChangeRequestConfiguration`, `DbSet<EmailChangeRequest>` в ATToursContext,
+        `User.EmailChangeRequest` nav. Миграция: `AddEmailChangeRequest` (CreateTable, additive).
+        Эндпоинты (AuthController, self-service):
+          POST api/Auth/RequestEmailChange        [Authorize] без тела — код на ТЕКУЩИЙ email.
+             Апсертит строку по UserId (тот же паттерн, что UpsertUserTokenAsync), сбрасывает
+             хвосты прошлой незавершённой попытки (PendingNewEmail/NewEmailToken) — каждый вызов
+             начинает флоу заново.
+          POST api/Auth/ConfirmEmailChangeCode {Code}  [Authorize] — код верен/не просрочен/не
+             использован → OldEmailConfirmedAtUtc = now.
+          POST api/Auth/RequestNewEmail {NewEmail}     [Authorize] — требует
+             OldEmailConfirmedAtUtc установлен И свежий (рекомендация: то же окно 15 мин от
+             OldEmailConfirmedAtUtc, иначе — заново с шага 1, код GlobalErrorCode
+             EmailChangeNotConfirmed=2210). NewEmail != текущий, и не занят другим НЕудалённым
+             юзером → явный 400 EmailAlreadyTaken=2211 (НЕ generic-200 как в Register — тут юзер
+             уже аутентифицирован, обоснование анти-энумерации из Register сюда не переносится 1:1
+             — это стоит подтвердить у Давида отдельно, помечаю как решение под вопросом, а не
+             тихое допущение). Генерит NewEmailToken, шлёт ссылку на НОВЫЙ адрес.
+          POST api/Auth/ConfirmEmailChange {Token}     [AllowAnonymous] (ссылка может открыться в
+             сессии без живого access-токена — тот же паттерн, что у VerifyEmail) — ищет по
+             NewEmailToken, не просрочен/не использован, повторно проверяет NewEmail всё ещё
+             свободен (race-guard), в транзакции: User.Email = PendingNewEmail; UsedAtUtc = now.
+             НЕ отзывает сессии/не разлогинивает (не задано явно в спеке — не выдумываю) — ОТКРЫТЫЙ
+             ВОПРОС Давиду: логично ли оставлять текущие сессии живыми при смене логин-email.
+        Коды ошибок (единая нумерация с 2208): 2208 EmailChangeCodeInvalid, 2209
+        EmailChangeLinkInvalid, 2210 EmailChangeNotConfirmed, 2211 EmailAlreadyTaken, 2212
+        CannotDeleteSelf (B4), 2213 AccountDeleted (B4), 2214 AdminRoleImmutable (B6).
+        `IEmailSender` (ATTours.Service/Email) — 2 новых метода:
+        `SendEmailChangeOldEmailCodeAsync(toEmail, toName, code, ct)` и
+        `SendEmailChangeConfirmationAsync(toEmail, toName, token, ct)` — реализовать в ОБОИХ
+        DevEmailSender и SendGridEmailSender (механически, по образцу двух существующих методов).
+
+        BACKEND-DEVELOPER (2026-08-06, ВОССТАНОВЛЕНИЕ ПОСЛЕ СБОЯ ХАРНЕССА): предыдущая сессия
+        реализовала B8/B10/B11 в коде и упала до записи чек-листа/итогов — этот проход перепроверил
+        КАЖДЫЙ файл с нуля построчно (не доверяя git status), прогнал `dotnet build` (0 ошибок) и
+        `dotnet ef migrations has-pending-model-changes` (модель 1:1 совпадает с применёнными
+        миграциями) и заново прогнал живой смоук-тест целиком — ничего не чинить не пришлось,
+        реализация оказалась 1:1 по спеке архитектора уже ДО этого прохода. Зафиксировано ниже
+        честно, включая находку о самом сбое.
+        Проверено файл-за-файлом: `EmailChangeRequest.cs`/`EmailChangeRequestConfiguration.cs`
+        (все поля/индексы 1:1 спеке, filtered unique на NewEmailToken, unique на UserId, Cascade),
+        `RandomTokenGenerator.CreateNumericCode` (6 цифр, RandomNumberGenerator.GetInt32, без
+        modulo-bias), 4 DTO (`RequestNewEmailModel`/`ConfirmEmailChangeCodeModel`/
+        `ConfirmEmailChangeModel`), 4 эндпоинта в `AuthController.cs` (RequestEmailChange
+        [Authorize] без тела, ConfirmEmailChangeCode [Authorize], RequestNewEmail [Authorize],
+        ConfirmEmailChange [AllowAnonymous] — 1:1 по маршрутам спеки), `AuthService.cs` (весь
+        4-шаговый флоу, апсерт по UserId со сбросом хвостов на шаге 1, 15-минутное окно свежести
+        OldEmailConfirmedAtUtc на шаге 3, race-guard на шаге 4), `IEmailSender`/`DevEmailSender`/
+        `SendGridEmailSender`/`BrevoEmailSender`/`EmailMessageFactory` (2 новых метода
+        реализованы во ВСЕХ ТРЁХ реализациях — включая `BrevoEmailSender`, которого не было на
+        момент архитектурной спеки B8, но который уже существовал в кодовой базе к моменту
+        реализации, и получил оба новых метода наравне с SendGrid/Dev), `GlobalErrorCode`
+        (2208-2211 добавлены, не коллидируют с 2212-2214 из B4/B6), миграция
+        `AddEmailChangeRequest` (чистый CreateTable, применена к LocalDB).
+        ОБЕ РЕШЕНИЯ ДАВИДА подтверждены В КОДЕ, не только в комментариях:
+        1) `RequestNewEmailAsync` — явный `throw EmailAlreadyTaken()` (400/2211) при занятом
+           email, НЕ generic-200 (в отличие от Register) — комментарий в коде прямо ссылается на
+           это решение.
+        2) `ConfirmEmailChangeAsync` — вызывает ту же `RevokeAllRefreshTokensAsync`, что
+           `ResetPasswordAsync`/`UserDeletionService.DeleteAsync`, в одной транзакции с
+           `User.Email = PendingNewEmail`.
+        СМОУК-ТЕСТ вживую (curl + sqlcmd против LocalDB, throwaway-пользователи, удалены после
+        теста, реальные пользователи id 1/5/9/12/13 не тронуты): зарегистрирован тестовый
+        пользователь (id 15) и верифицирован; шаг 1 RequestEmailChange -> код получен через
+        DevToken (Provider=Dev в конфиге); шаг 2 ConfirmEmailChangeCode с этим кодом -> 200; шаг 3a
+        RequestNewEmail с email ВТОРОГО тестового пользователя (уже занят) -> подтверждено 400
+        `{"ErrorCode":2211,...}`, не тихий 200; шаг 3b RequestNewEmail со свободным email -> 200,
+        DevToken получен; sqlcmd подтвердил ДО шага 4: у пользователя 1 живой (RevokedAtUtc=NULL)
+        refresh-токен; шаг 4 ConfirmEmailChange с DevToken -> 200 "Email address has been changed.";
+        sqlcmd ПОСЛЕ шага 4 подтвердил ОБА факта: `User.Email` реально сменился на новый адрес В
+        БД, И тот же refresh-токен получил `RevokedAtUtc` (сессия отозвана) — оба решения Давида
+        работают по-настоящему, не только в коде.
+        НАХОДКА ПРО СБОЙ ХАРНЕССА (зафиксирована честно): в БД обнаружен и удалён leftover-артефакт
+        от УПАВШЕЙ сессии — пользователь `b8smoketest` (id 14, email `b8smoketest-new@example.com`)
+        с ПОЛНОСТЬЮ завершённым EmailChangeRequest (UsedAtUtc уже проставлен) и его RefreshToken/
+        UserToken строками, брошенными не удалёнными. Это ПРЯМОЕ доказательство, что упавшая сессия
+        реально прогнала весь флоу B8 end-to-end через реальные HTTP-запросы ДО крэша (значит, код
+        уже тогда работал) — но упала до git-статуса "готово"/записи чек-листа И до очистки
+        тестовых данных. Артефакт удалён этим проходом (User+RefreshToken+UserToken+
+        EmailChangeRequest, id 14) — в БД не осталось.
+[x] B9. SiteSettings: поле faviconUrl (группа Seo, рядом с ogImageUrl).
+
+        АРХИТЕКТОР (2026-08-06): тривиально, 1:1 по образцу seo.ogImageUrl. Одна строка в
+        SiteSettingCatalog.cs (ATTours.Common/Infrastructure/SiteSettings/):
+          new("seo.faviconUrl", SiteSettingGroup.Seo, SettingValueType.ImageUrl,
+              isTranslatable: false, isPublic: true, sortOrder: 22)
+        sortOrder: 22 (следующий свободный номер в конце списка, а не 17.5/переномерация
+        существующих 18-21) — если позже окажется, что порядок ВНУТРИ группы Seo в админ-UI важен
+        визуально (сразу после ogImageUrl, а не после всей группы Content), это вопрос
+        backend-developer/UI, не архитектурный — SortOrder глобальный по всему каталогу, группы
+        рендерятся, судя по всему, как отдельные секции. Ключ/тип/isTranslatable/isPublic — как у
+        ogImageUrl 1:1. Ни миграция, ни сид не нужны (ADR 002, файл — единственный источник правды).
+        NB: F11 уже реализован фронтендом и ждёт этот ключ на бэке (см. блок F11 ниже) — B9 сейчас
+        единственная реальная блокирующая зависимость для того, чтобы favicon реально заработал.
+
+        BACKEND-DEVELOPER (2026-08-06): одна строка добавлена 1:1 по спеке (ключ/тип/
+        isTranslatable/isPublic/sortOrder=22, как у ogImageUrl). Ни миграция, ни сид не
+        потребовались (подтверждено — ADR 002, каталог в коде уже единственный источник правды,
+        так же как ogImageUrl). Не смоук-тестировал отдельным HTTP-запросом (тривиальная правка
+        статического каталога, тот же путь чтения, что уже проверен для остальных Seo-ключей).
+[x] B10. Place: схема под несколько изображений (новая дочерняя таблица PlaceImage с
+        SortOrder, вместо одиночного Place.ImageUrl) — решение архитектора, соблюсти принцип
+        "Place — единственный источник географии/фото точки" (см. комментарий в Place.cs).
+
+        АРХИТЕКТОР (2026-08-06): новая сущность `PlaceImage : EntityBase`
+        (ATTours.Common/Entities/PlaceImage.cs), по образцу GalleryImage (день ~ место):
+          PlaceId   int FK -> Place, required
+          Url       nvarchar(4000) required (тот же лимит, что GalleryImage.Url)
+          SortOrder int
+          Place     nav
+        Config `PlaceImageConfiguration`: `HasMany(Place.Images).WithOne(x => x.Place)
+        .HasForeignKey(x => x.PlaceId).OnDelete(Cascade)` — Place владеет своими изображениями
+        (в отличие от Place↔RoutePoint, где Restrict, т.к. там Place — общий шаблон, а не
+        родитель). `Place.cs` получает `public HashSet<PlaceImage> Images { get; set; } = [];`.
+        `Place.ImageUrl` ОСТАЁТСЯ (не удаляется, не депрекейтится в схеме) — это "cover"/legacy
+        поле, ниже — почему это безопасно и достаточно для обратной совместимости.
+        ВАЖНЫЙ ФАКТ, снимающий риск слома текущих туров: по коду `TourGraphQueryExtensions.
+        IncludeTourGraphForClient` (комментарий "D-13") — `Place.ImageUrl`/Latitude/Longitude/
+        RegionId СЕЙЧАС ВООБЩЕ НЕ включаются в публичный граф чтения тура — наружу их не отдают.
+        Единственный текущий потребитель `Place.ImageUrl` — админский каталог Places
+        (PlaceInfoModel/PlaceCreateModel). Значит новая таблица Images ничего не ломает на
+        публичном сайте по определению — там Place-фото сегодня не участвуют вовсе (участвует
+        только B11 — копирование в галерею ТУРА/дня, это отдельный путь, см. B11).
+        Миграция: `AddPlaceImage` — только `CreateTable` (additive), БЕЗ автоматического переноса
+        существующих `Place.ImageUrl` в строки PlaceImage (чистая schema-миграция). Опционально
+        (не обязательно, не часть схемы) — backend-developer/Давид могут отдельно прогнать
+        one-off backfill (по одной PlaceImage на Place из текущего ImageUrl), но B11 работает и
+        без него — см. fallback-правило там.
+        DTO: `PlaceInfoModel`/`PlaceCreateModel` — добавить `Images: List<PlaceImageModel>`
+        (Url+SortOrder) РЯДОМ с существующим ImageUrl, не вместо. Reconcile при Update — тем же
+        приёмом, что TourUpdateService уже делает для GalleryImages (add/update/remove по Id).
+
+        BACKEND-DEVELOPER (2026-08-06, ВОССТАНОВЛЕНИЕ ПОСЛЕ СБОЯ ХАРНЕССА): та же перепроверка
+        файл-за-файлом с нуля, что и у B8 (см. примечание там про сам сбой) — код оказался готов
+        1:1 по спеке архитектора, ничего чинить не пришлось. Проверено: `PlaceImage.cs`/
+        `PlaceImageConfiguration.cs` (PlaceId/Url(4000)/SortOrder, ToTable), `Place.cs`
+        (`HashSet<PlaceImage> Images = []`, ImageUrl НЕ удалён — остался рядом как cover/legacy),
+        `PlaceImageInfoModel`/`PlaceImageCreateModel` (Url+SortOrder, без лишних полей),
+        `PlaceInfoModel`/`PlaceCreateModel` (`Images: List<...>` рядом с ImageUrl, не вместо),
+        `MappingProfile.cs` (4 новых CreateMap для PlaceImage в обе стороны + Images подключены в
+        мапперы Place<->PlaceInfoModel/PlaceCreateModel), `PlaceInfo.GetEntityQueryableRepository`
+        (`.Include(x => x.Images)` добавлен рядом с Translations/Region), `PlaceUpdateService`
+        (загружает `.Include(x => x.Images)`, `ReconcileImages` — тот же by-Id add/update/remove
+        приём, что уже был у `ReconcileTranslations`), миграция `AddPlaceImage` (чистый
+        CreateTable+FK Cascade+индекс на PlaceId, применена к LocalDB, 1:1 совпадает с
+        `PlaceImageConfiguration`).
+        СМОУК-ТЕСТ вживую (throwaway Place, удалён после теста, реальные Place не тронуты):
+        POST api/Place/Create с `images: [{url, sortOrder:0}, {url, sortOrder:1}]` (Admin-токен) ->
+        201 с Id=12 и ОБЕИМИ картинками в ответе (PlaceImage id 3/4 реально созданы в БД); PUT
+        api/Place/Update с payload — убрана картинка id=3, у id=4 изменены Url/SortOrder, добавлена
+        новая (id=0/без Id) -> ответ подтвердил ВСЕ ТРИ операции разом: id=3 пропала (remove), id=4
+        обновилась на месте (update), новая появилась как id=5 (add) — reconciliation по Id работает
+        1:1 как у GalleryImages в TourUpdateService. Place 12 и все его PlaceImage/PlaceTranslation
+        удалены после теста (cascade подтверждён — 0 строк осталось).
+[x] B11. При добавлении НОВОЙ точки маршрута в тур/экскурсию (создание или обновление
+        продукта) — её изображение(я) по умолчанию добавляются в галерею продукта.
+        Существующие точки маршрута НЕ трогать (только новые добавления).
+
+        АРХИТЕКТОР (2026-08-06): уточнение терминологии — единой "галереи тура" в схеме нет,
+        `GalleryImage` привязан к `TourDay` (проверено — `TourDay.GalleryImages`), а не к `Tour`
+        напрямую. "Галерея продукта" из формулировки = `TourDay.GalleryImages` того дня, где
+        стоит точка маршрута.
+        Правило "какая точка новая" (проверено чтением обоих сервисов целиком):
+          - Create (TourCreationService, новый тур) — граф целиком новый, у ВСЕХ RoutePoint
+            `Id == default` → применять ко ВСЕМ точкам с `PlaceId != null` во всех днях.
+          - Update (TourUpdateService.ReconcileTourDays) — новые точки распознаются ровно так же,
+            как их распознаёт существующий generic `ReconcileCollection<T>` внутри: ветка
+            `incomingItem.Id == default` (RoutePoint ещё не существовал). Точки с `Id != default`
+            (уже существующие) — НЕ трогать, даже если у них поменяли PlaceId — это буквальное
+            требование пункта.
+          - Новый день целиком, добавленный при Update (`incomingDay.Id == default` в
+            ReconcileTourDays) — ВСЕ его точки по определению новые (как в Create).
+        Реализация — НЕ трогать generic `ReconcileCollection<T>` (используется для 6+ разнородных
+        коллекций: Translations/AdditionalExpenses/Notes/TourRegions/RoutePoints/GalleryImages
+        самой) добавлением туда side-effect-логики про Place/галерею — это протекло бы
+        Tour/Place-специфичной бизнес-логикой в чисто структурный diff-хелпер. Хук — точечно в двух
+        местах, где уже есть код про RoutePoints:
+          1. `TourCreationService.ExecuteEntityChangesFactoryAsync` — перед
+             `EntityRepository.AddRangeAsync`: собрать все `RoutePoint.PlaceId` по всем дням тура,
+             одним запросом подгрузить `Place` (+`Images`) по этим Id (`Context.Set<Place>()
+             .Include(p => p.Images).Where(...)` — у входящего графа `RoutePoint.Place` не
+             заполнен, это create-DTO), для каждой точки с PlaceId — добавить GalleryImage(-ы) в
+             `day.GalleryImages`.
+          2. `TourUpdateService.ReconcileTourDays` — сразу после существующего
+             `ReconcileCollection(existingDay.RoutePoints, incomingDay.RoutePoints, ...)`: отдельно
+             посчитать `incomingDay.RoutePoints.Where(rp => rp.Id == default && rp.PlaceId.HasValue)`
+             (те же новые точки, что этот вызов только что добавил в `existingDay.RoutePoints`),
+             подгрузить их Place так же, как в (1), дописать GalleryImage в `existingDay.
+             GalleryImages` (не incomingDay — он не персистится).
+        Копирование: одна GalleryImage на каждый `Place.Images` элемент (по SortOrder), а если у
+        Place `Images` пуст — fallback на одну GalleryImage из `Place.ImageUrl` (см. B10 — это и
+        есть механизм обратной совместимости для Places, у которых ещё нет строк в PlaceImage).
+        SortOrder новых картинок — продолжает существующий максимум дня
+        (`day.GalleryImages.Any() ? Max(SortOrder)+1 : 0`), чтобы не перезаписать вручную
+        расставленный порядок.
+        Не дедуплицируется: если одна и та же Place привязана к 2 точкам маршрута — её фото
+        попадут в галерею дважды. Осознанно (пункт просит "скопировать при добавлении", не
+        "держать в синхроне") — админ может вручную убрать дубль из галереи после.
+
+        BACKEND-DEVELOPER (2026-08-06, ВОССТАНОВЛЕНИЕ ПОСЛЕ СБОЯ ХАРНЕССА): та же перепроверка
+        файл-за-файлом с нуля, что и у B8/B10 (см. примечание про сам сбой в B8) — код оказался
+        готов 1:1 по спеке архитектора, ничего чинить не пришлось. Проверено: новый статический
+        класс `RoutePointGalleryImageCopier.AppendImagesForNewRoutePoints` (одна GalleryImage на
+        каждый Place.Images по SortOrder, fallback на Place.ImageUrl при пустом Images, SortOrder
+        продолжает `day.GalleryImages.Max(SortOrder)+1`, без дедупликации — 1:1 спеке); хук (1) в
+        `TourCreationService.ExecuteEntityChangesFactoryAsync` — вызывается ДО `base.
+        ExecuteEntityChangesFactoryAsync()` (значит до AddRangeAsync, граф ещё не персистится),
+        собирает все PlaceId по всем дням ОДНИМ запросом (`Context.Set<Place>().Include(Images)`),
+        обходит ВСЕ точки с PlaceId (у Create все точки новые по определению — Id==default); хук
+        (2) в `TourUpdateService.ReconcileTourDays` — накапливает (day, newRoutePoints) по ходу
+        цикла по дням (и для полностью новых дней: incomingDay.Id==default -> все точки дня новые;
+        и для существующих дней: `incomingDay.RoutePoints.Where(rp => rp.Id == default && ...)`
+        сразу после `ReconcileCollection(RoutePoints...)`, те же объекты, что тот вызов только что
+        добавил в `existingDay.RoutePoints`), один батч-запрос Place после всего цикла (не N+1 на
+        точку), копирует в `existingDay.GalleryImages` (не incomingDay — не персистится) — 1:1
+        буквальному тексту спеки, включая явный комментарий в коде про недостижимость PlaceId у
+        существующих точек.
+        СМОУК-ТЕСТ вживую (throwaway Place id=12 с 2 PlaceImage + существующие Place id=2/id=3 из
+        сида регионов — id=2 с PlaceImage-строками, id=3 БЕЗ них, только legacy ImageUrl; throwaway
+        тур id=21, полностью удалён со всем графом после теста, реальные туры/Place не тронуты):
+        1) CREATE — тур с одним НОВЫМ route point (PlaceId=12, 2 картинки в PlaceImage) -> sqlcmd
+        подтвердил ОБЕ картинки Place 12 реально скопированы в GalleryImage дня (SortOrder 0,1),
+        подтверждает хук (1) и Create-путь ("граф целиком новый"). 2) UPDATE того же тура —
+        существующему route point (Id≠0) сменил PlaceId с 12 на 3 (Place БЕЗ PlaceImage-строк, есть
+        только legacy ImageUrl) — sqlcmd подтвердил, что галерея НЕ изменилась (остались ровно те
+        же 2 картинки, SortOrder 0,1) — буквальное требование "существующие точки не трогать" даже
+        при смене PlaceId подтверждено фактически, не только по коду. В ТОМ ЖЕ запросе добавлен
+        ОДИН НОВЫЙ route point (Id=0, PlaceId=2, у Place 2 есть 2 реальные строки PlaceImage) ->
+        ответ подтвердил ОБЕ картинки Place 2 добавлены в галерею с продолженным SortOrder (2, 3,
+        не перезаписали существующие 0/1) — подтверждает хук (2) и Update-путь ("новые точки
+        распознаются как incomingItem.Id==default"). Fallback на Place.ImageUrl — отдельным
+        живым прогоном (throwaway тур id=22, throwaway admin-пользователь, оба удалены после
+        теста): CREATE с одной НОВОЙ точкой на Place 3 (нет строк PlaceImage, только legacy
+        ImageUrl="https://example.com/gegard-cover.jpg") -> sqlcmd подтвердил ровно одну
+        GalleryImage с этим URL и SortOrder=0 — fallback-ветка (Place.Images.Count==0 ->
+        одна GalleryImage из Place.ImageUrl) реально сработала, не только прочитана по коду.
+[x] B13. (НОВОЕ, найдено при архитектурном разборе F4, ещё не в контракте) Эндпоинт детали
+        пользователя `GET api/Users/{id}` — Admin-only, возвращает LastActiveAtUtc,
+        RegisteredAtUtc, RegisteredIp/LastLoginIp (после B2/B7) в дополнение к полям
+        `UserInfoModel`. Решение: отдельный detail-эндпоинт, а не раздувание списочного
+        `GET api/Users` этими же полями — по прямой аналогии с турами (`GetAllTours` лёгкий
+        список / `InitUpdate(id)` — тяжёлая деталь). IP не должен уходить на клиент при каждой
+        загрузке таблицы пользователей, только при открытии карточки конкретного пользователя.
+        Страна/флаг НЕ передаются бэкендом — фронт выводит их из `phoneNumber` сам (см. F4 ниже).
+        Нужно решение backend-architect, прежде чем начинать реализацию F4.
+
+        АРХИТЕКТОР (2026-08-06, контракт подтверждён): `[HttpGet] [Route("{id:int}")]
+        GetUserByIdAsync(int id, CancellationToken ct) -> UserDetailInfoModel` на UsersController
+        (класс-уровневый `[Authorize(Roles="Admin")]` уже покрывает). Чтение — существующий
+        `UserInfo.GetByIdAsync(id)` (ATTours.Service/Services/InfoServices/UserInfo.cs, уже есть,
+        ничего нового писать не нужно) → 404 `GlobalErrorCode.RelationalEntityNotFound`, если null.
+        ОБЯЗАТЕЛЬНОЕ смежное изменение: `UserInfo.GetEntityQueryableRepository()` должен получить
+        `.Where(x => !x.IsDeleted)` — это ОДНО место, от которого наследуют и список
+        (`GetAllAsync`, используется `GetUsersAsync` в контроллере), и эта деталь (`GetByIdAsync`)
+        — без этого фильтра B4 (soft-delete) не будет видно в UI: удалённые пользователи так и
+        останутся в таблице и по прямой ссылке на карточку.
+        Новый DTO `UserDetailInfoModel` (ATTours.Common/DTO/Auth/UserDetailInfoModel.cs) — ПЛОСКИЙ
+        отдельный класс, не наследник `UserInfoModel` (в кодовой базе нет прецедента DTO-наследования
+        — TourCardModel/TourInfoModel тоже сиблинги, не parent/child): дублирует поля
+        UserInfoModel (Id/FirstName/LastName/Username/Email/PhoneNumber/RoleId/Role/
+        IsEmailVerified/IsLocked) + 4 новых: `LastActiveAtUtc (DateTime?)`,
+        `RegisteredAtUtc (DateTime)`, `RegisteredIp (string?)`, `LastLoginIp (string?)`. Новая
+        запись в AutoMapper-профиле `CreateMap<User, UserDetailInfoModel>()` рядом с уже
+        существующей `CreateMap<User, UserInfoModel>()`.
+
+        BACKEND-DEVELOPER (2026-08-06): реализовано 1:1 по спеке — `UserDetailInfoModel`
+        (ATTours.Common/DTO/Auth), плоский сиблинг, не наследник; `CreateMap<User,
+        UserDetailInfoModel>` рядом с UserInfoModel-маппингом; GET api/Users/{id:int} на
+        UsersController -> UserInfo.GetByIdAsync (существующий метод, не менял) -> 404
+        RelationalEntityNotFound, если null. ОБЯЗАТЕЛЬНОЕ смежное изменение выполнено:
+        `UserInfo.GetEntityQueryableRepository()` получил `.Where(x => !x.IsDeleted)` — общее
+        для списка и детали место, как и требовал архитектор.
+        ТЕХНИЧЕСКАЯ ДЕТАЛЬ: `.Where(...)` после `.Include(x => x.Role)` в этой репозиторной
+        абстракции возвращает суженный `IQueryableRepository<User>` (интерфейс не хранит
+        ковариантный возврат под Include+Where одновременно, прецедента такой комбинации в
+        кодовой базе не было) — вызвал `.Where(...)` ради побочного эффекта (мутирует то же
+        `LocalEntities` того же объекта) и вернул исходную includable-ссылку, не результат
+        вызова Where. Прокомментировано в UserInfo.cs.
+        СМОУК-ТЕСТ вживую: GET api/Users -> список из 4 пользователей (реальные id 1/5/9 +
+        тестовый); GET api/Users/10 (тестовый) -> все базовые поля + LastActiveAtUtc/
+        RegisteredAtUtc/RegisteredIp/LastLoginIp корректно заполнены после B7-трекинга.
+
+============================================================
+ФРОНТЕНД — форма логина/регистрации (AuthPage)
+============================================================
+[x] F1. Дизайн-проход по форме логин/регистрации (сейчас "убого", не соответствует стилю
+        сайта) — через designer/design-mockup, затем ui-ux-engineer/frontend-developer.
+        МОКАП СОГЛАСОВАН ДАВИДОМ (2026-08-06): https://claude.ai/code/artifact/0fca9896-4282-4ea6-b853-3670ba0f80df
+        ДОП. ЗАПРОС (2026-08-06): переключатель Вход/Регистрация должен анимироваться так же,
+        как сегмент-контролы в фильтрах (ProductsToolbar.ViewTab, TourTypeToggle) —
+        transition-colors + shadow-sm-поп на активном сегменте, на токенах --dur-micro/
+        --ease-in-out-soft (index.css ~230-240, "colour swap, toggles"; паттерн уже
+        формализован в shared/ui/Tabs.tsx). Сейчас переключатель в AuthPage.tsx (~105-123)
+        просто меняет bg-wine без этих токенов и без elevation-попа — привести к общему стилю.
+
+        ГОТОВО (2026-08-06, ui-ux-engineer): реализовано по мокапу, на РЕАЛЬНЫХ токенах проекта
+        (bg-panel-raised/ring-edge-strong/text-gold-ink/text-ink-muted и т.д.) — НЕ хардкод из
+        CSS-переменных самого HTML-мокапа (там это placeholder-имена только для демонстрации).
+        - Иконки поля: 5 новых в `shared/ui/icons.tsx` — `UserIcon` (геометрия уже существующего
+          `GuideIcon`, отдельный экспорт под смысл "имя/логин"), `MailIcon`, `LockIcon`,
+          `PhoneIcon`, `EyeIcon`/`EyeOffIcon` — все 24×24, stroke-width 1.5, round caps/joins,
+          та же геометрия, что и весь остальной набор (сверено перед добавлением).
+        - Подписи полей — eyebrow-стиль (11px/600/uppercase/tracking-[.14em]/text-ink-muted).
+        - Контрол поля (`AuthField.tsx`, переписан): 46px высота, rounded-xl, bg-panel-raised,
+          ring-1 ring-edge-strong, focus-within:ring-2 ring-focus, ведущая иконка меняет цвет на
+          text-gold-ink через `group-focus-within` (без хардкода box-shadow-глоу из CSS мокапа).
+        - Переключатель показать/скрыть пароль — глазок (`EyeIcon`/`EyeOffIcon`), локальный
+          state внутри `AuthField`, НЕ трогает `value` инпута — форма остаётся uncontrolled/
+          FormData-based на submit, как и раньше, тайпинг не ре-рендерит форму.
+        - Переключатель Вход/Регистрация (`AuthPage.tsx`) переведён на `role="radiogroup"` +
+          `role="radio"`/`aria-checked` (тот же паттерн, что `TourTypeToggle`), классы —
+          `transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)]` +
+          `shadow-sm` на активном сегменте — тот же токен-набор, что уже применяет
+          `shared/ui/Tabs.tsx`, а не голый `transition-colors`. Цветовая длительность
+          (`--dur-micro`) намеренно НЕ схлопывается под `prefers-reduced-motion` (index.css
+          ~250-260, это тон, а не перемещение) — отдельной reduced-motion-ветки не потребовалось.
+        - Мобильная адаптивность вниз до 320px — контейнер (`AuthShell`, `max-w-md`+`px-4`) не
+          менялся, новые composite-контролы (телефон, см. F2) не имеют фиксированных широких
+          блоков и сжимаются вместе с карточкой.
+        - Файлы: `AuthField.tsx`, `LoginForm.tsx`, `RegisterForm.tsx`, `AuthPage.tsx`,
+          `shared/ui/icons.tsx`.
+        ОТКЛОНЕНИЕ: живое посимвольное форматирование номера телефона с пробелами не сделано —
+        см. примечание в F2.
+[x] F2. Телефон: "+" префикс, non-required, подсказка "нужен для связи", динамический флаг
+        страны по коду при вводе (например через libphonenumber-js).
+        АРХИТЕКТОР (2026-08-06): библиотека `libphonenumber-js` и функция телефон→ISO-страна
+        нужны И здесь, И в F4 (страна+флаг в карточке пользователя) — единая логика, значит
+        живёт в `shared/lib/phoneCountry.ts` (не дублируется в фиче auth и в фиче admin/users;
+        фичи не имеют права шарить код друг с другом напрямую, только через shared). Кто бы ни
+        реализовывал F2 первым — заводит этот shared-модуль, F4 его переиспользует, и наоборот.
+
+        ГОТОВО (2026-08-06, ui-ux-engineer):
+        - `shared/lib/phoneCountry.ts::countryFromPhone(phone)` — новый общий модуль, только
+          `libphonenumber-js` (`AsYouType`+`getCountryCallingCode`), без auth-специфичных
+          допущений — F4 сможет вызвать его 1:1 на уже сохранённом номере пользователя.
+        - Composite-контрол `features/auth/components/PhoneField.tsx`: слева read-only чип
+          флаг+код (SVG-флаг из `country-flag-icons/react/3x2`, НЕ эмодзи — явный запрет эмодзи
+          как UI-элемента на паблик-сайте из самого мокапа), справа — то, что реально печатает
+          посетитель. Поле НЕ required (ни HTML-атрибута, ни JS-guard) — форма постит то, что
+          есть, вплоть до пустой строки, как и просил Давид, не дожидаясь B1.
+        - Флаг переключается динамически: 2-шаговая эвристика поверх `countryFromPhone` (сначала
+          пробуем "+374"+введённое как валидный армянский номер через
+          `parsePhoneNumberFromString(...).isValid()`, и только если это НЕ валидно — пробуем
+          сами введённые цифры как полный международный номер, переключаем чип ТОЛЬКО если это
+          тоже валидно). Понадобилось, т.к. наивное "спросить countryFromPhone у сырых цифр"
+          даёт ложные срабатывания: армянские номера вида "55…"/"91…" по префиксу читаются как
+          код Бразилии (+55)/Индии (+91) — проверено вручную через сам `libphonenumber-js`.
+        - Подсказка "зачем телефон" — через `HelpButton` (F14) рядом с лейблом поля; это и есть
+          демонстрационное использование, которое просил F14.
+        - Новые зависимости: `libphonenumber-js` (^1.13.10) и `country-flag-icons` (^1.6.20, тот
+          же автор, что `libphonenumber-js`/`react-phone-number-input` — активно поддерживается),
+          добавлены в `package.json` через `npm install`.
+        ОТКЛОНЕНИЯ/ОТКРЫТЫЕ МОМЕНТЫ (зафиксированы, не скрыты):
+        - Видимое поле показывает ровно то, что напечатано — без живого форматирования пробелами
+          ("55 123 456" в мокапе) и без "срезания" уже распознанного кода страны из текста
+          ("916 123 45 67" без "7" в мокапе). Сознательный выбор: переформатирование
+          controlled-инпута на каждый keystroke — известный источник cursor-jump багов; риск на
+          самой заметной странице сайта посчитан выше, чем польза от красивых пробелов.
+        - Ручного выбора страны (dropdown в чипе с шевроном, как в мокапе) нет — страна только
+          определяется по вводу. В задаче явно не просили ручной выбор — не строил лишнего.
+        - Размер бандла: `country-flag-icons` подключён как `import * as Flags` — весь набор
+          флагов (265 стран) уходит в `auth`-чанк (после добавления ~412KB/~97KB gzip). Чанк уже
+          отдельно code-split по роуту `/auth`, в основной бандл сайта (главная/туры/регионы) не
+          попадает. Точечный дозагруз по одной стране (`import()` на ISO-код) дал бы меньше вес,
+          но требует непроверенной у меня схемы динамических путей в `node_modules` через Vite —
+          не стал рисковать без проверки на реальном Netlify-деплое, фиксирую как осознанный
+          компромисс, а не тихое решение.
+        - Валидация "номер введён не полностью" — лёгкая, не блокирует submit (текст под полем
+          на blur, если ни один из двух вариантов не сошёлся) — финальную проверку всё равно
+          делает бэкенд (сейчас — как required, после B1 — как разрешённый nullable).
+        - Файлы: `shared/lib/phoneCountry.ts` (новый), `features/auth/components/PhoneField.tsx`
+          (новый), `RegisterForm.tsx` (правка — `PhoneField` вместо `AuthField` для телефона).
+
+============================================================
+ФРОНТЕНД — Админка / Пользователи
+============================================================
+[x] F3. Email в таблице — убрать вырвиглазный перенос по буквам (ellipsis + tooltip / нормальный
+        responsive-скролл таблицы на мобиле).
+        Причина: `break-all` на ячейке email снижал её min-content ширину почти до нуля (можно
+        рвать в любом месте), поэтому в `table-layout: auto` браузер сжимал именно эту колонку,
+        а не расширял таблицу за `min-w-[860px]` — горизонтальный скролл (`overflow-x-auto` на
+        обёртке) из-за этого не срабатывал, хотя был на месте. Фикс: `break-all` → `truncate`
+        (нативный `white-space: nowrap` + `text-overflow: ellipsis`) с `max-w-[220px]` и
+        `title={user.email}` — теперь на узких экранах не хватает места и таблица честно
+        скроллится по горизонтали, как `ProductsTable`, а на широких email просто аккуратно
+        обрезается с тултипом. Файл: `src/features/admin/users/components/UsersTable.tsx`.
+[x] F4. Страница/модалка детали пользователя (сейчас нет — только инлайн-роль в таблице):
+        - Онлайн сейчас (по LastActiveAtUtc), дата регистрации, IP, страна (по коду телефона,
+          с флагом)
+        - Кнопка "Удалить пользователя" (soft, с подтверждением)
+        - Кнопка "Force password reset"
+        - Раздел "Help" (?) с подсказками по странице
+
+        АРХИТЕКТОР — решение (2026-08-06, архитектура зафиксирована, реализация не начата):
+
+        1) Модалка vs роут — РЕШЕНО: отдельный роут `/admin/users/:id`, НЕ модалка.
+           Обоснование: это тот же паттерн взаимодействия, что уже есть у «Продуктов»
+           (`ProductsTable`: клик по строке → `onOpen(tour)` → `navigate('/admin/tours/:id/edit')`,
+           см. `ProductsPage.tsx`/`ProductsTable.tsx`), а не паттерн «Справочников»
+           (`SidePanel` — короткая CRUD-форма из 3-5 полей, открывается кнопкой «Добавить/
+           Редактировать» в тулбаре). Карточка пользователя содержит однородный набор
+           read-only данных + 2 опасных действия + Help — по объёму и форме ближе к «детали
+           записи», а не к «редактированию формы», плюс отдельный URL даёт то, чего у модалки
+           нет и что реально полезно в админке — прямую ссылку на карточку конкретного
+           пользователя (саппорт/тикет). Код-сплит — тем же способом, что и весь `/admin`
+           (один `lazy: () => import('@/features/admin')`), отдельный чанк не заводится.
+        2) Загрузка данных — РЕШЕНО: свой loader, как `tourEditLoader`, НЕ переиспользование
+           уже загруженного списка `UsersPage`. `userDetailLoader({ params }) => getUserDetail(id)`
+           бьёт в новый `GET api/Users/{id}` (см. B13 выше — этого эндпоинта пока нет,
+           backend-architect должен подтвердить контракт до реализации). Ошибка загрузки НЕ
+           глушится — летит в `AdminErrorBoundary`, как везде в admin.
+        3) UsersTable — строка становится кликабельной по тому же рецепту, что `ProductsTable`:
+           `<tr onClick={() => !isBusy && onOpen(user)} className="cursor-pointer ...">`,
+           `onOpen` — проп, `UsersPage` держит `useNavigate()` и делает
+           `navigate('/admin/users/${id}')`. Ячейка с `RoleSelect` получает
+           `onClick={(e) => e.stopPropagation()}`, чтобы клик по селекту роли не триггерил
+           переход — тот же приём, что уже есть у `ProductsTable` для тумблера/иконок действий.
+        4) Дерево файлов (`features/admin/users/`):
+             UserDetailPage.tsx        userDetailLoader + страница-контейнер (по образцу
+                                        TourEditPage.tsx: loader → view-компонент, key={id})
+             components/
+               UsersTable.tsx          [правка] клик по строке (см. п.3)
+               RoleSelect.tsx          [правка, см. F5]
+               UsersToolbar.tsx        (без изменений)
+               UserDetailHeader.tsx    [новый] имя/логин, бейдж «в сети»/«был(а) N назад»,
+                                        хлебная крошка «Пользователи → …» (как у TourEditPage),
+                                        HelpButton в шапке (см. ниже)
+               UserDetailInfo.tsx      [новый] дата регистрации, IP, страна+флаг — read-only
+                                        сетка полей
+               UserDangerZone.tsx      [новый] «Удалить пользователя» + «Force password reset»,
+                                        оба — через `Modal` с подтверждением (тот же `Modal`,
+                                        что уже используют «Продукты»/«Справочники»)
+             lib/
+               userCopy.ts             [правка] + подписи детали, + текст Help-раздела
+               onlineStatus.ts         [новый] чистая функция `onlineStatusFrom(lastActiveAtUtc,
+                                        nowMs?) -> { isOnline: boolean; label: string }` — порог
+                                        «сейчас онлайн» вынесен в один именованный константный
+                                        экспорт (например `ONLINE_THRESHOLD_MINUTES`), не
+                                        захардкожен по месту. Конкретное число минут — не
+                                        архитектурное решение, оставлено на усмотрение
+                                        frontend-developer/Давида на этапе реализации.
+           api/adminUsers.ts [правка] + `getUserDetail(id)`, `deleteUser(id)`,
+                              `forcePasswordReset(id)` — по одной функции на эндпоинт, тем же
+                              стилем, что уже в файле.
+           app/router.tsx [правка] + дочерний маршрут:
+             { path: 'users/:id', lazy: () => import('@/features/admin').then(m => ({
+                 Component: m.UserDetailPage, loader: m.userDetailLoader })) }
+        5) Страна+флаг — см. F2 выше: `shared/lib/phoneCountry.ts` (не дублировать логику
+           внутри `users/`). `UserDetailInfo` вызывает `countryFromPhone(user.phoneNumber)`,
+           рендерит флаг+название страны или ничего, если номер не распознан (телефон
+           необязателен и nullable по B1 — отсутствие/нераспознанный номер это НЕ ошибка).
+        6) Удаление/Force reset — оба через уже существующий `Modal` (заголовок + текст
+           подтверждения + кнопки), тот же контракт использования, что у удаления архивного
+           тура и у удаления записи справочника. После успеха — `revalidator.revalidate()` +
+           (для удаления) `navigate('/admin/users')` назад к списку, т.к. карточка удалённого
+           пользователя больше не должна быть открыта.
+
+        FRONTEND-DEVELOPER (2026-08-06): реализовано 1:1 по дереву файлов архитектора —
+        `UserDetailPage.tsx` (loader + контейнер, `key={user.id}`, мирроринг `TourEditPage.tsx`),
+        `components/UserDetailHeader.tsx`, `components/UserDetailInfo.tsx`,
+        `components/UserDangerZone.tsx`, `lib/onlineStatus.ts` (`ONLINE_THRESHOLD_MINUTES = 5` —
+        подтверждено по B7: "LastActiveAtUtc == null || старше 5 минут", число здесь и там — один
+        контракт, не независимая настройка). `UsersTable.tsx`: строка кликабельна
+        (`onClick={() => !isBusy && onOpen(user)}`), ячейка `RoleSelect` — `stopPropagation`, 1:1
+        рецепт `ProductsTable`. Роут `users/:id` в `router.tsx` — 1:1 по спеке. `adminUsers.ts`: +
+        `getUserDetail`/`deleteUser`/`forcePasswordReset`, тем же стилем, что уже в файле.
+
+        РЕАЛЬНЫЙ КОНТРАКТ БЭКЕНДА проверен чтением `UsersController.cs`/`UserDetailInfoModel.cs`
+        (не по описанию из промпта) — расхождений не найдено, DTO 1:1 с тем, что реализовал
+        backend-developer в B13/B4/B5.
+
+        ОТКЛОНЕНИЯ ОТ МОКАПА (с обоснованием):
+        - В шапке НЕТ редактируемого `RoleSelect` (в мокапе он в `u-role-slot`) — роль показана
+          read-only строкой в карточке «Аккаунт». Это прямое следствие пункта 6 архитектурного
+          решения F4: "ни на UserDetailPage, ни где-либо ещё смена роли не дублируется" — мокап
+          рисовался до этого уточнения контракта.
+        - Текст подтверждения удаления смягчён: не "будут удалены без возможности восстановления"
+          (как в мокапе, буквально подразумевает hard-delete), а "аккаунт будет деактивирован и
+          скрыт… восстановить из панели нельзя" — соответствует РЕАЛЬНОМУ поведению B4 (soft-delete,
+          строка остаётся в БД, тот же email/логин можно зарегистрировать заново благодаря B3) —
+          не хотел обещать администратору то, чего система не делает.
+        - Нет полей «Город» и copy-кнопок (⧉) рядом с email/телефоном из мокапа — в контракте
+          B13 нет города вообще (мокап сам помечал это как "если доступно", источника данных не
+          появилось), copy-кнопки не были в буквальном тексте архитектурного решения — не стал
+          добавлять незаявленную функциональность.
+        - HelpButton получил новый проп `surface?: 'public' | 'admin'` (default `'public'`, обратно
+          совместимо с уже существующим использованием в `PhoneField.tsx`) — сам файл
+          `HelpButton.tsx` в своём doc-comment явно указывал на этот пробел («ОТКРЫТЫЙ ВОПРОС»,
+          F14), а сам утверждённый мокап (раздел «Передача в разработку») требует именно
+          `surface: 'admin' | 'public'`, тем же контрактом, что уже есть у `Select`. Реализовано
+          1:1 по прецеденту `Select.tsx` (админ-токены/паблик role-токены, две отдельные ветки
+          классов).
+        - `Button.tsx` получил новый вариант `outline-danger` — `border border-rose-300 bg-white
+          text-rose-700 hover:bg-rose-50` — ровно те классы, что даёт таблица «Передача в
+          разработку» в мокапе, для менее разрушительного действия (force-reset) рядом с
+          `variant="danger"` (удаление).
+        - `revalidator.revalidate()` для удаления НЕ вызывается (только `navigate('/admin/users')`)
+          — технически обоснованное отклонение от буквального текста пункта 6: ревалидация
+          означала бы повторный вызов ЭТОГО ЖЕ роута (`getUserDetail` на только что удалённый,
+          отфильтрованный `!IsDeleted` id) — гарантированный 404 на долю секунды перед самой
+          навигацией. `/admin/users` и так гоняет свежий `usersLoader` при заходе. Для force-reset
+          `revalidate()` вызывается, как и просил пункт 6 (остаёмся на той же странице).
+        - Небольшое дублирование бейджей «Подтверждён»/«Заблокирован» между `UsersTable`'s
+          `StatusBadges` и `UserDetailHeader`'s `AccountBadges` (тот же класс-набор, скопирован, не
+          вынесен в общий компонент) — осознанный компромисс, архитектурное решение не просило
+          выносить это в `shared/`, а единственных двух потребителей мало для генерализации.
+        - `UserInfoModel.phoneNumber` (список) остался типизирован как non-nullable `string`, хотя
+          B1 сделал колонку nullable на бэке — ПРЕДСУЩЕСТВУЮЩИЙ пробел (не мой код, не трогал,
+          вне скоупа F4/F5), обнаружен по пути при типизации нового `UserDetailInfoModel.phoneNumber`
+          (который я типизировал корректно как `string | null`). Не чинил список — фиксирую как
+          найденный, не исправленный пробел.
+
+        ПРОВЕРКА ВЖИВУЮ (реальные dev-серверы: backend `dotnet run` на :5253 против LocalDB,
+        frontend `vite` на :5173, НЕ мок): зарегистрирован и повышен до Admin тестовый пользователь
+        `f4verify001`/`F4Verify!2026` (id=12, оставлен в LocalDB как готовая фикстура для второго
+        визуального прогона с браузером — второй реальный Admin нужен, чтобы увидеть disabled-
+        select именно на ЧУЖОЙ админской строке, а не только на своей). Через curl подтверждено
+        1:1 совпадение реального JSON с `UserDetailInfoModel`/TS-типом; `GET api/Users/1`
+        (настоящий сид-админ) вернул `lastActiveAtUtc/registeredIp/lastLoginIp = null` — реальный
+        кейс для проверки "—"-заглушек в `UserDetailInfo`, не выдуманный. Создан и полностью пройден
+        по циклу одноразовый пользователь `f4verify002` (id=13): `ForcePasswordReset` → sqlcmd
+        подтвердил `ForceToChangePass=1` → `Delete` → `GET api/Users/13` вернул 404 → id пропал из
+        `GET api/Users`. Отдельно подтверждено: `PATCH ChangeRole` на реального админа id=1 → 403/
+        `{"ErrorCode":2214,...}` (PascalCase в теле — `errorCodeOf` в `userCopy.ts` уже толерантен к
+        обеим раскладкам регистра), роль id=1 в БД не изменилась; `DELETE Delete?id=12` (self) →
+        400/`{"ErrorCode":2212,...}`.
+        ОБНАРУЖЕНО И ИСПРАВЛЕНО ПОПУТНО (в скоупе F5, не отдельная задача): доккомент
+        `changeUserRole` в `adminUsers.ts` и ветка `usersErrorMessage` в `userCopy.ts` описывали
+        СТАРОЕ поведение B6 (`InvalidEntityRelation`=2001 для self/last-admin) — этот код-путь
+        backend-developer уже удалил при реализации B6, эндпоинт теперь отвечает
+        `AdminRoleImmutable`=2214. Обновил оба места на актуальный контракт (подтверждено curl-ом
+        выше), иначе сообщение об ошибке было бы в лучшем случае generic, а не по факту неверным.
+        ЧЕГО НЕ СМОГ ПРОВЕРИТЬ: у меня как у сабагента нет инструмента браузера/скриншотов/preview
+        — весь UI-уровень (реально ли модалка открывается по клику, действительно ли RoleSelect
+        визуально выглядит disabled, адаптивность на узком экране) проверен только на уровне
+        `tsc -b`/`oxlint`/`vite build` (все чисты) + реального REST-контракта через curl, НЕ
+        визуально. Оба dev-сервера (backend :5253, frontend :5173) оставлены запущенными для
+        визуальной проверки главным агентом/Давидом. Учётка для входа: `f4verify001` /
+        `F4Verify!2026` (Admin) — можно сразу открыть `/admin/users`, кликнуть по строке
+        `f4verify001` (проверка disabled RoleSelect на своей строке) и по строке `admin` (id=1,
+        проверка disabled RoleSelect на ЧУЖОЙ Admin-строке + карточка с "—"-полями активности).
+
+[x] F5. RoleSelect: disabled/заблокировано, если у ЦЕЛЕВОГО пользователя сейчас роль Admin
+        (в дополнение к уже существующему "нельзя менять себя").
+
+        АРХИТЕКТОР — решение (2026-08-06): расширить существующий паттерн, не менять контракт
+        `RoleSelect` (он остаётся «глупым» disabled-select без знания причины — решение о
+        видимом тексте причины остаётся снаружи, в `UsersTable`, как сегодня для `isSelf`).
+        В `UsersTable.tsx`:
+        - `isSelf = user.id === currentUserId` (без изменений)
+        - `isTargetAdmin = user.role === RoleType.Admin && !isSelf` (новое; `&& !isSelf`, чтобы
+          не выбирать формулировку причины, когда обе верны — self-случай уже полностью
+          покрыт своим текстом)
+        - `disabled={isSelf || isTargetAdmin || isBusy || pendingId === user.id}`
+        - Поясняющий текст под селектом (тот же `<p className="mt-1 text-[11px] ...">`, что уже
+          есть для `isSelf`) получает вторую ветку:
+          `isSelf` → «Свою роль изменить нельзя» (без изменений, приоритет)
+          иначе `isTargetAdmin` → новый текст в духе «Роль администратора можно снять только
+          напрямую в базе» (echo решения Давида «роль Admin неизменна через UI», см. шапку
+          файла) — точную формулировку утверждает frontend-developer/UX-копирайт по месту,
+          здесь фиксируется только факт, что причина ДОЛЖНА быть видна текстом, а не только
+          скрытым атрибутом disabled (тот же принцип доступности, что уже применён к isSelf —
+          нативный disabled title у select не гарантированно показывается, поэтому текст, а не
+          tooltip).
+        - Ни на `UserDetailPage`, ни где-либо ещё смена роли не дублируется — это единственное
+          место в UI, где роль вообще меняется, чтобы не завести два места, которые могут
+          разойтись в состоянии.
+
+        FRONTEND-DEVELOPER (2026-08-06): реализовано 1:1 по спеке в `UsersTable.tsx` —
+        `isTargetAdmin = user.role === RoleType.Admin && !isSelf`, добавлен в `disabled`, вторая
+        ветка текста — вынесена в новую именованную константу `ADMIN_ROLE_IMMUTABLE_HINT` в
+        `lib/userCopy.ts` («Роль администратора можно снять только напрямую в базе»), а не
+        захардкожена по месту, т.к. F4 (`usersErrorMessage`) отдельно нужен тот же смысл для
+        сообщения об ошибке 2214 — держать формулировку в одном месте. `RoleSelect.tsx` не
+        трогал — контракт остался «глупым» disabled-select, как и требовало решение. Проверено
+        живым curl-ом (см. ПРОВЕРКА ВЖИВУЮ под F4 выше) — реальный бэкенд действительно отвечает
+        403/`AdminRoleImmutable`=2214 на попытку понизить роль настоящего Admin (id=1), UI-гвард
+        просто делает эту попытку недостижимой из панели. Визуально (реально ли select выглядит
+        серым/disabled на экране) — не проверено тем же ограничением инструментов, что в F4;
+        учётка `f4verify001`/`F4Verify!2026` в LocalDB готова для проверки главным агентом.
+
+============================================================
+ФРОНТЕНД — Мобильная адаптивность (справочники)
+============================================================
+[x] F7. Скрины 2/3/4: вкладка "Заметки" + модалка "Новая заметка" + её select — контент вылезает
+        за viewport на мобиле, почистить layout/overflow.
+        Причина: только у вкладки "Заметки" (в отличие от "Доп. расходы"/"Точки маршрута") есть
+        строка-фильтр по типу (`role="radiogroup"`, 5 пилюль) рядом с полем поиска —
+        `inline-flex` без `overflow-x-auto`/`flex-wrap`, поэтому на 375px её суммарная
+        min-content ширина (5 надписей без переноса) не помещается и просто вылезает вправо за
+        границу `<body>`, а не переносится/скроллится — отсюда и бежевая полоса фона за краем
+        экрана на всех трёх скринах (сама модалка/Select тут ни при чём: `SidePanel` уже
+        `w-full max-w-full` на мобиле, а `Select` уже переключается на нижний `Sheet` при
+        `useIsCompactViewport`, оба скрина 3/4 "бежали" только из-за уже расширенного этим
+        багом документа под ними). Фикс по образцу `shared/ui/Tabs` (тот же паттерн уже
+        используется в проекте для строки вкладок, которая тоже может не поместиться):
+        `min-w-0` на flex-обёртке строки поиск+фильтр, чтобы она могла сжаться, и
+        `overflow-x-auto no-scrollbar max-w-full` + `shrink-0` на кнопках-пилюлях самого
+        radiogroup — теперь группа скроллится по горизонтали в своих границах (свайпом), а не
+        выталкивает всю страницу за viewport. Файл: `src/features/admin/catalog/note-templates/
+        NoteTemplatesTab.tsx`.
+[x] F8. Тип заметки в форме добавления — по умолчанию = тип активной вкладки (сейчас всегда
+        "Организационная деталь"). ГОТОВО (2026-08-06): `NoteTemplateForm` принимает новый проп
+        `defaultType`, используется только для НОВОЙ заметки (`initialValues`); при редактировании
+        по-прежнему берётся `item.type`. `NoteTemplatesTab` передаёт `typeFilter === 'all' ?
+        TourNoteType.OrganizationalDetail : typeFilter` — активная вкладка списка.
+
+============================================================
+ФРОНТЕНД — Тема админки (баг "помидор" в тёмной теме)
+============================================================
+[x] F9. Админка должна ВСЕГДА рендериться в light-теме независимо от сохранённого/системного
+        предпочтения публичного сайта — тема сейчас глобальная на <html> через localStorage +
+        inline-скрипт в index.html (задевает /admin, хотя переключатель темы там никогда не
+        показывается). Форсировать light для /admin (и в pre-paint скрипте тоже, по pathname).
+        ГОТОВО (2026-08-06): 1) `index.html` pre-paint скрипт проверяет `location.pathname`,
+        форсирует `data-theme='light'` для `/admin`, игнорируя localStorage — убирает вспышку
+        неверной темы до монтирования React. 2) `AdminLayout.tsx` — `useLayoutEffect` форсирует
+        `data-theme='light'` на маунте (перекрывает случай client-side навигации из публичного
+        сайта в /admin, когда pre-paint скрипт уже не выполнится повторно) + слушатель `storage`
+        как defense-in-depth на время жизни layout'а. Паблик-сайт со своим переключателем
+        тёмной/светлой темы не тронут — работает как раньше.
+
+============================================================
+SEO
+============================================================
+[x] F10/B12. Настройки SEO (title/description/og:image) сохраняются в БД, но НЕ попадают в
+        реальный HTML, который видят краулеры мессенджеров — index.html статический, без
+        OG-тегов вообще (SPA на статическом хостинге). Реальный фикс — Netlify Edge Function,
+        которая на каждый запрос подставляет актуальные SEO-настройки (из
+        SiteSettings/GetPublic) в <head> перед отдачей. Новая инфраструктура — если не
+        подходит, сказать до старта этого пункта.
+
+        ГОТОВО (2026-08-06, реализация без деплоя — Давид проверяет перед деплоем):
+        `Frontend/netlify/edge-functions/seo-meta.ts`, подключена через `[[edge_functions]]`
+        в `netlify.toml` (`path = "/*"`, `excludedPath` на `/api/*`/бандл/статику) — НЕ тот
+        же механизм, что `_redirects`, конфликт из истории (redirects vs netlify.toml) здесь
+        не воспроизводится: edge-функция работает как middleware вокруг разрешения редиректов
+        (`context.next()` отдаёт тот же ответ, что дал бы `_redirects`/SPA-fallback, функция
+        его переписывает), а не как вторая конкурирующая цепочка правил.
+        Тянет `SiteSettings/GetPublic?group=Seo` через тот же `/api/*`-прокси (не напрямую в
+        Azure) — Azure-хост остаётся единственно в `_redirects`, ценой одного лишнего hop;
+        кэш 60с — module-scope переменная (best-effort на тёплом инстансе), НЕ через Deno/
+        Netlify `caches` Cache API — доступность/семантику этого API на рантайме Netlify Edge
+        Functions не смог проверить (нет доступа в интернет на момент реализации), поэтому
+        выбран гарантированно рабочий вариант вместо непроверенного.
+        HTML переписывается вручную (regex-замена/вставка тегов в `<head>`), НЕ через
+        HTMLRewriter — это Cloudflare Workers API, не стандартный Deno-примитив, а тянуть
+        WASM-полифил означало бы внешнюю зависимость (запрещено условием задачи). Компромисс
+        описан в шапке файла `seo-meta.ts`.
+        Тэги: `<title>`, `meta[name=description]`, `og:title`, `og:description`, `og:image`,
+        `og:url` (всегда — реальный URL запрошенной страницы, не часть кэшируемых настроек),
+        `<link rel="icon">` — только если `seo.faviconUrl` задан (см. F11).
+        РИСК/НЕПРОВЕРЕНО: Edge Functions не выполняются в локальном `vite dev` — реальное
+        поведение на живом Netlify-деплое не проверялось (по условию задачи — только
+        имплементация). Проверено локально: `tsc -b` и `oxlint` чисты для всех новых/
+        изменённых файлов этой задачи; `vite build` падает на несвязанном уже существующем
+        (staged, не мой) сбое типов в `NoteTemplatesTab.tsx` — не имеет отношения к SEO.
+[x] F11. faviconUrl из настроек — применять к <link rel="icon"> динамически в рантайме
+        (+ туда же, где будет рендериться <head> для SEO, если Edge Function).
+
+        ГОТОВО (2026-08-06): краулерская часть — тот же `seo-meta.ts` (см. F10/B12).
+        Клиентская часть (реальные посетители) — новый `shared/hooks/useFavicon.ts`,
+        вызывается один раз из `RootLayout` (паблик-сайт; `/admin` не трогает), берёт
+        `seo.faviconUrl` через новую `shared/api/siteSettings.ts::getFaviconUrl()` (группа
+        Seo, тот же паттерн, что `getLogoUrl`). Пусто/поле ещё не существует на бэке (B9 —
+        отдельная бэкенд-задача, ещё не готова) — молча оставляет статичный
+        `<link rel="icon" href="/favicon.svg">` из `index.html`, никогда не бросает ошибку.
+
+============================================================
+ФРОНТЕНД — Точки маршрута / галерея
+============================================================
+[x] F12. Место под изображение точки маршрута — поддержка нескольких изображений (не одно).
+
+        ГЛАВНЫЙ АГЕНТ (2026-08-06, без субагентов): форма Place (`catalog/places/PlaceForm.tsx`)
+        получила блок «Фотографии» — список картинок с добавлением/удалением/drag-and-drop
+        реордером, обложка (`imageUrl`) осталась рядом как отдельное legacy-поле (по B10, не
+        заменяется списком). Reconcile на Update — по `id`, та же by-id конвенция, что у
+        GalleryImages в форме тура (`id: serverId ?? 0`). Переиспользуемый редактор картинок и
+        общие кнопки-репитеры вынесены из `tour-form/components/` в `features/admin/ui/`
+        (`GalleryImagesEditor` → `ImageListEditor`, `RepeaterControls`) — теперь используются и
+        формой тура, и формой точки маршрута; поведение/разметка не менялись, только путь
+        импорта, все существующие вызовы обновлены. `tsc -b`/`oxlint`/`vite build` чистые.
+        ПРОВЕРЕНО вживую: на «Гарни» добавлена и удалена картинка через UI, `PUT
+        api/Place/Update` -> 200, изменения подтверждены в БД (`sqlcmd`, throwaway Admin-аккаунт
+        для логина создан и удалён после теста, реальный `admin` не тронут) и возвращены к
+        исходным URL тем же UI. 375px — без горизонтального переполнения формы (полная мобильная
+        адаптивность админки вне объёма по решению Давида 01.08.2026, см. 4.5).
+        Детали — `docs/admin-panel.md` (раздел «Справочники»), `docs/CHANGELOG.md` (2026-08-06).
+[!] F13. При добавлении новой точки маршрута в форме тура/экскурсии — её изображения
+        подставляются в галерею продукта по умолчанию (см. B11).
+
+        ГЛАВНЫЙ АГЕНТ (2026-08-06): реальный блокер, не решается кодом в рамках F12/F13.
+        Бэкенд B11 (`RoutePointGalleryImageCopier`) копирует фото точки маршрута в галерею дня
+        ТОЛЬКО если у `RoutePoint` заполнен `PlaceId`. Форма тура (`tour-form/`) точки маршрута
+        реализует как автодополнение свободного текста (`LocalizedListEditor`/`SuggestInput`) —
+        решение 4.3 от 01.08.2026, `RoutePointFormState`/`RoutePointCreateModel` не содержат
+        `placeId` вообще, форма тура его никогда не отправляет. Значит B11 сегодня физически
+        недостижим через админку ни при каком действии админа, хотя реализован и протестирован
+        на бэке полностью.
+        Спрошено у Давида, как поступить — решение: не разворачивать 4.3 в рамках этой задачи
+        (реальная привязка точки маршрута к записи Place — отдельная, более крупная фича, меняет
+        контракт `RoutePoint`), зафиксировать как техдолг. Код не менялся.
+        Детали — `docs/admin-panel.md`, раздел «Регионы в форме тура (4.3, 4.4)».
+
+============================================================
+АРХИТЕКТУРА — переиспользуемый компонент "Help (?)" (введено по решению Давида 2026-08-06)
+============================================================
+[x] F14. (НОВОЕ) `shared/ui/HelpButton.tsx` — переиспользуемая "?"-кнопка + всплывающая
+        панель с подсказками, для использования на любой странице админки (начиная с F4,
+        карточка пользователя), не только Users.
+
+        АРХИТЕКТОР — решение (2026-08-06):
+
+        1) Место — `shared/ui/`, НЕ `features/admin/ui/`. Обоснование: компонент не содержит
+           ничего admin-специфичного (ни admin-типов, ни проверок роли) — это чистый «триггер +
+           текстовое содержимое», в отличие от `TranslationGroup`/`ImageUrlField`
+           (`admin/ui/`), которые реально завязаны на форму тура/настроек. К тому же он
+           технически — обёртка над уже существующими `shared/ui/Popover` (десктоп) и
+           `shared/ui/Sheet` (компактный вьюпорт), которые уже лежат в `shared/`; заворачивать
+           shared-примитив в admin-обёртку без причины — лишний слой. Если когда-нибудь
+           понадобится публичному сайту — переносить не придётся, он уже там.
+        2) API (реализует ui-ux-engineer, не архитектор):
+           ```
+           export interface HelpPanelProps {
+             title: string
+             children: React.ReactNode        // RU-текст подсказки — владеет вызывающая
+                                               // страница/фича, не сам компонент
+             triggerLabel?: string            // aria-label кнопки; по умолчанию
+                                               // `Справка: ${title}`
+           }
+           export function HelpButton(props: HelpPanelProps): JSX.Element
+           ```
+           Внутри — маленькая круглая кнопка "?" (тот же стиль иконок-кнопок, что уже в
+           проекте, напр. гамбургер в `AdminSidebar`), по клику открывает `Popover` на
+           десктопе / `Sheet` на компактном вьюпорте — тем же переключателем
+           `useIsCompactViewport`, каким это уже решено для `Select`/`DatePicker`
+           (см. doc-comment в `shared/ui/Popover.tsx`: «the compact-viewport counterpart is
+           Sheet»). Никакого нового оверлей-механизма не изобретается.
+        3) Точка врезки — рядом с `<h1>` в шапке страницы, НЕ отдельный обязательный
+           `PageHeader`-компонент. Причина: сегодня только одна страница (карточка
+           пользователя, F4) реально нуждается в Help, а существующие шапки других admin-
+           страниц (Dashboard/Products/Catalog/Settings/TourEdit) уже неодинаковы по составу
+           (где-то только h1+p, где-то ещё хлебные крошки) — насильно продавливать их через
+           общий wrapper сейчас было бы преждевременной генерализацией. `HelpButton` встраивается
+           точечно в разметку `UserDetailHeader.tsx` (F4) первым; когда (и если) 3+ страницы
+           реально примут этот паттерн с одинаковой шапкой — это и будет сигналом выносить общий
+           `AdminPageHeader`, не раньше.
+        4) Текст подсказок — не в компоненте. Каждая фича держит свой копирайт рядом с собой
+           (по аналогии с `settingsCopy.ts`/`userCopy.ts`) и передаёт его как `children`.
+
+        ГОТОВО (2026-08-06, ui-ux-engineer): реализовано ровно по интерфейсу из решения
+        архитектора — `HelpPanelProps { title, children, triggerLabel? }`, без доп. пропов (API не
+        переизобретался). Внутри — `Popover` на десктопе / `Sheet` на компактном вьюпорте,
+        тем же переключателем `useIsCompactViewport`, каким это уже сделано в `Select.tsx`
+        (десктоп/компакт-сплит скопирован оттуда 1:1). Escape/клик вне/крестик в углу — все три
+        способа закрытия работают. Единственное реальное использование на сегодня —
+        демонстрационное и постоянное (не временный smoke-test, ничего убирать не пришлось),
+        рядом с полем "Телефон" в `PhoneField.tsx` (см. F2).
+        ОТКРЫТЫЙ ВОПРОС (фиксирую, не решаю сам): решение архитектора НЕ содержит `surface`
+        проп (в отличие от `Select`'а — `surface: 'admin' | 'public'`), хотя в таблице дизайнера
+        (раздел "Help-триггер" мокапа) заданы РАЗНЫЕ палитры для admin/public. Сейчас компонент
+        рендерится ролевыми токенами паблик-сайта (bg-panel-raised/ring-edge-strong/
+        text-gold-ink) — корректно для единственного реального потребителя сегодня (F2). Когда
+        F4 будет реально встраивать `HelpButton` в `/admin`, эти же токены отрисуют его в
+        ПАБЛИК-палитре вместо admin-teal (см. предупреждение над `Select`'а `surface`-пропом про
+        то, почему `data-theme` тут не спасает) — понадобится либо добавить `surface` проп по
+        прецеденту `Select`, либо другое решение; оставляю на усмотрение реализатора F4, явно
+        фиксирую здесь, чтобы не потерялось между сессиями.
+        Файл: `shared/ui/HelpButton.tsx` (новый).
+
+============================================================
+ИНФОРМАЦИОННО (не код, ответ дан в чате)
+============================================================
+[x] I1. Вопрос про Environment variables — объяснено в чате: удалённая переменная
+        (VITE_API_BASE_URL в Netlify UI) не была секретом, её удаление ИСПРАВИЛО баг с
+        разлогином, а не создало уязвимость. Реальные секреты (Jwt__SigningKey, строка
+        подключения к БД) как были, так и остаются только в Azure App Service Application
+        Settings — не в репозитории и не во фронтенд-бандле.

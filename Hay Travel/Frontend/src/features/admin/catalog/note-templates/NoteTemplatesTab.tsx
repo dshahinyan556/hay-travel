@@ -174,12 +174,15 @@ export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           <CatalogSearchInput value={search.query} onChange={search.setQuery} placeholder="Поиск по названию…" />
+          {/* `max-w-full overflow-x-auto` (same pattern as `shared/ui/Tabs`): five pills don't fit
+              a 375px viewport, so the group scrolls horizontally in place instead of either
+              wrapping into a multi-row pill cluster or bleeding past the edge of the screen. */}
           <div
             role="radiogroup"
             aria-label="Тип заметки"
-            className="inline-flex rounded-xl border border-neutral-200 bg-neutral-100 p-1"
+            className="no-scrollbar inline-flex max-w-full overflow-x-auto rounded-xl border border-neutral-200 bg-neutral-100 p-1"
           >
             {TYPE_FILTER_OPTIONS.map((option) => {
               const selected = option.value === typeFilter
@@ -190,7 +193,7 @@ export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
                   role="radio"
                   aria-checked={selected}
                   onClick={() => setTypeFilter(option.value)}
-                  className={`rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${
+                  className={`shrink-0 rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${
                     selected ? 'bg-white text-brand-800 shadow-sm' : 'text-neutral-600 hover:text-neutral-800'
                   }`}
                 >
@@ -257,6 +260,7 @@ export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
         <NoteTemplateForm
           key={panel?.mode === 'edit' ? panel.item.id : 'create'}
           item={panel?.mode === 'edit' ? panel.item : null}
+          defaultType={typeFilter === 'all' ? TourNoteType.OrganizationalDetail : typeFilter}
           isSubmitting={isSubmitting}
           error={formError}
           onSubmit={handleSubmit}

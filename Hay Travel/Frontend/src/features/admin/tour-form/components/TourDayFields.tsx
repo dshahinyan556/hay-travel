@@ -2,8 +2,8 @@ import { Field, Input } from '@/shared/ui'
 import type { Localized, TourDayFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
 import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
+import { ImageListEditor } from '@/features/admin/ui/ImageListEditor'
 import { LocalizedListEditor } from './LocalizedListEditor'
-import { GalleryImagesEditor } from './GalleryImagesEditor'
 
 interface TourDayFieldsProps {
   day: TourDayFormState
@@ -93,7 +93,7 @@ export function TourDayFields({
 
       <div className="flex flex-col gap-2">
         <h4 className="text-sm font-semibold text-neutral-800">Галерея дня</h4>
-        <GalleryImagesEditor
+        <ImageListEditor
           items={day.gallery}
           onAdd={() => actions.addGallery(day.key)}
           onRemove={(key) => actions.removeGallery(day.key, key)}

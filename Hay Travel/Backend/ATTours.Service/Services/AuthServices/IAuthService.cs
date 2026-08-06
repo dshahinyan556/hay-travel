@@ -27,5 +27,21 @@ namespace ATTours.BusinessServices.Services.AuthServices
         // currentRefreshToken — plaintext из cookie: эта сессия переживает смену пароля,
         // остальные отзываются. null допустим (тогда отзываются все).
         Task<MessageResultModel> ChangePasswordAsync(int userId, ChangePasswordModel model, string? currentRefreshToken, CancellationToken cancellationToken = default);
+
+        // Email-change flow (B8, 2026-08-06). Шаг 1: код на ТЕКУЩИЙ email. Каждый вызов
+        // начинает флоу заново (апсерт по UserId, хвосты прошлой попытки сбрасываются).
+        Task<MessageResultModel> RequestEmailChangeAsync(int userId, RequestContextModel requestContext, CancellationToken cancellationToken = default);
+
+        // Шаг 2: подтверждение кода, присланного на старый email.
+        Task<MessageResultModel> ConfirmEmailChangeCodeAsync(int userId, ConfirmEmailChangeCodeModel model, CancellationToken cancellationToken = default);
+
+        // Шаг 3: новый email. Требует свежего OldEmailConfirmedAtUtc. В отличие от Register,
+        // занятый адрес отвечает явной ошибкой (решение Давида, 2026-08-06) — пользователь
+        // уже аутентифицирован, анти-энумерация здесь неприменима.
+        Task<MessageResultModel> RequestNewEmailAsync(int userId, RequestNewEmailModel model, RequestContextModel requestContext, CancellationToken cancellationToken = default);
+
+        // Шаг 4: переход по ссылке из письма на новый email — AllowAnonymous. Отзывает все
+        // живые сессии пользователя (решение Давида, 2026-08-06).
+        Task<MessageResultModel> ConfirmEmailChangeAsync(ConfirmEmailChangeModel model, CancellationToken cancellationToken = default);
     }
 }

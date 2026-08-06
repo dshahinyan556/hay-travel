@@ -22,8 +22,9 @@ namespace ATTours.Common.DTO.Auth
         public string Email { get; set; }
 
         // Только цифры, до 15 символов — тот же контракт, что уже валидируется на фронте.
-        [Required]
-        [RegularExpression(@"^\d{1,15}$")]
+        // Non-required (B1, 2026-08-06): регекс допускает и пустую строку — null не проходит
+        // через RegularExpressionAttribute по умолчанию, а "" с фронта обязана пройти.
+        [RegularExpression(@"^\d{0,15}$")]
         public string PhoneNumber { get; set; }
 
         [Required]

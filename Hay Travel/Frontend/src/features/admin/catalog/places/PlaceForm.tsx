@@ -1,19 +1,24 @@
 import { useState } from 'react'
 import { Button, buttonClassName, Field, Input, Select, Spinner } from '@/shared/ui'
 import { ImageUrlField } from '@/features/admin/ui/ImageUrlField'
+import { ImageListEditor, type ImageListItem } from '@/features/admin/ui/ImageListEditor'
 import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
 import type { Localized } from '@/features/admin/types/localized'
 import { readLocalized } from '@/features/admin/catalog/lib/catalogMapper'
 import type { PlaceInfoModel, RegionInfoModel } from '@/shared/types/attours'
 
+const newKey = (): string => crypto.randomUUID()
+
 /** No `sortOrder` on purpose: position is set by dragging rows in the list (see
- * `lib/useCatalogReorder.ts`), not by typing a number here. */
+ * `lib/useCatalogReorder.ts`), not by typing a number here. Same for `images` — order is array
+ * index, changed by dragging rows in `ImageListEditor`. */
 export interface PlaceFormValues {
   slug: string
   regionId: string
   latitude: string
   longitude: string
   imageUrl: string
+  images: ImageListItem[]
   name: Localized
 }
 
@@ -25,6 +30,7 @@ function initialValues(place: PlaceInfoModel | null): PlaceFormValues {
       latitude: '',
       longitude: '',
       imageUrl: '',
+      images: [],
       name: { ru: '', en: '' },
     }
   }
@@ -34,6 +40,9 @@ function initialValues(place: PlaceInfoModel | null): PlaceFormValues {
     latitude: place.latitude == null ? '' : String(place.latitude),
     longitude: place.longitude == null ? '' : String(place.longitude),
     imageUrl: place.imageUrl,
+    images: [...place.images]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((img) => ({ key: newKey(), serverId: img.id, url: img.url })),
     name: readLocalized(place.translations),
   }
 }
@@ -145,11 +154,42 @@ export function PlaceForm({ place, regions, isSubmitting, error, onSubmit, onCan
       </div>
 
       <ImageUrlField
-        label="Изображение — URL"
+        label="Обложка — URL"
         value={values.imageUrl}
         onChange={(value) => setValues((v) => ({ ...v, imageUrl: value }))}
-        hint="Необязательно."
+        hint="Необязательно. Используется, пока у точки нет фотографий ниже."
       />
+
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-medium text-neutral-700">Фотографии</span>
+        <p className="text-xs text-neutral-500">
+          Добавляются в галерею дня автоматически при выборе этой точки в новом маршруте.
+        </p>
+        <ImageListEditor
+          items={values.images}
+          onAdd={() => setValues((v) => ({ ...v, images: [...v.images, { key: newKey(), url: '' }] }))}
+          onRemove={(key) =>
+            setValues((v) => ({ ...v, images: v.images.filter((img) => img.key !== key) }))
+          }
+          onReorder={(fromIndex, toIndex) =>
+            setValues((v) => {
+              if (fromIndex === toIndex) return v
+              const isInRange = (i: number) => Number.isInteger(i) && i >= 0 && i < v.images.length
+              if (!isInRange(fromIndex) || !isInRange(toIndex)) return v
+              const next = [...v.images]
+              const [moved] = next.splice(fromIndex, 1)
+              next.splice(toIndex, 0, moved)
+              return { ...v, images: next }
+            })
+          }
+          onChangeUrl={(key, value) =>
+            setValues((v) => ({
+              ...v,
+              images: v.images.map((img) => (img.key === key ? { ...img, url: value } : img)),
+            }))
+          }
+        />
+      </div>
 
       <div className="mt-2 flex justify-end gap-2.5 border-t border-neutral-200 pt-4">
         <button type="button" onClick={onCancel} disabled={isSubmitting} className={buttonClassName('ghost', 'md')}>

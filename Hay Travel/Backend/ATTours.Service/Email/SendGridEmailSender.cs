@@ -38,6 +38,18 @@ namespace ATTours.BusinessServices.Email
                          EmailMessageFactory.BuildResetBody(toName, EmailMessageFactory.BuildResetUrl(settings, token)),
                          cancellationToken);
 
+        public Task SendEmailChangeOldEmailCodeAsync(string toEmail, string toName, string code, CancellationToken cancellationToken = default)
+            => SendAsync(toEmail, toName,
+                         EmailMessageFactory.EmailChangeCodeSubject,
+                         EmailMessageFactory.BuildEmailChangeCodeBody(toName, code),
+                         cancellationToken);
+
+        public Task SendEmailChangeConfirmationAsync(string toEmail, string toName, string token, CancellationToken cancellationToken = default)
+            => SendAsync(toEmail, toName,
+                         EmailMessageFactory.EmailChangeConfirmSubject,
+                         EmailMessageFactory.BuildEmailChangeConfirmBody(toName, EmailMessageFactory.BuildEmailChangeConfirmUrl(settings, token)),
+                         cancellationToken);
+
         // Сбой провайдера не должен ронять запрос: регистрация/восстановление уже записаны
         // в БД, а повторная отправка достигается повторным вызовом эндпоинта.
         private async Task SendAsync(string toEmail, string toName, string subject, string body, CancellationToken cancellationToken)

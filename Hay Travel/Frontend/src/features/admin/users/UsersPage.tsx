@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { redirect, useLoaderData, useRevalidator } from 'react-router'
+import { redirect, useLoaderData, useNavigate, useRevalidator } from 'react-router'
 import {
   canManageUsers,
   ensureAuthReady,
@@ -30,6 +30,7 @@ export async function usersLoader() {
 
 export function UsersPage() {
   const { users } = useLoaderData<typeof usersLoader>()
+  const navigate = useNavigate()
   const revalidator = useRevalidator()
 
   const [filters, setFilters] = useState<UserFilters>(emptyUserFilters)
@@ -98,6 +99,7 @@ export function UsersPage() {
           pendingId={pendingId}
           isBusy={isBusy}
           onChangeRole={handleChangeRole}
+          onOpen={(user) => !isBusy && navigate(`/admin/users/${user.id}`)}
         />
       )}
 

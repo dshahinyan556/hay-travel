@@ -26,6 +26,11 @@ namespace ATTours.BusinessServices.Services.AuthServices
         private const int LockoutMinutes = 15;
         private const int EmailTokenLifetimeMinutes = 60;
 
+        // Email-change flow (B8, 2026-08-06): и время жизни кода на старый email, и окно
+        // свежести OldEmailConfirmedAtUtc, за которое нужно успеть запросить новый email.
+        private const int EmailChangeCodeLifetimeMinutes = 15;
+        private const int EmailChangeCodeLength = 6;
+
         // Один и тот же текст для «письмо ушло» и «такого аккаунта нет» — иначе по ответу
         // перебирались бы зарегистрированные адреса.
         private const string GenericEmailSentMessage =
@@ -33,6 +38,11 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
         private const string PasswordChangedMessage = "Password has been changed.";
         private const string EmailVerifiedMessage = "Email has been verified.";
+
+        private const string EmailChangeCodeSentMessage = "A verification code has been sent to your current email address.";
+        private const string EmailChangeCodeConfirmedMessage = "Code confirmed. You can now request the new email address.";
+        private const string EmailChangeConfirmationSentMessage = "A confirmation link has been sent to the new email address.";
+        private const string EmailChangedMessage = "Email address has been changed.";
 
         private readonly IMapper mapper;
         private readonly IPasswordHasher passwordHasher;
@@ -60,6 +70,9 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
         private IEntityRepository<UserRole>? userRoleRepository;
         private IEntityRepository<UserRole> UserRoleRepository => userRoleRepository ??= new EntityRepository<UserRole>(Context);
+
+        private IEntityRepository<EmailChangeRequest>? emailChangeRequestRepository;
+        private IEntityRepository<EmailChangeRequest> EmailChangeRequestRepository => emailChangeRequestRepository ??= new EntityRepository<EmailChangeRequest>(Context);
 
         #endregion
 
@@ -90,12 +103,17 @@ namespace ATTours.BusinessServices.Services.AuthServices
                                   $"Default role '{RoleType.Regular}' is missing.");
 
             var user = mapper.Map<User>(model);
+            // "" -> null (B1, 2026-08-06): не даёт в БД жить двум представлениям "нет телефона".
+            user.PhoneNumber = string.IsNullOrWhiteSpace(user.PhoneNumber) ? null : user.PhoneNumber;
             user.RoleId = regularRole.Id;
             user.IsEmailVerified = false;
             user.FailedLoginAttempts = 0;
             user.LockedUntil = null;
             user.ForceToChangePass = false;
             user.Password = passwordHasher.Hash(model.Password);
+            user.IsDeleted = false;
+            user.RegisteredAtUtc = DateTime.UtcNow;
+            user.RegisteredIp = requestContext.IpAddress;
 
             await new UserRegistrationValidationService([user], Context).ValidateEntitiesAsync();
 
@@ -145,6 +163,13 @@ namespace ATTours.BusinessServices.Services.AuthServices
                 throw InvalidCredentials();
 
             var now = DateTime.UtcNow;
+
+            // Soft-deleted (B4, 2026-08-06): без этой проверки живой access/refresh токен
+            // удалённого пользователя продолжал бы работать весь оставшийся TTL.
+            if (user.IsDeleted)
+                throw new ErrorModelException(GlobalErrorCode.AccountDeleted, HttpStatusCode.Unauthorized,
+                    "Account has been deleted.");
+
             if (user.LockedUntil.HasValue && user.LockedUntil.Value > now)
                 throw new ErrorModelException(GlobalErrorCode.AccountLocked, HttpStatusCode.Unauthorized,
                     "Account is temporarily locked. Try again later.");
@@ -223,10 +248,15 @@ namespace ATTours.BusinessServices.Services.AuthServices
                 throw RefreshTokenInvalid();
 
             // Состояние учётки перепроверяется на каждой ротации: сессия живёт 14 дней и
-            // переживает блокировку, поэтому без этой проверки заблокированный пользователь
-            // продлевал бы себе доступ бесконечно, просто потому что залогинился раньше.
-            // Порядок проверок тот же, что в LoginAsync: сперва блокировка, потом почта.
+            // переживает блокировку, поэтому без этой проверки заблокированный (или удалённый,
+            // B4) пользователь продлевал бы себе доступ бесконечно, просто потому что
+            // залогинился раньше. Порядок проверок тот же, что в LoginAsync: сперва soft-delete,
+            // потом блокировка, потом почта.
             var user = storedToken.User;
+
+            if (user.IsDeleted)
+                throw await RevokeAndRejectAsync(storedToken, now, GlobalErrorCode.AccountDeleted,
+                    "Account has been deleted.", cancellationToken);
 
             if (user.LockedUntil.HasValue && user.LockedUntil.Value > now)
                 throw await RevokeAndRejectAsync(storedToken, now, GlobalErrorCode.AccountLocked,
@@ -346,6 +376,160 @@ namespace ATTours.BusinessServices.Services.AuthServices
             transaction.Complete();
 
             return new MessageResultModel { Message = PasswordChangedMessage };
+        }
+
+        #endregion
+
+        #region Email change (B8, 2026-08-06)
+
+        // Шаг 1: код на ТЕКУЩИЙ email. Апсертит строку по UserId (тот же приём, что
+        // UpsertUserTokenAsync) — каждый вызов начинает флоу заново, хвосты прошлой
+        // незавершённой попытки (PendingNewEmail/NewEmailToken) сбрасываются.
+        public async Task<MessageResultModel> RequestEmailChangeAsync(int userId, RequestContextModel requestContext, CancellationToken cancellationToken = default)
+        {
+            var user = await UserRepository.AsQueryable()
+                                           .SingleOrDefaultAsync(x => x.Id == userId, cancellationToken)
+                       ?? throw InvalidCredentials();
+
+            var request = await EmailChangeRequestRepository.AsQueryable()
+                                                             .SingleOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+
+            var code = RandomTokenGenerator.CreateNumericCode(EmailChangeCodeLength);
+            var now = DateTime.UtcNow;
+
+            if (request is null)
+            {
+                request = new EmailChangeRequest { UserId = userId };
+                await EmailChangeRequestRepository.AddAsync(request, cancellationToken);
+            }
+
+            request.OldEmailCode = code;
+            request.OldEmailRequestedAtUtc = now;
+            request.OldEmailExpiresAtUtc = now.AddMinutes(EmailChangeCodeLifetimeMinutes);
+            request.OldEmailConfirmedAtUtc = null;
+            request.PendingNewEmail = null;
+            request.NewEmailToken = null;
+            request.NewEmailRequestedAtUtc = null;
+            request.NewEmailExpiresAtUtc = null;
+            request.RequestIp = requestContext.IpAddress;
+            request.UserAgent = requestContext.UserAgent;
+            request.UsedAtUtc = null;
+
+            await EmailChangeRequestRepository.SaveChangesAsync(cancellationToken);
+            await emailSender.SendEmailChangeOldEmailCodeAsync(user.Email, user.FirstName, code, cancellationToken);
+
+            return new MessageResultModel
+            {
+                Message = EmailChangeCodeSentMessage,
+                DevToken = emailSender.ExposesTokenToCaller ? code : null
+            };
+        }
+
+        // Шаг 2: подтверждение кода, присланного на старый email.
+        public async Task<MessageResultModel> ConfirmEmailChangeCodeAsync(int userId, ConfirmEmailChangeCodeModel model, CancellationToken cancellationToken = default)
+        {
+            var request = await EmailChangeRequestRepository.AsQueryable()
+                                                             .SingleOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+
+            var now = DateTime.UtcNow;
+
+            // "не использован" (спека B8) — код, уже подтверждённый ранее, повторно не проходит:
+            // пользователю нужно начать флоу заново запросом нового кода.
+            if (request is null || request.OldEmailConfirmedAtUtc.HasValue ||
+                request.OldEmailExpiresAtUtc <= now || request.OldEmailCode != model.Code)
+                throw EmailChangeCodeInvalid();
+
+            request.OldEmailConfirmedAtUtc = now;
+            await EmailChangeRequestRepository.SaveChangesAsync(cancellationToken);
+
+            return new MessageResultModel { Message = EmailChangeCodeConfirmedMessage };
+        }
+
+        // Шаг 3: новый email. Требует свежего OldEmailConfirmedAtUtc (то же 15-минутное окно,
+        // что и код) — иначе пользователь обязан начать заново с шага 1.
+        //
+        // РЕШЕНИЕ ДАВИДА (2026-08-06): в отличие от Register, занятый адрес отвечает явной
+        // 400-ошибкой (EmailAlreadyTaken), а не generic-200 — пользователь уже аутентифицирован,
+        // анти-энумерация из Register сюда не переносится.
+        public async Task<MessageResultModel> RequestNewEmailAsync(int userId, RequestNewEmailModel model, RequestContextModel requestContext, CancellationToken cancellationToken = default)
+        {
+            var request = await EmailChangeRequestRepository.AsQueryable()
+                                                             .SingleOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+
+            var now = DateTime.UtcNow;
+            if (request is null || !request.OldEmailConfirmedAtUtc.HasValue ||
+                request.OldEmailConfirmedAtUtc.Value.AddMinutes(EmailChangeCodeLifetimeMinutes) <= now)
+                throw new ErrorModelException(GlobalErrorCode.EmailChangeNotConfirmed, HttpStatusCode.BadRequest,
+                    "The old email code has not been confirmed, or the confirmation has expired. Start over.");
+
+            var user = await UserRepository.AsQueryable()
+                                           .SingleOrDefaultAsync(x => x.Id == userId, cancellationToken)
+                       ?? throw InvalidCredentials();
+
+            // РЕШЕНИЕ ДАВИДА: явная ошибка, не generic-200 (см. комментарий над методом).
+            if (string.Equals(model.NewEmail, user.Email, StringComparison.OrdinalIgnoreCase))
+                throw EmailAlreadyTaken();
+
+            var emailTaken = await UserRepository.AsQueryable()
+                                                 .AnyAsync(x => x.Email == model.NewEmail && !x.IsDeleted && x.Id != userId, cancellationToken);
+            if (emailTaken)
+                throw EmailAlreadyTaken();
+
+            var token = RandomTokenGenerator.Create();
+
+            request.PendingNewEmail = model.NewEmail;
+            request.NewEmailToken = token;
+            request.NewEmailRequestedAtUtc = now;
+            request.NewEmailExpiresAtUtc = now.AddMinutes(EmailTokenLifetimeMinutes);
+            request.RequestIp = requestContext.IpAddress;
+            request.UserAgent = requestContext.UserAgent;
+
+            await EmailChangeRequestRepository.SaveChangesAsync(cancellationToken);
+            await emailSender.SendEmailChangeConfirmationAsync(model.NewEmail, user.FirstName, token, cancellationToken);
+
+            return new MessageResultModel
+            {
+                Message = EmailChangeConfirmationSentMessage,
+                DevToken = emailSender.ExposesTokenToCaller ? token : null
+            };
+        }
+
+        // Шаг 4: переход по ссылке из письма на новый email — AllowAnonymous (та же логика,
+        // что VerifyEmailAsync: ссылка может открыться без живого access-токена).
+        //
+        // РЕШЕНИЕ ДАВИДА (2026-08-06): отзывает ВСЕ живые сессии пользователя как часть той же
+        // транзакции — форс ре-логин на всех устройствах после смены логин-email.
+        public async Task<MessageResultModel> ConfirmEmailChangeAsync(ConfirmEmailChangeModel model, CancellationToken cancellationToken = default)
+        {
+            var request = await EmailChangeRequestRepository.AsQueryable()
+                                                             .Include(x => x.User)
+                                                             .SingleOrDefaultAsync(x => x.NewEmailToken == model.Token, cancellationToken);
+
+            var now = DateTime.UtcNow;
+            if (request is null || request.UsedAtUtc.HasValue || request.PendingNewEmail is null ||
+                !request.NewEmailExpiresAtUtc.HasValue || request.NewEmailExpiresAtUtc.Value <= now)
+                throw EmailChangeLinkInvalid();
+
+            // Race-guard (спека B8): адрес мог быть занят другим пользователем между шагом 3
+            // и переходом по ссылке.
+            var emailTaken = await UserRepository.AsQueryable()
+                                                 .AnyAsync(x => x.Email == request.PendingNewEmail && !x.IsDeleted && x.Id != request.UserId, cancellationToken);
+            if (emailTaken)
+                throw EmailAlreadyTaken();
+
+            using var transaction = TransactionsHelper.CreateAsyncTransactionScope();
+
+            request.User.Email = request.PendingNewEmail;
+            request.UsedAtUtc = now;
+
+            // Форс ре-логин на всех устройствах (решение Давида, 2026-08-06) — тот же приём,
+            // что уже использует ResetPasswordAsync.
+            await RevokeAllRefreshTokensAsync(request.UserId, now, null, cancellationToken);
+
+            await UserRepository.SaveChangesAsync(cancellationToken);
+            transaction.Complete();
+
+            return new MessageResultModel { Message = EmailChangedMessage };
         }
 
         #endregion
@@ -499,6 +683,15 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
         private static ErrorModelException RefreshTokenInvalid()
             => new(GlobalErrorCode.RefreshTokenInvalid, HttpStatusCode.Unauthorized, "Refresh token is invalid or expired.");
+
+        private static ErrorModelException EmailChangeCodeInvalid()
+            => new(GlobalErrorCode.EmailChangeCodeInvalid, HttpStatusCode.BadRequest, "Email change code is invalid or expired.");
+
+        private static ErrorModelException EmailChangeLinkInvalid()
+            => new(GlobalErrorCode.EmailChangeLinkInvalid, HttpStatusCode.BadRequest, "Email change link is invalid or expired.");
+
+        private static ErrorModelException EmailAlreadyTaken()
+            => new(GlobalErrorCode.EmailAlreadyTaken, HttpStatusCode.BadRequest, "This email address is already taken.");
 
         #endregion
     }

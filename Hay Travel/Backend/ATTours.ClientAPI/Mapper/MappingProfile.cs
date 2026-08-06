@@ -319,7 +319,9 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Longitude, opt => opt.MapFrom(src => src.Longitude))
                 .ForMember(dest => dest.ImageUrl, opt => opt.MapFrom(src => src.ImageUrl))
                 .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
-                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations))
+                .ForMember(dest => dest.Images,
+                    opt => opt.MapFrom(src => src.Images.OrderBy(i => i.SortOrder)));
 
             // PlaceCreateModel -> Place
             CreateMap<PlaceCreateModel, Place>()
@@ -332,7 +334,8 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Longitude, opt => opt.MapFrom(src => src.Longitude))
                 .ForMember(dest => dest.ImageUrl, opt => opt.MapFrom(src => src.ImageUrl))
                 .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
-                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations))
+                .ForMember(dest => dest.Images, opt => opt.MapFrom(src => src.Images));
 
             // PlaceInfoModel -> Place (для обновления, Update идёт через Info-модель с Id)
             CreateMap<PlaceInfoModel, Place>()
@@ -345,7 +348,31 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Longitude, opt => opt.MapFrom(src => src.Longitude))
                 .ForMember(dest => dest.ImageUrl, opt => opt.MapFrom(src => src.ImageUrl))
                 .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
-                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations))
+                .ForMember(dest => dest.Images, opt => opt.MapFrom(src => src.Images));
+
+            // ============= Mappings for PLACEIMAGE =============
+            // Множественные фото точки (B10, 2026-08-06), по образцу GalleryImage.
+
+            // PlaceImage -> PlaceImageInfoModel
+            CreateMap<PlaceImage, PlaceImageInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.Url, opt => opt.MapFrom(src => src.Url))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder));
+
+            // PlaceImageCreateModel -> PlaceImage
+            CreateMap<PlaceImageCreateModel, PlaceImage>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.PlaceId, opt => opt.Ignore())
+                .ForMember(dest => dest.Place, opt => opt.Ignore());
+
+            // PlaceImageInfoModel -> PlaceImage (для обновления)
+            CreateMap<PlaceImageInfoModel, PlaceImage>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.Url, opt => opt.MapFrom(src => src.Url))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
+                .ForMember(dest => dest.PlaceId, opt => opt.Ignore())
+                .ForMember(dest => dest.Place, opt => opt.Ignore());
 
             // ============= Mappings for EXPENSETEMPLATE =============
             // Каталог шаблонов расходов (3.4). Дефолтной суммы не несёт (D-8).
@@ -425,6 +452,20 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.IsEmailVerified, opt => opt.MapFrom(src => src.IsEmailVerified))
                 .ForMember(dest => dest.IsLocked,
                     opt => opt.MapFrom(src => src.LockedUntil.HasValue && src.LockedUntil.Value > DateTime.UtcNow));
+
+            // User -> UserDetailInfoModel (B13, 2026-08-06). Требует загруженного Role, как
+            // и UserInfoModel выше.
+            CreateMap<User, UserDetailInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.RoleId, opt => opt.MapFrom(src => src.RoleId))
+                .ForMember(dest => dest.Role, opt => opt.MapFrom(src => src.Role.Type))
+                .ForMember(dest => dest.IsEmailVerified, opt => opt.MapFrom(src => src.IsEmailVerified))
+                .ForMember(dest => dest.IsLocked,
+                    opt => opt.MapFrom(src => src.LockedUntil.HasValue && src.LockedUntil.Value > DateTime.UtcNow))
+                .ForMember(dest => dest.LastActiveAtUtc, opt => opt.MapFrom(src => src.LastActiveAtUtc))
+                .ForMember(dest => dest.RegisteredAtUtc, opt => opt.MapFrom(src => src.RegisteredAtUtc))
+                .ForMember(dest => dest.RegisteredIp, opt => opt.MapFrom(src => src.RegisteredIp))
+                .ForMember(dest => dest.LastLoginIp, opt => opt.MapFrom(src => src.LastLoginIp));
 
             // ============= Mappings for translations =============
 
