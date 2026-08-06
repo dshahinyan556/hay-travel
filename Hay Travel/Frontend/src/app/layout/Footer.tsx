@@ -59,6 +59,7 @@ export function Footer() {
     catalogTitle: '',
     catalogSubtitle: '',
     featuredHeading: '',
+    largeGroupInvitation: '',
   })
 
   useEffect(() => {
