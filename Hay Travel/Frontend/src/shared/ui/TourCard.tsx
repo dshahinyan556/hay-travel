@@ -1,7 +1,8 @@
 import { Link } from 'react-router'
 import type { Tour } from '@/shared/types/tour'
 import { REGION_BY_SLUG } from '@/shared/data/armeniaRegions'
-import { formatDuration, formatPrice } from '@/shared/lib/format'
+import { formatDuration } from '@/shared/lib/format'
+import { useMoney } from '@/shared/currency'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { KindChip } from './Chip'
 import { ClockIcon, MapPinIcon } from './icons'
@@ -40,6 +41,9 @@ import { ClockIcon, MapPinIcon } from './icons'
  */
 export function TourCard({ tour }: { tour: Tour }) {
   const { locale, t } = useLocale()
+  // `shared/ui` → `shared/currency` is not a cycle, and threading a pre-formatted price down as a
+  // prop from all four render sites would be worse. This card is never rendered under `/admin`.
+  const money = useMoney()
   const regions = tour.regionSlugs.map((slug) =>
     locale === 'en' ? REGION_BY_SLUG[slug].en : REGION_BY_SLUG[slug].ru,
   )
@@ -95,9 +99,11 @@ export function TourCard({ tour }: { tour: Tour }) {
               {formatDuration(tour.durationDays, tour.durationNights, locale)}
             </span>
             <span className="text-right leading-tight">
+              {/* "цена от"/"from" — now true in two senses: the smallest group tier, and per
+                  person. `tour.priceFrom` is the base (1–4 guests) price. */}
               <span className="block text-[10px] tracking-wide text-ink-muted">{t('tourCard.priceFrom')}</span>
               <span className="font-display text-2xl text-gold-ink">
-                {formatPrice(tour.priceFrom, locale)}
+                {money.format(tour.priceFrom)}
               </span>
             </span>
           </div>

@@ -1,20 +1,24 @@
 import { useId, useRef, useState } from 'react'
-import { formatPrice } from '@/shared/lib/format'
+import { useMoney } from '@/shared/currency'
 import { useIsCompactViewport } from '@/shared/hooks'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { Popover, Sheet, SHEET_SINGLE_DETENT } from '@/shared/ui'
 import { ChevronDownIcon } from '@/shared/ui/icons'
-import { PRICE_STEP, type TourSort } from '../hooks/useTourFilters'
+import { type TourSort } from '../hooks/useTourFilters'
 
 interface PriceSortControlProps {
   id?: string
+  /** AMD, like everything in the URL — converted to the display currency at this component's edge. */
   minPrice: number | null
+  /** AMD, see `minPrice`. */
   maxPrice: number | null
   sort: TourSort
   onMinPriceChange: (value: number | null) => void
   onMaxPriceChange: (value: number | null) => void
   onSortChange: (value: TourSort) => void
+  /** AMD. */
   priceFloor: number
+  /** AMD. */
   priceCeiling: number
   'aria-labelledby'?: string
 }
@@ -28,6 +32,14 @@ interface PriceSortControlProps {
  * Holds two independent axes — a min/max range and a sort order — since neither implies the
  * other: a sort with no range still narrows nothing, and a range with no sort still leaves order
  * untouched. Both live in one dropdown rather than two separate controls to keep the bar compact.
+ *
+ * ── Currency (2026-08) ────────────────────────────────────────────────────────────────────────
+ * The bounds travel in AMD everywhere outside this file — props, `useTourFilters`,
+ * `?minPrice=`/`?maxPrice=` — so a shared catalog link means the same set of tours no matter which
+ * currency either person has selected. Conversion happens HERE, at the display edge only: the
+ * value shown, the value written back and the two placeholders. `money.amount`/`money.toAmd` are
+ * used (not `format`'s rounding step) precisely because they round-trip exactly — stepping a bound
+ * to hundreds would make the field snap while the visitor is still typing.
  */
 export function PriceSortControl({
   id,
@@ -46,7 +58,8 @@ export function PriceSortControl({
   const isCompact = useIsCompactViewport()
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const { locale, t } = useLocale()
+  const { t } = useLocale()
+  const money = useMoney()
 
   const SORT_OPTIONS: { value: TourSort; label: string }[] = [
     { value: 'default', label: t('filter.price.sortDefault') },
@@ -60,11 +73,22 @@ export function PriceSortControl({
   const isActive = minPrice !== null || maxPrice !== null || sort !== 'default'
   const label = t('filter.price.label')
 
+  // The upper clamp has to be applied in the DISPLAY currency (that is the number the visitor
+  // typed), then converted back to AMD once — clamping in AMD after conversion could land a
+  // rounding step above the ceiling.
+  const displayCeiling = money.amount(priceCeiling)
+
+  /** Typed display-currency string → AMD bound (or `null` for "no limit"). */
   function parseBound(raw: string): number | null {
     if (raw.trim() === '') return null
     const value = Number(raw)
     if (!Number.isFinite(value)) return null
-    return Math.min(Math.max(value, 0), priceCeiling)
+    return money.toAmd(Math.min(Math.max(value, 0), displayCeiling))
+  }
+
+  /** AMD bound → the value the `<input>` shows. `''` keeps the field empty (placeholder visible). */
+  function displayBound(amd: number | null): number | '' {
+    return amd === null ? '' : money.amount(amd)
   }
 
   function blockMinusKey(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -81,9 +105,9 @@ export function PriceSortControl({
             type="number"
             inputMode="numeric"
             min={0}
-            step={PRICE_STEP}
-            placeholder={t('filter.price.fromPlaceholder', { value: formatPrice(priceFloor, locale) })}
-            value={minPrice ?? ''}
+            step={money.currency.roundingStep}
+            placeholder={t('filter.price.fromPlaceholder', { value: money.format(priceFloor) })}
+            value={displayBound(minPrice)}
             onChange={(e) => onMinPriceChange(parseBound(e.target.value))}
             onKeyDown={blockMinusKey}
             className="w-full appearance-none rounded-lg border border-edge-strong bg-panel-raised px-2.5 py-1.5 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
@@ -96,9 +120,9 @@ export function PriceSortControl({
             type="number"
             inputMode="numeric"
             min={0}
-            step={PRICE_STEP}
-            placeholder={t('filter.price.toPlaceholder', { value: formatPrice(priceCeiling, locale) })}
-            value={maxPrice ?? ''}
+            step={money.currency.roundingStep}
+            placeholder={t('filter.price.toPlaceholder', { value: money.format(priceCeiling) })}
+            value={displayBound(maxPrice)}
             onChange={(e) => onMaxPriceChange(parseBound(e.target.value))}
             onKeyDown={blockMinusKey}
             className="w-full appearance-none rounded-lg border border-edge-strong bg-panel-raised px-2.5 py-1.5 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"

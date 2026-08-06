@@ -4,6 +4,7 @@ import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { getLogoUrl } from '@/shared/api/siteSettings'
 import { MountainIcon } from '@/shared/ui/icons'
 import { ThemeToggle } from './ThemeToggle'
+import { CurrencySwitch } from './CurrencySwitch'
 import { LanguageSwitch } from './LanguageSwitch'
 import { UserMenu } from './UserMenu'
 
@@ -16,7 +17,7 @@ import { UserMenu } from './UserMenu'
  * Primary links live here only from `lg` up. Below that they move to the fixed bottom
  * `MobileTabBar` (a sibling in `RootLayout`, not rendered here) — a pill this compact has no room
  * left for both a link row and the utility controls at 375px, so mobile keeps only brand +
- * language/theme here and gets its primary navigation from the bottom bar instead.
+ * currency/language/theme here and gets its primary navigation from the bottom bar instead.
  */
 export function Header() {
   const { t } = useLocale()
@@ -56,7 +57,14 @@ export function Header() {
               <span className="text-gold-ink">
                 <MountainIcon size={22} />
               </span>
-              <span className="text-gold-sheen font-display text-xl leading-none font-semibold tracking-wide sm:text-2xl">
+              {/*
+                Hidden below `sm` (2026-08 currency pass): with `CurrencySwitch` added the capsule
+                spends ~180px on utility controls at 375px, and the wordmark's own ~140px no longer
+                fits next to it. The `MountainIcon` stays, so the brand and the link back to `/` are
+                both still there. The custom-logo `<img>` branch above is already `h-7 sm:h-8` and
+                needs no equivalent.
+              */}
+              <span className="text-gold-sheen hidden font-display text-xl leading-none font-semibold tracking-wide sm:inline sm:text-2xl">
                 Hay Travel
               </span>
             </>
@@ -84,6 +92,13 @@ export function Header() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
+          {/*
+            Currency first, and on EVERY viewport — no `lg:` gate. On a travel catalog "what does
+            this cost in my money" is a higher-intent question than theme or language, and mobile is
+            the majority of the traffic. It does NOT go in `MobileTabBar`: that bar's contract is
+            four navigation destinations, and a stateful non-navigating control would break it.
+          */}
+          <CurrencySwitch />
           <LanguageSwitch />
           <ThemeToggle />
           {/* Renders the same gold "Войти" pill when signed out, an account dropdown when in. */}

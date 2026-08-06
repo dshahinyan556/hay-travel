@@ -2,7 +2,8 @@ import { Link } from 'react-router'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { Region } from '@/shared/data/armeniaRegions'
 import type { Tour } from '@/shared/types/tour'
-import { formatDuration, formatPrice, formatTourCount } from '@/shared/lib/format'
+import { formatDuration, formatTourCount } from '@/shared/lib/format'
+import { useMoney } from '@/shared/currency'
 import { useReducedMotion } from '@/shared/hooks'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { KindChip } from '@/shared/ui/Chip'
@@ -158,6 +159,7 @@ export function RegionPanel({ region, state, onClose, onRetry }: RegionPanelProp
  */
 function RegionTourRow({ tour }: { tour: Tour }) {
   const { locale } = useLocale()
+  const money = useMoney()
 
   return (
     <Link
@@ -186,7 +188,7 @@ function RegionTourRow({ tour }: { tour: Tour }) {
             {formatDuration(tour.durationDays, tour.durationNights, locale)}
           </span>
           <span className="font-display text-lg text-gold-ink">
-            {formatPrice(tour.priceFrom, locale)}
+            {money.format(tour.priceFrom)}
           </span>
         </div>
       </div>

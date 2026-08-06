@@ -46,6 +46,10 @@ namespace ATTours.Helper.Enums
         CatalogEntryInUse = 2010,
         [Description("At most 6 tours can be featured at once.")]
         TooManyFeaturedTours = 2011,
+        // Отдаётся только на холодном старте: курс не был сохранён ни разу, и CBA недоступен.
+        // Если хоть один курс когда-либо записан, эндпоинт отдаёт его с IsStale = true, а не ошибку.
+        [Description("Exchange rates are not available yet.")]
+        ExchangeRatesUnavailable = 2012,
 
         #endregion
 
