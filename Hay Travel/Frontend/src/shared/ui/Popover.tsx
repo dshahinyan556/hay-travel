@@ -12,6 +12,15 @@ interface Position {
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max))
 
+/** Sub-pixel tolerance for "the panel has not moved" — see the call site in `recompute`. */
+const POSITION_EPSILON_PX = 0.5
+
+const sameNumber = (a: number | undefined, b: number | undefined) =>
+  a === b || (a !== undefined && b !== undefined && Math.abs(a - b) < POSITION_EPSILON_PX)
+
+const samePosition = (a: Position, b: Position) =>
+  sameNumber(a.top, b.top) && sameNumber(a.left, b.left) && sameNumber(a.width, b.width)
+
 /**
  * Flip-and-clamp placement, computed from two already-measured rects — pure, so it is testable
  * without a DOM and does not care how the caller obtained the rects.
@@ -46,9 +55,10 @@ function computePosition(
       )
 
   // `matchAnchorWidth` is a FLOOR, not a fixed width: the panel is never narrower than the anchor,
-  // but a long option label is allowed to make it wider. `panelRect` here is measured before any
-  // width constraint has been applied (see the call site's comment on why that stays true on every
-  // subsequent measurement too), so it already reflects the content's natural/unconstrained width.
+  // but a long option label is allowed to make it wider. On the first pass `panelRect` is the
+  // content's natural width (no constraint applied yet); on every later pass it is the width we
+  // already applied, and `max()` of a value with itself is a fixed point — which is what lets the
+  // bail-out below actually fire.
   const width = matchAnchorWidth ? Math.max(anchorRect.width, panelRect.width) : panelRect.width
   const left = clamp(
     anchorRect.left,
@@ -120,11 +130,12 @@ export function Popover({
     // option list changing) stays correctly placed — so without this check, `setPosition` would
     // hand back a new object every time, `useLayoutEffect` would never see a stable render to
     // stop at, and the two would loop forever.
-    setPosition((prev) =>
-      prev && prev.top === next.top && prev.left === next.left && prev.width === next.width
-        ? prev
-        : next,
-    )
+    //
+    // Compared with a sub-pixel tolerance rather than `===` because the measured rect is a float:
+    // at a fractional device pixel ratio (browser zoom, 125% Windows scaling) a width we applied
+    // can be read back a hundredth of a pixel off, which `===` would treat as "it moved" forever.
+    // Half a pixel is below what any display can show, so nothing visible is being discarded.
+    setPosition((prev) => (prev && samePosition(prev, next) ? prev : next))
   }, [anchorRef, matchAnchorWidth])
 
   // Measure synchronously after the (invisible) panel has laid out, so the very first visible
@@ -175,6 +186,23 @@ export function Popover({
   if (!open) return null
 
   return createPortal(
+    // Two elements on purpose, and they must stay two.
+    //
+    // OUTER = geometry. It is the element `panelRef` measures and the element the measurement is
+    // written back to (`top`/`left`/`width`). It must never carry a `transform`, because
+    // `getBoundingClientRect()` returns the VISUALLY transformed box: measuring an element that is
+    // mid-`scale()` and then writing that reading into its layout `width` feeds the scale factor
+    // back into the geometry. `width` is not a transitioned property, so it applies instantly,
+    // while the entrance transition has not advanced by a single frame between two synchronous
+    // `useLayoutEffect` passes — so every pass multiplied the width by the scale factor again
+    // (0.98, 0.9604, …), `setPosition` never repeated itself, the bail-out above never fired and
+    // the whole thing looped until React threw "Maximum update depth exceeded".
+    //
+    // INNER = appearance. The entrance animation and all caller chrome live here. A transform on
+    // this element cannot disturb the measurement, because a child's transform does not affect its
+    // parent's layout box. Its width is auto, so it fills whatever the outer element resolved to
+    // (and, before any width is applied, the outer shrink-to-fits around it — that is how the
+    // natural width gets measured in the first place).
     <div
       ref={panelRef}
       style={{
@@ -183,15 +211,21 @@ export function Popover({
         left: position?.left ?? 0,
         width: position?.width,
         visibility: position ? 'visible' : 'hidden',
-        opacity: position ? 1 : 0,
-        transform: position ? 'translateY(0) scale(1)' : 'translateY(-4px) scale(0.98)',
-        transitionProperty: 'opacity, transform',
-        transitionDuration: 'var(--dur-fast)',
-        transitionTimingFunction: 'var(--ease-out-soft)',
       }}
-      className={`z-50 ${className}`}
+      className="z-50"
     >
-      {children}
+      <div
+        style={{
+          opacity: position ? 1 : 0,
+          transform: position ? 'translateY(0) scale(1)' : 'translateY(-4px) scale(0.98)',
+          transitionProperty: 'opacity, transform',
+          transitionDuration: 'var(--dur-fast)',
+          transitionTimingFunction: 'var(--ease-out-soft)',
+        }}
+        className={className}
+      >
+        {children}
+      </div>
     </div>,
     document.body,
   )

@@ -44,6 +44,11 @@ const ru = {
   'currency.switchAriaLabel': 'Валюта отображения цен',
   'currency.optionAriaLabel': '{code}',
   'currency.unavailable': 'Курсы валют временно недоступны — цены показаны в драмах',
+  // Desktop panel only (2026-08 redesign) — mobile's `Sheet` rows stay symbol+code, no rate line.
+  'currency.rateNote': '1 {code} ≈ {amount}',
+  'currency.baseCurrency': 'Базовая валюта',
+  'currency.updatedAt': 'Курс обновлён в {time}',
+  'currency.rateStale': 'Курс мог устареть',
 
   // ── Home page ─────────────────────────────────────────────────────────────────────────────
   'home.hero.season': 'Сезон 2026 открыт',
@@ -225,6 +230,9 @@ const ru = {
   'auth.phoneHelpBody':
     'Нужен только для связи по бронированию — подтвердим детали тура и адрес отправления.',
   'auth.phoneIncomplete': 'Похоже, номер введён не полностью',
+  'auth.countrySelectLabel': 'Код страны',
+  'auth.countrySearchPlaceholder': 'Найти страну',
+  'auth.countryNoResults': 'Страна не найдена',
   'auth.password': 'Пароль',
   'auth.confirmPassword': 'Повторите пароль',
   'auth.forgotPassword': 'Забыли пароль?',
@@ -270,7 +278,6 @@ const ru = {
   'auth.forceChangeNotice': 'Прежде чем продолжить, нужно сменить пароль.',
 
   // Account (signed in)
-  'auth.accountTitle': 'Ваш аккаунт',
   'auth.accountMenu': 'Меню аккаунта',
   'auth.accountRole': 'Роль',
   'auth.role.regular': 'Пользователь',
@@ -278,6 +285,47 @@ const ru = {
   'auth.role.admin': 'Администратор',
   'auth.goToPanel': 'Панель',
   'auth.logout': 'Выйти',
+
+  // ── Личный кабинет `/account` ─────────────────────────────────────────────────────────────
+  'account.title': 'Личный кабинет',
+  'account.fullName': 'Имя и фамилия',
+  'account.emailStatus': 'Статус почты',
+  'account.emailVerified': 'Подтверждена',
+  'account.emailUnverified': 'Не подтверждена',
+  'account.change': 'Изменить',
+  'account.close': 'Свернуть',
+  'account.cancel': 'Отмена',
+  'account.changeEmailAria': 'Изменить email',
+  'account.changePhoneAria': 'Изменить телефон',
+  'account.changePasswordAria': 'Изменить пароль',
+  'account.phoneNotSet': 'Не указан',
+  'account.phoneSubmit': 'Сохранить телефон',
+  'account.phoneSaved': 'Телефон обновлён.',
+
+  // Смена email — шаги 1-3 здесь, шаг 4 на отдельной странице.
+  'account.emailIntro':
+    'Смена почты в два подтверждения: сначала код на текущий адрес {email}, затем ссылка на новый.',
+  'account.emailStart': 'Сменить email',
+  'account.emailCodeSent': 'Мы отправили код на {email}. Введите его ниже.',
+  'account.emailCodeLabel': 'Код из письма',
+  'account.emailCodeSubmit': 'Подтвердить код',
+  'account.emailCodeAccepted': 'Код принят. Укажите новый адрес — на него придёт ссылка.',
+  'account.newEmailLabel': 'Новый email',
+  'account.newEmailSubmit': 'Отправить ссылку',
+  'account.emailLinkSent': 'Ссылка отправлена на {email}. Откройте её, чтобы завершить смену.',
+  'account.emailLinkLogoutWarning':
+    'После подтверждения нужно будет войти заново — уже с новым адресом.',
+  'account.devCodeHint': 'Режим разработки: письма не отправляются, код ниже.',
+
+  // Шаг 4 — страница по ссылке из письма.
+  'account.confirmTitle': 'Смена email',
+  'account.confirmPending': 'Проверяем ссылку…',
+  'account.confirmSuccess': 'Email изменён. Войдите заново с новым адресом.',
+
+  'account.error.codeInvalid': 'Код неверный или уже истёк.',
+  'account.error.linkInvalid': 'Ссылка недействительна или устарела.',
+  'account.error.notConfirmed': 'Сначала подтвердите код со старого адреса.',
+  'account.error.emailTaken': 'Этот email уже занят другим аккаунтом.',
 
   // Errors
   'auth.error.invalidCredentials': 'Неверный логин или пароль.',
@@ -320,6 +368,10 @@ const en: Record<TranslationKey, string> = {
   'currency.switchAriaLabel': 'Display currency',
   'currency.optionAriaLabel': '{code}',
   'currency.unavailable': 'Exchange rates are unavailable — prices are shown in drams',
+  'currency.rateNote': '1 {code} ≈ {amount}',
+  'currency.baseCurrency': 'Base currency',
+  'currency.updatedAt': 'Rate updated at {time}',
+  'currency.rateStale': 'Rate may be outdated',
 
   'home.hero.season': '2026 season is open',
   'home.hero.regionsCta': 'Region map',
@@ -480,6 +532,9 @@ const en: Record<TranslationKey, string> = {
   'auth.phoneHelpBody':
     "It's only used to reach you about a booking — to confirm the trip's details and pickup address.",
   'auth.phoneIncomplete': "That number doesn't look complete yet",
+  'auth.countrySelectLabel': 'Country code',
+  'auth.countrySearchPlaceholder': 'Find a country',
+  'auth.countryNoResults': 'No country found',
   'auth.password': 'Password',
   'auth.confirmPassword': 'Repeat password',
   'auth.forgotPassword': 'Forgot password?',
@@ -517,7 +572,6 @@ const en: Record<TranslationKey, string> = {
   'auth.changeSuccess': 'Password updated.',
   'auth.forceChangeNotice': 'You must change your password before continuing.',
 
-  'auth.accountTitle': 'Your account',
   'auth.accountMenu': 'Account menu',
   'auth.accountRole': 'Role',
   'auth.role.regular': 'Customer',
@@ -525,6 +579,44 @@ const en: Record<TranslationKey, string> = {
   'auth.role.admin': 'Administrator',
   'auth.goToPanel': 'Panel',
   'auth.logout': 'Log out',
+
+  'account.title': 'My account',
+  'account.fullName': 'Full name',
+  'account.emailStatus': 'Email status',
+  'account.emailVerified': 'Verified',
+  'account.emailUnverified': 'Not verified',
+  'account.change': 'Change',
+  'account.close': 'Collapse',
+  'account.cancel': 'Cancel',
+  'account.changeEmailAria': 'Change email',
+  'account.changePhoneAria': 'Change phone number',
+  'account.changePasswordAria': 'Change password',
+  'account.phoneNotSet': 'Not set',
+  'account.phoneSubmit': 'Save phone number',
+  'account.phoneSaved': 'Phone number updated.',
+
+  'account.emailIntro':
+    'Changing your email takes two confirmations: a code sent to {email}, then a link sent to the new address.',
+  'account.emailStart': 'Change email',
+  'account.emailCodeSent': 'We sent a code to {email}. Enter it below.',
+  'account.emailCodeLabel': 'Code from the email',
+  'account.emailCodeSubmit': 'Confirm code',
+  'account.emailCodeAccepted': 'Code accepted. Enter the new address — we will send a link to it.',
+  'account.newEmailLabel': 'New email',
+  'account.newEmailSubmit': 'Send the link',
+  'account.emailLinkSent': 'A link was sent to {email}. Open it to finish the change.',
+  'account.emailLinkLogoutWarning':
+    'Once confirmed, you will need to log in again — with the new address.',
+  'account.devCodeHint': 'Development mode: no email is sent, the code is below.',
+
+  'account.confirmTitle': 'Email change',
+  'account.confirmPending': 'Checking the link…',
+  'account.confirmSuccess': 'Email changed. Log in again with the new address.',
+
+  'account.error.codeInvalid': 'That code is wrong or has expired.',
+  'account.error.linkInvalid': 'This link is invalid or has expired.',
+  'account.error.notConfirmed': 'Confirm the code from your old address first.',
+  'account.error.emailTaken': 'That email already belongs to another account.',
 
   'auth.error.invalidCredentials': 'Wrong username or password.',
   'auth.error.accountLocked':

@@ -1,46 +1,55 @@
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router'
+import { redirect, useLocation, useNavigate } from 'react-router'
+import type { LoaderFunctionArgs } from 'react-router'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import {
   authErrorMessageKey,
+  ensureAuthReady,
   login,
-  logout,
   register,
-  useAuth,
   type LoginRequest,
   type RegisterRequest,
 } from '@/shared/auth'
 import { AuthShell } from './components/AuthShell'
 import { LoginForm } from './components/LoginForm'
 import { RegisterForm } from './components/RegisterForm'
-import { AccountPanel } from './components/AccountPanel'
 import { readReturnTo, withReturnTo } from './lib/returnTo'
 
 type Mode = 'login' | 'register'
 
 /**
+ * `/auth` is for signing IN. A visitor who already has a session is sent away (ADR 010, decision 3)
+ * — the account screen is now its own route, and rendering login tabs to someone already signed in
+ * was the confusing alternative this replaces.
+ *
+ * The destination is NOT always `/account`: a valid `?returnTo=` wins. Someone who followed a
+ * "sign in to book this" link and turns out to be signed in already should land on the booking, not
+ * in their profile. `readReturnTo` sanitises the value (it is attacker-controllable) and yields `/`
+ * when there is nothing usable — which is the one case that falls through to `/account`.
+ */
+export async function authPageLoader({ request }: LoaderFunctionArgs) {
+  const state = await ensureAuthReady()
+  if (!state.user) return null
+
+  const returnTo = readReturnTo(new URL(request.url).search)
+  throw redirect(returnTo === '/' ? '/account' : returnTo)
+}
+
+/**
  * `/auth` — the container for signing in and signing up.
  *
- * Three states in one route rather than three URLs:
- *  - signed in → `AccountPanel` (bouncing a signed-in visitor away from a page they navigated to
- *    would just look broken; and this is where the header's user menu points);
- *  - `login` / `register` tabs otherwise.
- *
- * `?returnTo=` is honoured on successful sign-in (sanitised in `lib/returnTo` — it is
- * attacker-controllable). Registration does NOT sign anyone in: the account is unverified until
- * the emailed link is used, so it hands off to `/auth/check-email` with the address and, in dev,
- * the token the backend echoed back.
+ * `?returnTo=` is honoured on successful sign-in (sanitised in `lib/returnTo`). Registration does
+ * NOT sign anyone in: the account is unverified until the emailed link is used, so it hands off to
+ * `/auth/check-email` with the address and, in dev, the token the backend echoed back.
  */
 export function AuthPage() {
   const [mode, setMode] = useState<Mode>('login')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   const { t } = useLocale()
   const navigate = useNavigate()
   const location = useLocation()
-  const { user } = useAuth()
 
   const returnTo = readReturnTo(location.search)
   const isRegister = mode === 'register'
@@ -79,23 +88,6 @@ export function AuthPage() {
     }
   }
 
-  async function handleLogout() {
-    setIsLoggingOut(true)
-    try {
-      await logout()
-    } finally {
-      setIsLoggingOut(false)
-    }
-  }
-
-  if (user) {
-    return (
-      <AuthShell title={t('auth.accountTitle')} subtitle={user.email}>
-        <AccountPanel user={user} onLogout={handleLogout} isLoggingOut={isLoggingOut} />
-      </AuthShell>
-    )
-  }
-
   return (
     <AuthShell
       title={isRegister ? t('auth.createAccount') : t('auth.welcomeBack')}
@@ -123,7 +115,10 @@ export function AuthPage() {
             }}
             aria-checked={mode === value}
             className={[
-              'flex-1 cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)]',
+              // `transition-colors` alone leaves `shadow-sm` snapping in/out instantly while the
+              // background fades — the mismatch is what reads as "not smooth". Listing `box-shadow`
+              // explicitly alongside color puts both on the same fade.
+              'flex-1 cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition-[color,background-color,box-shadow] duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)]',
               mode === value ? 'bg-wine text-gold-light shadow-sm' : 'text-ink-dim hover:text-gold-ink',
             ].join(' ')}
           >

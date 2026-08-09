@@ -91,10 +91,16 @@ namespace ATTours.Helper.Enums
         CannotDeleteSelf = 2212,
         [Description("Account has been deleted.")]
         AccountDeleted = 2213,
-        [Description("The Admin role can only be changed directly in the database.")]
+        // 2214/2215 стали недостижимы с D3 (2026-08-09): безусловный запрет на Admin-роль и
+        // Admin-аккаунт заменён проверкой прав действующего пользователя (2216). Коды
+        // оставлены занятыми, чтобы не переиспользовать их под другой смысл, а тексты
+        // приведены к действующему правилу — «в базе руками» больше не единственный путь.
+        [Description("Only a super administrator can manage administrator accounts.")]
         AdminRoleImmutable = 2214,
-        [Description("An Admin account can only be deleted directly in the database.")]
+        [Description("Only a super administrator can manage administrator accounts.")]
         AdminAccountImmutable = 2215,
+        [Description("Only a super administrator can manage administrator accounts.")]
+        SuperAdminPrivilegeRequired = 2216,
         #endregion
 
         [Description("Endpoint not existing")]

@@ -6,6 +6,12 @@ interface UsersTableProps {
   users: UserInfoModel[]
   /** Id of the signed-in admin — their own row cannot change its role (see `RoleSelect`). */
   currentUserId: number
+  /**
+   * `canManageAdmins(actor)` — is the signed-in admin the SuperAdmin (D3)? Passed as a CAPABILITY,
+   * not as the actor object, so this component stays presentational (the same convention
+   * `UserDangerZone.canDelete` already follows).
+   */
+  canManageAdmins: boolean
   /** Id of the row whose PATCH is in flight, or null. */
   pendingId: number | null
   /** True while any mutation or revalidation is running. */
@@ -47,6 +53,7 @@ function StatusBadges({ user }: { user: UserInfoModel }) {
 export function UsersTable({
   users,
   currentUserId,
+  canManageAdmins,
   pendingId,
   isBusy,
   onChangeRole,
@@ -68,11 +75,13 @@ export function UsersTable({
         <tbody>
           {users.map((user) => {
             const isSelf = user.id === currentUserId
-            // B6 (2026-08-06): the backend's role-change guard is now unconditional — a target
-            // whose CURRENT role is Admin cannot have it changed by anyone, not even another
-            // Admin, except directly in the database. `&& !isSelf` avoids picking a formulation
-            // when both are true — the self case already has its own, more specific text below.
+            // `&& !isSelf` avoids picking a formulation when both are true — the self case has its
+            // own, more specific text below.
             const isTargetAdmin = user.role === RoleType.Admin && !isSelf
+            // D3 (2026-08-09) relaxed B6's unconditional lock: another Admin's role is still frozen
+            // for everyone EXCEPT the SuperAdmin, who may now demote them. Previously this was just
+            // `isTargetAdmin`.
+            const roleLocked = isTargetAdmin && !canManageAdmins
             const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ')
             return (
               <tr
@@ -100,7 +109,8 @@ export function UsersTable({
                   <RoleSelect
                     value={user.role}
                     onChange={(role) => onChangeRole(user, role)}
-                    disabled={isSelf || isTargetAdmin || isBusy || pendingId === user.id}
+                    disabled={isSelf || roleLocked || isBusy || pendingId === user.id}
+                    allowAdminOption={canManageAdmins}
                     userLabel={fullName || user.username}
                   />
                   {isSelf ? (
@@ -108,7 +118,7 @@ export function UsersTable({
                       Свою роль изменить нельзя
                     </p>
                   ) : (
-                    isTargetAdmin && (
+                    roleLocked && (
                       <p className="mt-1 text-[11px] text-neutral-500">{ADMIN_ROLE_IMMUTABLE_HINT}</p>
                     )
                   )}

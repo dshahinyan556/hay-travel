@@ -17,7 +17,13 @@
  *    visitor does not fire a doomed `RefreshToken` request on every page load.
  *
  * After a cold reload the user object is rebuilt by decoding the access-token payload rather than
- * fetching a profile: the backend has no `Me` endpoint and adding one was out of scope (ADR 007).
+ * fetching a profile: `GET api/Account/Me` exists since 2026-08-09 but is the ACCOUNT screen's
+ * concern (it needs name/phone), not the session's — the store still only needs what the token
+ * already carries (ADR 007).
+ *
+ * INVARIANT (ADR 011): `AuthUser.isSuperAdmin` is written ONLY from a decoded access token. No
+ * path that builds a user from a `UserInfoModel` may overwrite it — that DTO never carries the
+ * flag, so "not present" there means "unknown", not "false".
  */
 
 import { loginRequest, logoutRequest, refreshRequest, registerRequest } from './authApi'
@@ -176,6 +182,44 @@ function roleClaim(payload: Record<string, unknown>): RoleType | undefined {
 }
 
 /**
+ * Read the `is_super_admin` claim as a boolean (ADR 011, decision 3).
+ *
+ * The tolerance is not defensive padding, it is the actual contract: an ASP.NET `Claim` value is
+ * ALWAYS a string, so a boolean claim arrives as `"true"` and a naive `payload.is_super_admin ===
+ * true` would silently evaluate to `false` and disable the whole feature. Numbers are accepted too
+ * in case the claim is ever emitted as `JsonClaimValueTypes.Integer`.
+ *
+ * Absence is the normal case — the backend adds the claim only when the flag is set.
+ */
+function isSuperAdminClaim(payload: Record<string, unknown>): boolean {
+  const raw = payload.is_super_admin
+  const value = Array.isArray(raw) ? raw[0] : raw
+  if (value === true) return true
+  if (typeof value === 'number') return value === 1
+  if (typeof value === 'string') return value.toLowerCase() === 'true' || value === '1'
+  return false
+}
+
+/**
+ * `is_super_admin` straight from a raw token — for the paths that have a token but do not (re)build
+ * the whole user from it: `login()` (which gets a richer user from the response body) and the
+ * mid-session refresh.
+ *
+ * Not verified, and it does not need to be: the backend re-reads the flag FROM THE DATABASE on
+ * every guarded endpoint (`SuperAdminPrivilegeRequired`, 403), so a forged payload buys nothing but
+ * a button that answers 403 — exactly the same reasoning ADR 007 records for `role`.
+ */
+function superAdminFromToken(token: string): boolean {
+  try {
+    const [, payloadSegment] = token.split('.')
+    if (!payloadSegment) return false
+    return isSuperAdminClaim(JSON.parse(decodeBase64Url(payloadSegment)) as Record<string, unknown>)
+  } catch {
+    return false
+  }
+}
+
+/**
  * Rebuild the user from the access token's payload.
  *
  * The signature is NOT verified here — it cannot be, the key is server-side. That is fine: this
@@ -199,7 +243,9 @@ export function decodeAccessToken(token: string): AuthUser | null {
 
     if (!Number.isInteger(id) || id <= 0 || !username || !email || role === undefined) return null
 
-    return { id, username, email, role }
+    // Write site 2 of 4 for `isSuperAdmin` (ADR 011): the cold-reload path, where this decode IS
+    // the user.
+    return { id, username, email, role, isSuperAdmin: isSuperAdminClaim(payload) }
   } catch {
     return null
   }
@@ -296,14 +342,28 @@ export function refreshAccessToken(): Promise<string | null> {
 
       // The refresh response carries no user — on a cold reload this decode IS the user. On a
       // routine mid-session refresh we already have a richer object (from `Login`) and keep it.
-      const user = state.user ?? decodeAccessToken(result.accessToken)
+      const existing = state.user
+      const user = existing ?? decodeAccessToken(result.accessToken)
       if (!user) {
         clearSession()
         setState({ status: 'anonymous', user: null, forceChangePassword: false })
         return null
       }
 
-      setState({ status: 'authenticated', user, forceChangePassword: state.forceChangePassword })
+      // Write site 3 of 4 (ADR 011). The token is re-issued roughly every 15 minutes and is the
+      // ONLY carrier of this flag — no endpoint and no DTO can report it — so even when the richer
+      // existing user object is kept, `isSuperAdmin` is re-read from the fresh token. Deliberately
+      // narrow: `role` and every other field on that object are still NOT refreshed here, because
+      // widening this path would be fixing a different problem.
+      const isSuperAdmin = superAdminFromToken(result.accessToken)
+      const next =
+        existing && existing.isSuperAdmin !== isSuperAdmin ? { ...existing, isSuperAdmin } : user
+
+      setState({
+        status: 'authenticated',
+        user: next,
+        forceChangePassword: state.forceChangePassword,
+      })
       return accessToken
     } catch {
       if (epoch !== sessionEpoch) return accessToken
@@ -335,7 +395,12 @@ export async function login(request: LoginRequest): Promise<AuthState> {
 
     setState({
       status: 'authenticated',
-      user: toAuthUser(result.user),
+      // Write site 1 of 4 (ADR 011). `toAuthUser` alone is NOT enough: `UserInfoModel` never
+      // carries `is_super_admin`, so the token has to be decoded on top of the response body.
+      user: {
+        ...toAuthUser(result.user),
+        isSuperAdmin: superAdminFromToken(result.accessToken),
+      },
       forceChangePassword: result.forceChangePassword,
     })
     // A successful login also answers the "is there a session?" question for this page load, so
@@ -380,9 +445,17 @@ export function clearForceChangePassword(): void {
   setState({ ...state, forceChangePassword: false })
 }
 
-/** Replace the current user — e.g. an admin who changed their own profile/role and must see the
- * navigation update without a reload. No-op when nobody is signed in. */
+/**
+ * Replace the current user — e.g. someone who just changed their own phone number on `/account`
+ * and must see it without a reload. No-op when nobody is signed in.
+ *
+ * Write site 4 of 4 (ADR 011): callers build `user` from a `UserInfoModel`, which cannot carry
+ * `isSuperAdmin`, so the flag is CARRIED OVER from the current user rather than taken from the
+ * argument. Without this, saving your own phone number would silently demote a SuperAdmin for the
+ * rest of the session.
+ */
 export function applyUser(user: AuthUser): void {
-  if (!state.user) return
-  setState({ ...state, user })
+  const current = state.user
+  if (!current) return
+  setState({ ...state, user: { ...user, isSuperAdmin: current.isSuperAdmin } })
 }

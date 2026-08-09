@@ -55,6 +55,13 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
                 .IsRequired()
                 .HasDefaultValue(false);
 
+            // D1 (2026-08-09): дефолт false нужен и для бэкфилла существующих строк —
+            // таблица User на момент миграции не пуста. Единственная строка с true
+            // проставляется той же миграцией (AddUserIsSuperAdmin), по Username = 'admin'.
+            builder.Property(x => x.IsSuperAdmin)
+                .IsRequired()
+                .HasDefaultValue(false);
+
             // Soft-delete + activity tracking (B2, 2026-08-06). Таблица User не пустая на
             // момент миграции — see AddUserSoftDeleteAndActivityTracking: IsDeleted/
             // RegisteredAtUtc получают дефолты для бэкфилла существующих строк,

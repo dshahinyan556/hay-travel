@@ -48,6 +48,15 @@ namespace ATTours.BusinessServices.Security
                 new(ClaimTypes.Role, user.Role.Type.ToString())
             };
 
+            // D6 (2026-08-09): свой собственный статус SuperAdmin приходит тем же каналом,
+            // что и роль. Claim добавляется ТОЛЬКО когда он true — у обычного админа в токене
+            // нет даже упоминания о существовании такого признака.
+            //
+            // Токен здесь — канал уведомления фронта (какие кнопки показывать), но не источник
+            // истины для авторизации: сами guard'ы перечитывают IsSuperAdmin из БД.
+            if (user.IsSuperAdmin)
+                claims.Add(new Claim("is_super_admin", "true"));
+
             var token = new JwtSecurityToken(
                 issuer: settings.Issuer,
                 audience: settings.Audience,

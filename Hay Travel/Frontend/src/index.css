@@ -204,7 +204,18 @@
   /* Armenia map — mirrors the literals currently hardcoded in ArmeniaMap.tsx one-to-one */
   --map-sea: #0f0c08;
   --map-region-fill: #17120c;
-  --map-region-muted-fill: #14100a;
+  /**
+   * No-tour region (dark theme fix, 2026-08-09). Was `#14100a` — ΔL* to `--map-region-fill` was
+   * only 0.9 (near-identical to the eye, matches the 1.12:1 contrast gap flagged as unresolved on
+   * 2026-08-26 and reported live by Давид: "не подсказывает нормально в каких регионах есть
+   * туры"). Pushed toward near-black instead of lightened (unlike the light-theme fix below,
+   * which raises the muted fill) — dark's base fill sits only ~2.3 ΔL* above the sea itself, so
+   * there isn't headroom to widen the gap upward without relighting the base fill, a bigger
+   * palette change out of scope for this fix. `#0b0805` gives ΔL* ≈ 3.4 from the base fill (~4x
+   * the old gap) while staying a touch above the sea (`--map-sea`, ΔL* ≈ 1.1) so the region still
+   * registers as land via its stroke, not fully merged with the water.
+   */
+  --map-region-muted-fill: #0b0805;
   --map-region-hover-fill: rgba(217, 180, 90, 0.18);
   --map-region-selected-fill: #8e1b38;
   --map-region-stroke: #6b5426;

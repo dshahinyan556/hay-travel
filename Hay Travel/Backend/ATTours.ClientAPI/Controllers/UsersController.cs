@@ -40,12 +40,26 @@ namespace ATTours.ClientAPI.Controllers
             return mapper.Map<UserDetailInfoModel>(user);
         }
 
+        // История входов пользователя (C2, 2026-08-09) — только админская вьюха: на публичном
+        // /account эта секция не показывается по прямому решению Давида.
+        [HttpGet]
+        [Route("{id:int}/LoginHistory")]
+        public async Task<List<LoginHistoryModel>> GetLoginHistoryAsync(int id, CancellationToken cancellationToken)
+        {
+            using var info = new LoginHistoryInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
+            var loginHistory = await info.GetForUserAsync(id, cancellationToken: cancellationToken);
+            return mapper.Map<List<LoginHistoryModel>>(loginHistory);
+        }
+
+        // actingUserId (D3/D4, 2026-08-09) вернулся в сигнатуру: кто именно меняет роль,
+        // теперь определяет исход — админские роли доступны только SuperAdmin'у, и свою
+        // собственную он тоже менять не может.
         [HttpPatch]
         [Route("ChangeRole")]
         public async Task<UserInfoModel> ChangeRoleAsync([FromBody] ChangeRoleModel model, CancellationToken cancellationToken)
         {
             using var updateService = new UserRoleUpdateService(cancellationToken);
-            var user = await updateService.ChangeRoleAsync(model.UserId, model.RoleId);
+            var user = await updateService.ChangeRoleAsync(User.GetUserId(), model.UserId, model.RoleId);
             return mapper.Map<UserInfoModel>(user);
         }
 

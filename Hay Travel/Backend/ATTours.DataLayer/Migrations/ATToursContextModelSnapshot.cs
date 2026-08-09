@@ -242,6 +242,49 @@ namespace ATTours.DataLayer.Migrations
                     b.ToTable("GalleryImage", (string)null);
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.LoginHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("City")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("CountryCode")
+                        .HasMaxLength(2)
+                        .HasColumnType("nvarchar(2)");
+
+                    b.Property<string>("CountryName")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("IpAddress")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("LoggedInAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UserAgent")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("LoginHistory", (string)null);
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.Place", b =>
                 {
                     b.Property<int>("Id")
@@ -840,6 +883,11 @@ namespace ATTours.DataLayer.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("IsSuperAdmin")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<DateTime?>("LastActiveAtUtc")
                         .HasColumnType("datetime2");
 
@@ -1044,6 +1092,17 @@ namespace ATTours.DataLayer.Migrations
                         .IsRequired();
 
                     b.Navigation("TourDay");
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.LoginHistory", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("ATTours.Common.Entities.Place", b =>

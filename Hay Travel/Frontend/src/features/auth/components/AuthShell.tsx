@@ -10,21 +10,36 @@ interface AuthShellProps {
   children: ReactNode
   /** Small print under the card (only the sign-up screen uses it, for the terms line). */
   note?: string
+  /**
+   * How wide the column is.
+   *
+   * `'form'` (default) is the original `max-w-md` — right for a single stack of inputs, and what
+   * every `/auth` screen still uses. `'page'` widens it to `max-w-2xl` for `/account`, which is not
+   * one form but several collapsible sections plus a read-only profile block; at `max-w-md` those
+   * section headers (label + current value + toggle on one line) would wrap on a desktop screen for
+   * no reason. Additive: no existing caller changes.
+   */
+  width?: 'form' | 'page'
+}
+
+const WIDTH_CLASS: Record<'form' | 'page', string> = {
+  form: 'max-w-md',
+  page: 'max-w-2xl',
 }
 
 /**
  * The frame every `/auth` screen shares: centred column, brand mark, heading pair, one panel
  * card, and the way back to the site.
  *
- * Extracted verbatim from the original single-screen `AuthPage` so the six screens cannot drift
- * apart visually. `max-w-md` + `px-4` keeps it comfortable at 375px with no separate mobile
- * layout; the vertical rhythm loosens from `py-16` to `py-24` from `sm` up.
+ * Extracted verbatim from the original single-screen `AuthPage` so the screens cannot drift apart
+ * visually. `px-4` keeps it comfortable at 375px with no separate mobile layout at either width;
+ * the vertical rhythm loosens from `py-16` to `py-24` from `sm` up.
  */
-export function AuthShell({ title, subtitle, children, note }: AuthShellProps) {
+export function AuthShell({ title, subtitle, children, note, width = 'form' }: AuthShellProps) {
   const { t } = useLocale()
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col px-4 py-16 sm:py-24">
+    <div className={`mx-auto flex w-full ${WIDTH_CLASS[width]} flex-col px-4 py-16 sm:py-24`}>
       <div className="flex flex-col items-center text-center">
         <span className="text-gold-ink">
           <MountainIcon size={28} />

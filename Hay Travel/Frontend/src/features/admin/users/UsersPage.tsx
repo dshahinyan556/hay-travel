@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { redirect, useLoaderData, useNavigate, useRevalidator } from 'react-router'
 import {
+  canManageAdmins,
   canManageUsers,
   ensureAuthReady,
   getAuthState,
@@ -10,6 +11,7 @@ import {
 import { changeUserRole, getUsers } from '@/features/admin/api/adminUsers'
 import { UsersToolbar } from './components/UsersToolbar'
 import { UsersTable } from './components/UsersTable'
+import { PromoteToAdminModal } from './components/PromoteToAdminModal'
 import { emptyUserFilters, filterUsers, type UserFilters } from './lib/filterUsers'
 import { roleHints, roleIdFor, roleLabels, usersErrorMessage } from './lib/userCopy'
 
@@ -36,10 +38,15 @@ export function UsersPage() {
   const [filters, setFilters] = useState<UserFilters>(emptyUserFilters)
   const [pendingId, setPendingId] = useState<number | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  /** The row whose promotion to Admin is waiting for confirmation (D5), or `null`. */
+  const [pendingPromotion, setPendingPromotion] = useState<UserInfoModel | null>(null)
 
-  // Read once per render from the store (not `useAuth`) — the only thing needed is the id, and it
-  // cannot change while this screen is open without a full re-navigation.
-  const currentUserId = getAuthState().user?.id ?? 0
+  // Read once per render from the store (not `useAuth`) — neither the id nor the SuperAdmin flag
+  // can change while this screen is open without a full re-navigation, and the loaders re-run on
+  // that navigation anyway.
+  const actor = getAuthState().user
+  const currentUserId = actor?.id ?? 0
+  const actorManagesAdmins = canManageAdmins(actor)
 
   const isBusy = pendingId !== null || revalidator.state !== 'idle'
   const visible = useMemo(() => filterUsers(users, filters), [users, filters])
@@ -48,15 +55,36 @@ export function UsersPage() {
     setFilters((prev) => ({ ...prev, ...patch }))
   }
 
+  /**
+   * What the table reports. Promotion to Admin is the one transition that does NOT go straight to
+   * the server (D5): it parks the row in `pendingPromotion` and the modal decides.
+   *
+   * The interception lives here, not in `RoleSelect`: the confirmation is a page-level modal (one
+   * per page, not one per row) and this is where the mutation already lives.
+   */
+  function requestChangeRole(user: UserInfoModel, role: RoleType) {
+    if (isBusy) return
+    if (role === RoleType.Admin) {
+      setActionError(null)
+      setPendingPromotion(user)
+      return
+    }
+    void handleChangeRole(user, role)
+  }
+
   async function handleChangeRole(user: UserInfoModel, role: RoleType) {
     if (isBusy) return
     setActionError(null)
     setPendingId(user.id)
     try {
       await changeUserRole({ userId: user.id, roleId: roleIdFor(role, users) })
+      setPendingPromotion(null)
       await revalidator.revalidate()
     } catch (err) {
       setActionError(usersErrorMessage(err, `изменить роль пользователя «${user.username}»`))
+      // The modal closes on failure too: the error banner lives above the table, and leaving a
+      // dialog open in front of the message explaining the failure would hide it.
+      setPendingPromotion(null)
     } finally {
       setPendingId(null)
     }
@@ -96,12 +124,29 @@ export function UsersPage() {
         <UsersTable
           users={visible}
           currentUserId={currentUserId}
+          canManageAdmins={actorManagesAdmins}
           pendingId={pendingId}
           isBusy={isBusy}
-          onChangeRole={handleChangeRole}
+          onChangeRole={requestChangeRole}
           onOpen={(user) => !isBusy && navigate(`/admin/users/${user.id}`)}
         />
       )}
+
+      {/* One modal per page (see `PromoteToAdminModal`). Cancelling needs no undo: `RoleSelect` is
+          controlled by `user.role` from the loader, so the unconfirmed pick reverts by itself. */}
+      <PromoteToAdminModal
+        userLabel={
+          pendingPromotion === null
+            ? null
+            : [pendingPromotion.firstName, pendingPromotion.lastName].filter(Boolean).join(' ') ||
+              pendingPromotion.username
+        }
+        pending={pendingId !== null}
+        onCancel={() => setPendingPromotion(null)}
+        onConfirm={() => {
+          if (pendingPromotion) void handleChangeRole(pendingPromotion, RoleType.Admin)
+        }}
+      />
 
       <section className="rounded-xl border border-neutral-200 bg-white px-4 py-3.5">
         <h2 className="text-sm font-semibold text-neutral-800">Что даёт роль</h2>
@@ -118,6 +163,11 @@ export function UsersPage() {
         {adminCount === 1 && (
           <p className="mt-3 text-xs text-neutral-500">
             Сейчас администратор один — снять эту роль с него нельзя, пока не назначен другой.
+          </p>
+        )}
+        {!actorManagesAdmins && (
+          <p className="mt-3 text-xs text-neutral-500">
+            Назначать и снимать роль администратора может только главный администратор.
           </p>
         )}
       </section>

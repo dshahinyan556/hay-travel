@@ -1,0 +1,71 @@
+ЧЕК-ЛИСТ РЕАЛИЗАЦИИ (frontend-developer), 2026-08-09
+Спека: architect (сессия) + ADR 010 + ADR 011 + profile-account-checklist-2026-08-09.txt
+Бэкенд проверен по коду: AccountController(Me/Phone), GeoController(Country),
+UsersController({id}/LoginHistory, ChangeRole/Delete c 2216), AuthController(4 шага email),
+JwtTokenService (claim is_super_admin) — ВСЁ НА МЕСТЕ.
+
+--- 0. SHARED ---------------------------------------------------------------
+[x] 0.1 shared/lib/country.ts — countryFlagEmoji / countryDisplayName
+[x] 0.2 shared/lib/phoneCountry.ts — PHONE_COUNTRIES, countryByIso2, DEFAULT_PHONE_COUNTRY
+[x] 0.3 shared/api/geo.ts — getVisitorCountry (single-flight + кэш, провал кэшируется)
+[x] 0.4 shared/auth/types.ts — AuthUser.isSuperAdmin?, LoginHistoryEntryModel
+[x] 0.5 shared/auth/authStore.ts — superAdminFromToken + 4 точки записи
+[x] 0.6 shared/auth/permissions.ts — canManageAdmins
+[x] 0.7 shared/auth/index.ts — экспорт canManageAdmins + тип истории
+[x] 0.8 shared/ui/Select.tsx — option.icon, option.triggerLabel, searchable
+[x] 0.9 shared/i18n/dictionary.ts — новые ключи (ru + en) — auth.country*, весь блок account.*
+
+--- 1. ТЕЛЕФОН / СТРАНЫ -----------------------------------------------------
+[x] 1.1 features/auth/hooks/useCountryOptions.ts
+[x] 1.2 features/auth/hooks/useDefaultPhoneCountry.ts
+[x] 1.3 features/auth/components/CountrySelect.tsx
+[x] 1.4 features/auth/components/PhoneField.tsx — полная переписка (новый контракт)
+[x] 1.5 RegisterForm.tsx — defaultCountry={useDefaultPhoneCountry()}
+
+--- 2. /account -------------------------------------------------------------
+[x] 2.1 AuthShell — width?: 'form' | 'page'
+[x] 2.2 account/api/account.ts, account/api/emailChange.ts
+[x] 2.3 account/lib/accountErrors.ts (2208/2209/2210/2211)
+[x] 2.4 account/hooks/useEmailChangeFlow.ts
+[x] 2.5 account/components/AccountSection.tsx
+[x] 2.6 account/components/ProfileSummary.tsx
+[x] 2.7 account/components/EmailChangeForm.tsx
+[x] 2.8 account/components/PhoneChangeForm.tsx
+[x] 2.9 account/components/PasswordChangeForm.tsx (вынос тела ChangePasswordPage)
+[x] 2.10 account/AccountPage.tsx + accountLoader
+[x] 2.11 ChangePasswordPage.tsx → тонкая обёртка
+[x] 2.12 ConfirmEmailChangePage.tsx (шаг 4, logout при успехе)
+[x] 2.13 AuthPage.tsx — authPageLoader, удалить ветку if(user)
+[x] 2.14 УДАЛИТЬ components/AccountPanel.tsx
+[x] 2.15 features/auth/index.ts — экспорты
+[x] 2.16 app/router.tsx — /account, auth/confirm-email-change, legacy confirm-email-change
+[x] 2.17 UserMenu.tsx — «Личный кабинет» → /account
+[x] 2.18 MobileTabBar.tsx — таб → /account при сессии
+
+--- 3. АДМИНКА --------------------------------------------------------------
+[x] 3.1 admin/api/adminUsers.ts — getUserLoginHistory
+[x] 3.2 users/lib/userCopy.ts — buildRoleOptions, deleteAdminBody, promoteCopy, код 2216
+[x] 3.3 users/lib/userAgent.ts — describeUserAgent
+[x] 3.4 RoleSelect.tsx — allowAdminOption
+[x] 3.5 UsersTable.tsx — canManageAdmins / roleLocked
+[x] 3.6 PromoteToAdminModal.tsx + UsersPage (pendingPromotion)
+[x] 3.7 UserDangerZone.tsx — targetIsAdmin
+[x] 3.8 LoginHistoryList.tsx
+[x] 3.9 UserDetailPage.tsx — Promise.all c .catch, canDelete, вставка списка
+
+--- 4. ПРОВЕРКА -------------------------------------------------------------
+[x] 4.1 tsc -b чистый (0 ошибок)
+[x] 4.2 vite build чистый; флаги (265 SVG) целиком в auth-чанке, в admin-чанке 3 viewBox
+        (собственные иконки) — код-сплит цел, admin не раздут
+[x] 4.3 oxlint — 0 errors, 24 warnings, все того же вида, что были до правок
+        (only-export-components у страниц, exhaustive-deps у Sheet/Popover/DatePicker)
+[!] 4.4 Браузер: desktop + 375px — НЕ ВЫПОЛНЕНО МНОЙ.
+        В моём наборе инструментов нет preview/browser-тула (только Read/Write/Edit/Grep/
+        Glob/Bash), отрисовать и посмотреть страницу я физически не могу — не выдумываю.
+        Что реально проверено вместо этого:
+          - vite dev поднят на :5199, все новые модули отдаются 200 (AccountPage,
+            PhoneField, useCountryOptions, Select, LoginHistoryList,
+            ConfirmEmailChangePage) — ошибок трансформации нет;
+          - вёрстка считана вручную под 375px, см. отчёт (узкое место — строка
+            телефона: 116px селектор + 8px gap + остальное под input с min-w-0).
+        Визуальную проверку 375px нужно сделать главному агенту/Давиду.

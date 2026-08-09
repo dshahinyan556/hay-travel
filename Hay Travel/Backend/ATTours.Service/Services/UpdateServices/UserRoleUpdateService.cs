@@ -25,11 +25,10 @@ namespace ATTours.BusinessServices.Services.UpdateServices
         private IEntityRepository<UserRole>? roleRepository;
         private IEntityRepository<UserRole> RoleRepository => roleRepository ??= new EntityRepository<UserRole>(Context);
 
-        // actingUserId больше не нужен (B6, 2026-08-06): self-guard существовал только внутри
-        // GuardAdminDemotionAsync и полностью поглощён безусловным GuardAdminDemotion ниже —
-        // держать неиспользуемый параметр не имеет смысла. Сигнатура — внутренний C#-контракт
-        // (не REST), править вызывающего в UsersController безопасно в рамках этой же правки.
-        public async Task<User> ChangeRoleAsync(int userId, int roleId)
+        // actingUserId вернулся в сигнатуру (D3/D4, 2026-08-09): безусловный запрет из B6
+        // снят, и теперь исход зависит от того, кто именно выполняет операцию.
+        // Сигнатура — внутренний C#-контракт (не REST), вызывающий один (UsersController).
+        public async Task<User> ChangeRoleAsync(int actingUserId, int userId, int roleId)
         {
             var user = await EntityRepository.AsQueryable()
                                              .Include(x => x.Role)
@@ -42,10 +41,18 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                        ?? throw new ErrorModelException(GlobalErrorCode.RoleNotFound, HttpStatusCode.BadRequest,
                            $"Role with id {roleId} not found.");
 
+            // Роль уже такая — операция ничего не меняет, guard'ить нечего.
             if (user.RoleId == roleId)
                 return user;
 
-            GuardAdminDemotion(user, role);
+            // IsSuperAdmin читается из БД, а не из claim'а токена (D3): claim решает только,
+            // что показать в UI, и подделанный/устаревший токен не должен давать прав.
+            var actingUser = await EntityRepository.AsQueryable()
+                                                   .SingleOrDefaultAsync(x => x.Id == actingUserId && !x.IsDeleted, cancellationToken)
+                             ?? throw new ErrorModelException(GlobalErrorCode.InvalidCredentials, HttpStatusCode.Unauthorized,
+                                 "The acting user no longer exists.");
+
+            GuardRoleChange(actingUser, user, role);
 
             user.RoleId = role.Id;
             user.Role = role;
@@ -54,19 +61,28 @@ namespace ATTours.BusinessServices.Services.UpdateServices
             return user;
         }
 
-        // Роль Admin неизменна через этот эндпоинт (B6, 2026-08-06) — снятие роли Admin у
-        // кого угодно кем угодно запрещено безусловно. Это полностью поглощает прежние два
-        // частных случая (self/last-admin): оба были лишь подмножеством "цель — Admin",
-        // поэтому старая GuardAdminDemotionAsync с их отдельными сообщениями удалена —
-        // недостижимый код хуже, чем один guard на всё правило.
-        private static void GuardAdminDemotion(User user, UserRole newRole)
+        // D3/D4 (2026-08-09) вместо безусловного запрета из B6. Правило одно: всё, что
+        // касается роли Admin (и повышение до неё, и любое изменение роли действующего
+        // администратора), доступно только SuperAdmin'у. Regular <-> TourManager остаётся
+        // обычной админской операцией.
+        private static void GuardRoleChange(User actingUser, User target, UserRole newRole)
         {
-            var isAdminDemotion = user.Role.Type == RoleType.Admin && newRole.Type != RoleType.Admin;
-            if (!isAdminDemotion)
+            var touchesAdminRole = newRole.Type == RoleType.Admin || target.Role.Type == RoleType.Admin;
+            if (!touchesAdminRole)
                 return;
 
-            throw new ErrorModelException(GlobalErrorCode.AdminRoleImmutable, HttpStatusCode.Forbidden,
-                "The Admin role can only be changed directly in the database.");
+            // Отбивается и прямой запрос в обход UI (в интерфейсе обычного админа опции
+            // "Admin" просто нет) — это и есть защита от IDOR, ради которой guard читает БД.
+            if (!actingUser.IsSuperAdmin)
+                throw new ErrorModelException(GlobalErrorCode.SuperAdminPrivilegeRequired, HttpStatusCode.Forbidden,
+                    "Only a super administrator can manage administrator accounts.");
+
+            // Самозащита (D4, подтверждено Давидом): единственный SuperAdmin не может снять
+            // административную роль сам с себя — иначе одним запросом система остаётся без
+            // того, кто вообще способен раздавать эту роль обратно.
+            if (actingUser.Id == target.Id)
+                throw new ErrorModelException(GlobalErrorCode.SuperAdminPrivilegeRequired, HttpStatusCode.Forbidden,
+                    "You cannot change your own administrator role.");
         }
     }
 }

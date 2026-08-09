@@ -2,6 +2,7 @@ using ATTours.ClientAPI.DependencyInjection;
 using ATTours.ClientAPI.Mapper.MappingProfile;
 using ATTours.ClientAPI.Middleware;
 using ATTours.Common.Settings;
+using ATTours.ContextRepository.Extensions;
 using ATTours.DataLayer;
 using ATTours.Helper.Interfaces;
 using ATTours.Helper.MiddlewareAbstraction;
@@ -9,6 +10,7 @@ using ATTours.Helper.MvcRegistrars;
 using ATTours.Helper.StartupAbstraction.ApiAbstraction;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
@@ -35,8 +37,49 @@ namespace ATTours.ClientAPI
 
         protected override void ConfigureFactory(IApplicationBuilder app, IWebHostEnvironment env)
         {
+            // Применяем ожидающие миграции при каждом старте API, чтобы не гонять
+            // dotnet ef database update руками — БД сама подтягивается до актуальной схемы.
+            app.ApplicationServices.MigrateDatabase<ATToursContext>();
+
+            // Раньше всего в конвейере: всё, что читает HttpContext.Connection.RemoteIpAddress
+            // (GeoController, AuthController.BuildRequestContext -> LoginHistory/RegisteredIp,
+            // UserActivityTrackingMiddleware), должно видеть уже подменённый адрес.
+            // Чинится централизованно здесь — сами вызывающие остаются без изменений.
+            app.UseForwardedHeaders(BuildForwardedHeadersOptions());
+
             app.UseMiddleware<InitializableMiddlewareBase<ATToursExceptionMaster>>();
             base.ConfigureFactory(app, env);
+        }
+
+        // За Netlify -> Azure App Service до Kestrel доезжает исходный IP клиента только
+        // в X-Forwarded-For: без этого RemoteIpAddress — это адрес прокси, и вся гео-IP
+        // вертикаль (B) на проде показывала бы страну дата-центра, а не посетителя.
+        private static ForwardedHeadersOptions BuildForwardedHeadersOptions()
+        {
+            var options = new ForwardedHeadersOptions
+            {
+                ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+
+                // По умолчанию 1 — берётся только ПРАВЫЙ элемент цепочки, то есть ближайший
+                // прокси (egress Netlify), а не клиент. Цепочка у нас двухзвенная
+                // (Netlify -> front-end Azure), поэтому лимит снят: проходим её до конца и
+                // получаем исходный адрес.
+                ForwardLimit = null
+            };
+
+            // По умолчанию ASP.NET доверяет только loopback (KnownNetworks: 127.0.0.1/8, ::1/128),
+            // поэтому за Azure заголовок молча игнорировался бы, и весь этот middleware был бы
+            // no-op. Списки очищаются осознанно: единственный публичный вход — Netlify/Azure,
+            // прямого доступа к бэкенду мимо прокси не предполагается.
+            //
+            // Плата за это: X-Forwarded-For подделывается любым, кто дотянется до бэкенда
+            // напрямую. Значение используется только как справка (страна в дропдауне телефона)
+            // и как аудит-поле (LoginHistory/RegisteredIp) — прав оно не выдаёт и решений
+            // об авторизации не принимает.
+            options.KnownNetworks.Clear();
+            options.KnownProxies.Clear();
+
+            return options;
         }
 
         protected override void ConfigureAdditionalMiddleware(IApplicationBuilder app)

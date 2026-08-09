@@ -10,7 +10,7 @@
 ## Как поднять
 Ярлыки в `.claude/launch.json`:
 - `hay-travel-frontend` → Vite на :5173.
-- `hay-travel-backend` → API на :5254 (порт передаётся флагом `--urls`, т.к. дефолтный профиль указывает 5253).
+- `hay-travel-backend` → API на :5253 (порт передаётся флагом `--urls`, совпадает с дефолтным профилем `launchSettings.json`). `Frontend/.env` (`VITE_API_BASE_URL`) и `start-servers.bat` должны указывать тот же порт — рассинхрон (2026-08-09: `start-servers.bat` был на 5254) ломает локальный запуск молча, фронт просто не достучится до бэка.
 
 Backend требует `ASPNETCORE_ENVIRONMENT=Development` (строка подключения к БД `ATTours` только в `ATTours.ClientAPI/appsettings.Development.json`). Админка: `http://localhost:5173/admin`.
 
