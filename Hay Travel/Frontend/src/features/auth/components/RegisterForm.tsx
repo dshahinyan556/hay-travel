@@ -9,6 +9,7 @@ import {
   validatePassword,
   validateUsername,
 } from '../lib/passwordRules'
+import { useDefaultPhoneCountry } from '../hooks/useDefaultPhoneCountry'
 import { AuthField } from './AuthField'
 import { PhoneField } from './PhoneField'
 import { AuthError, AuthSubmitButton } from './AuthShell'
@@ -37,6 +38,9 @@ type FieldErrors = Partial<Record<'username' | 'password' | 'confirmPassword', s
  */
 export function RegisterForm({ onSubmit, error, isSubmitting }: RegisterFormProps) {
   const { t } = useLocale()
+  // Geo-IP guess for the country picker; resolves after the first render and only moves the
+  // selection while the visitor has not touched the phone field (see `PhoneField`).
+  const defaultCountry = useDefaultPhoneCountry()
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   // Shared by the password + confirm-password fields — one eye toggles both (F, 2026-08-06).
   const [passwordRevealed, setPasswordRevealed] = useState(false)
@@ -112,8 +116,8 @@ export function RegisterForm({ onSubmit, error, isSubmitting }: RegisterFormProp
         maxLength={256}
         icon={<MailIcon size={16} />}
       />
-      {/* Composite control (chip + digits), not `required` — see `PhoneField`'s doc comment. */}
-      <PhoneField name="phoneNumber" label={t('auth.phone')} />
+      {/* Composite control (country picker + digits), not `required` — see `PhoneField`. */}
+      <PhoneField name="phoneNumber" label={t('auth.phone')} defaultCountry={defaultCountry} />
       <AuthField
         name="password"
         label={t('auth.password')}

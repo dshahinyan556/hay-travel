@@ -11,6 +11,7 @@ export type {
   AuthUser,
   ChangePasswordRequest,
   ChangeRoleRequest,
+  LoginHistoryEntryModel,
   LoginRequest,
   MessageResultModel,
   RegisterRequest,
@@ -41,10 +42,13 @@ export {
   verifyEmailRequest,
 } from './authApi'
 
+// Only the PREDICATES are exported, never the raw `isSuperAdmin` field's meaning: call sites ask
+// `canManageAdmins(user)` so the SuperAdmin matrix stays in one file (ADR 011, decision 4).
 export {
   canArchiveTours,
   canDeleteTours,
   canFeatureTours,
+  canManageAdmins,
   canManageCatalog,
   canManageSettings,
   canManageTours,

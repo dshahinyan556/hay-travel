@@ -1,5 +1,6 @@
 using ArmeniaTours.DataLayer;
 using ATTours.BusinessServices.Email;
+using ATTours.BusinessServices.Geo;
 using ATTours.BusinessServices.Security;
 using ATTours.BusinessServices.Services.ValidationServices;
 using ATTours.Common.DTO.Auth;
@@ -48,14 +49,17 @@ namespace ATTours.BusinessServices.Services.AuthServices
         private readonly IPasswordHasher passwordHasher;
         private readonly IJwtTokenService jwtTokenService;
         private readonly IEmailSender emailSender;
+        private readonly IGeoIpLookup geoIpLookup;
 
-        public AuthService(IMapper mapper, IPasswordHasher passwordHasher, IJwtTokenService jwtTokenService, IEmailSender emailSender)
+        public AuthService(IMapper mapper, IPasswordHasher passwordHasher, IJwtTokenService jwtTokenService,
+            IEmailSender emailSender, IGeoIpLookup geoIpLookup)
             : base(CommonSettings.Instance.ATToursConnectionString)
         {
             this.mapper = mapper;
             this.passwordHasher = passwordHasher;
             this.jwtTokenService = jwtTokenService;
             this.emailSender = emailSender;
+            this.geoIpLookup = geoIpLookup;
         }
 
         #region Repositories
@@ -73,6 +77,9 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
         private IEntityRepository<EmailChangeRequest>? emailChangeRequestRepository;
         private IEntityRepository<EmailChangeRequest> EmailChangeRequestRepository => emailChangeRequestRepository ??= new EntityRepository<EmailChangeRequest>(Context);
+
+        private IEntityRepository<LoginHistory>? loginHistoryRepository;
+        private IEntityRepository<LoginHistory> LoginHistoryRepository => loginHistoryRepository ??= new EntityRepository<LoginHistory>(Context);
 
         #endregion
 
@@ -203,8 +210,24 @@ namespace ATTours.BusinessServices.Services.AuthServices
                 CreatedByIp = requestContext.IpAddress
             }, cancellationToken);
 
-            // Один контекст -> один SaveChanges -> обнуление счётчика и выдача сессии
-            // фиксируются вместе.
+            // История входов (C1, 2026-08-09) — только здесь: ротация refresh-токена
+            // (RefreshAsync) новым входом не является и строку не пишет.
+            // Резолв гео необязателен: без базы Lookup вернёт null, и запись просто ляжет
+            // без страны/города.
+            var location = geoIpLookup.Lookup(requestContext.IpAddress);
+            await LoginHistoryRepository.AddAsync(new LoginHistory
+            {
+                UserId = user.Id,
+                IpAddress = requestContext.IpAddress,
+                CountryCode = location?.CountryCode,
+                CountryName = location?.CountryName,
+                City = location?.City,
+                UserAgent = requestContext.UserAgent,
+                LoggedInAtUtc = now
+            }, cancellationToken);
+
+            // Один контекст -> один SaveChanges -> обнуление счётчика, выдача сессии и
+            // запись в историю входов фиксируются вместе.
             await UserRepository.SaveChangesAsync(cancellationToken);
 
             var accessToken = jwtTokenService.CreateAccessToken(user);

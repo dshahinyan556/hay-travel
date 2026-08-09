@@ -7,10 +7,14 @@ export type DangerConfirmKind = 'delete' | 'reset'
 interface UserDangerZoneProps {
   /** Full name (or username fallback) shown in the confirm modal's title. */
   userLabel: string
-  /** `false` on your own profile or on any Admin account — mirrors the backend's guards (B4
-   * `CannotDeleteSelf`, and `AdminAccountImmutable` alongside `ChangeRole`'s own `AdminRoleImmutable`).
-   * `UserDetailPage` computes this the same way `UsersTable` computes `isSelf`/`isTargetAdmin`. */
+  /** `false` on your own profile, and on another Admin's profile unless the actor is the SuperAdmin
+   * (D3) — mirrors the backend's guards (`CannotDeleteSelf`, `SuperAdminPrivilegeRequired`).
+   * `UserDetailPage` computes this the same way `UsersTable` computes `isSelf`/`roleLocked`. */
   canDelete: boolean
+  /** The account being viewed is an Admin (and not you). Only changes the confirm dialog's WORDING:
+   * deleting a colleague with panel access has wider consequences than deleting a customer, and the
+   * one person who can actually do it should be told so before they do. */
+  targetIsAdmin?: boolean
   /** Shown under the delete button when `canDelete` is false — which of the two reasons above. */
   deleteDisabledHint: string
   /** Which confirm modal is open, or `null`. Owned by the parent — same "container owns the
@@ -39,6 +43,7 @@ interface UserDangerZoneProps {
 export function UserDangerZone({
   userLabel,
   canDelete,
+  targetIsAdmin = false,
   deleteDisabledHint,
   confirmKind,
   pending,
@@ -51,7 +56,8 @@ export function UserDangerZone({
 
   const isDelete = confirmKind === 'delete'
   const title = confirmKind === null ? '' : isDelete ? userDetailCopy.deleteTitle(userLabel) : userDetailCopy.resetTitle(userLabel)
-  const body = isDelete ? userDetailCopy.deleteBody : userDetailCopy.resetBody
+  const deleteBody = targetIsAdmin ? userDetailCopy.deleteAdminBody : userDetailCopy.deleteBody
+  const body = isDelete ? deleteBody : userDetailCopy.resetBody
 
   return (
     <section className="overflow-hidden rounded-xl border border-rose-200 bg-rose-50">

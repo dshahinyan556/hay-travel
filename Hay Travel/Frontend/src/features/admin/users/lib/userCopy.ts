@@ -6,6 +6,7 @@
 
 import { ApiError } from '@/shared/lib/http'
 import { RoleType, type UserInfoModel } from '@/shared/auth'
+import type { SelectOption } from '@/shared/ui'
 
 /** `GlobalErrorCode` values this screen's mutations can report — the admin panel keeps its own
  * local copy of the numeric codes it cares about rather than a shared dictionary (mirrors
@@ -15,6 +16,7 @@ const ADMIN_ROLE_IMMUTABLE = 2214 // ChangeRole (B6) — target's current role i
 const CANNOT_DELETE_SELF = 2212 // Delete (B4).
 const ACCOUNT_DELETED = 2213 // Delete (B4) — target was already soft-deleted (stale page).
 const ADMIN_ACCOUNT_IMMUTABLE = 2215 // Delete — target's role is Admin (mirrors ADMIN_ROLE_IMMUTABLE).
+const SUPER_ADMIN_REQUIRED = 2216 // ChangeRole/Delete (D3) — the ACTOR is not the SuperAdmin.
 
 export const roleLabels: Record<RoleType, string> = {
   [RoleType.Regular]: 'Пользователь',
@@ -41,6 +43,26 @@ export function roleIdFor(role: RoleType, users: UserInfoModel[]): number {
   return users.find((user) => user.role === role)?.roleId ?? role
 }
 
+const ROLE_ORDER: RoleType[] = [RoleType.Regular, RoleType.TourManager, RoleType.Admin]
+
+/**
+ * Options for one row's `RoleSelect` (D3, 2026-08-09).
+ *
+ * «Администратор» is offered ONLY to the SuperAdmin — an ordinary admin cannot promote anyone, and
+ * showing an option the backend answers 403 to would be a lie.
+ *
+ * The CURRENT value is always included even when `allowAdminOption` is false. That is not a
+ * courtesy, it is a correctness requirement: `Select` renders the placeholder («Выберите…») when
+ * `value` matches no option, so dropping the Admin option from an Admin row would replace the
+ * account's actual role with "nothing selected". The row stays readable — «Администратор», disabled,
+ * with `ADMIN_ROLE_IMMUTABLE_HINT` underneath.
+ */
+export function buildRoleOptions(currentValue: RoleType, allowAdminOption: boolean): SelectOption[] {
+  return ROLE_ORDER.filter(
+    (role) => role !== RoleType.Admin || allowAdminOption || currentValue === RoleType.Admin,
+  ).map((role) => ({ value: String(role), label: roleLabels[role] }))
+}
+
 export function usersErrorMessage(err: unknown, action: string): string {
   if (err instanceof ApiError) {
     const code = errorCodeOf(err.body)
@@ -53,6 +75,9 @@ export function usersErrorMessage(err: unknown, action: string): string {
     if (code === ADMIN_ACCOUNT_IMMUTABLE) {
       return 'Аккаунт администратора можно удалить только напрямую в базе данных.'
     }
+    if (code === SUPER_ADMIN_REQUIRED) {
+      return 'Действия с ролью администратора доступны только главному администратору.'
+    }
     if (code === ACCOUNT_DELETED) {
       return 'Этот пользователь уже удалён — обновите страницу.'
     }
@@ -64,9 +89,22 @@ export function usersErrorMessage(err: unknown, action: string): string {
   return `Не удалось ${action}: проверьте соединение и попробуйте ещё раз.`
 }
 
-/** Explanatory text under a disabled `RoleSelect` (F5) — same reasoning `isSelf` already gets,
- * extended to any row whose CURRENT role is Admin (B6's unconditional backend guard). */
-export const ADMIN_ROLE_IMMUTABLE_HINT = 'Роль администратора можно снять только напрямую в базе'
+/** Explanatory text under a disabled `RoleSelect` (F5). As of D3 this is shown only when the actor
+ * is NOT the SuperAdmin — for the SuperAdmin the control is live, so the hint would be wrong. */
+export const ADMIN_ROLE_IMMUTABLE_HINT =
+  'Снять роль администратора может только главный администратор'
+
+/** Confirm dialog for promoting somebody to Admin (D5). Promotion had no confirmation at all
+ * before — it was a plain select — which is too quiet for the one change that hands over full
+ * control of the panel. */
+export const promoteCopy = {
+  title: (userLabel: string) => `Назначить «${userLabel}» администратором?`,
+  body:
+    'Администратор получает полный доступ к панели: справочники, настройки, удаление туров и ' +
+    'управление ролями других пользователей. Снять эту роль сможет только главный администратор.',
+  confirm: 'Назначить',
+  pending: 'Назначаем…',
+} as const
 
 /** Copy for the user-detail screen (F4/F14) — kept next to the rest of this feature's Russian
  * copy, same convention as `roleLabels`/`roleHints` above. */
@@ -82,8 +120,14 @@ export const userDetailCopy = {
   deleteBody:
     'Аккаунт будет деактивирован и скрыт из списка пользователей. Восстановить его из панели ' +
     'администратора нельзя.',
+  /** Harsher variant for deleting ANOTHER ADMIN's account (D3) — only the SuperAdmin ever sees the
+   * button enabled in that case, and the consequences are wider than for a regular account. */
+  deleteAdminBody:
+    'Это учётная запись АДМИНИСТРАТОРА. Вместе с доступом к панели она потеряет и права на ' +
+    'справочники, настройки и управление ролями. Аккаунт будет деактивирован и скрыт из списка; ' +
+    'восстановить его из панели нельзя.',
   deleteSelfHint: 'Свою же учётную запись удалить нельзя',
-  deleteAdminHint: 'Аккаунт администратора можно удалить только напрямую в базе',
+  deleteAdminHint: 'Удалить аккаунт администратора может только главный администратор',
   resetTitle: (userLabel: string) => `Сбросить пароль «${userLabel}»?`,
   resetBody: 'Пользователь будет обязан задать новый пароль при следующем входе.',
 } as const

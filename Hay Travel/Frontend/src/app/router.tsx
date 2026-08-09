@@ -78,11 +78,21 @@ export const router = createBrowserRouter([
             loader: m.regionsLoader,
           })),
       },
-      // Auth lives under one `/auth` prefix. `AuthPage` itself is three states (login tabs /
-      // sign-up tabs / "you are already signed in"), the rest are steps of the email flows.
+      // Auth lives under one `/auth` prefix: `AuthPage` is the login/sign-up pair, the rest are
+      // steps of the email flows. The signed-in ACCOUNT screen is `/account` below — `/auth` now
+      // redirects a signed-in visitor there (or to `?returnTo=`), see `authPageLoader`.
       {
         path: 'auth',
-        lazy: () => import('@/features/auth').then((m) => ({ Component: m.AuthPage })),
+        lazy: () =>
+          import('@/features/auth').then((m) => ({ Component: m.AuthPage, loader: m.authPageLoader })),
+      },
+      // The signed-in account screen (ADR 010). Deliberately NOT under `/auth`: `/auth` is for
+      // becoming signed in, this is for being signed in. Its loader is the guard — it runs before
+      // render, so an anonymous visitor never sees a flash of an empty profile.
+      {
+        path: 'account',
+        lazy: () =>
+          import('@/features/auth').then((m) => ({ Component: m.AccountPage, loader: m.accountLoader })),
       },
       {
         path: 'auth/check-email',
@@ -104,6 +114,10 @@ export const router = createBrowserRouter([
         path: 'auth/change-password',
         lazy: () => import('@/features/auth').then((m) => ({ Component: m.ChangePasswordPage })),
       },
+      {
+        path: 'auth/confirm-email-change',
+        lazy: () => import('@/features/auth').then((m) => ({ Component: m.ConfirmEmailChangePage })),
+      },
       // `/login` was the old URL of the (presentation-only) auth screen and may be bookmarked.
       // Redirect-only route, same pattern as `/tours` above: `replace` keeps it out of history so
       // Back doesn't bounce forward again. The query string carries over, so a `?returnTo=` on an
@@ -124,6 +138,14 @@ export const router = createBrowserRouter([
       {
         path: 'reset-password',
         loader: ({ request }) => replace(`/auth/reset-password${new URL(request.url).search}`),
+      },
+      // Same story for the email-CHANGE link: `Email:EmailChangeConfirmUrlBase` is already deployed
+      // as `<site>/confirm-email-change?token=`, and links built from it are already sitting in
+      // people's inboxes. The router adapts, not the backend configuration.
+      {
+        path: 'confirm-email-change',
+        loader: ({ request }) =>
+          replace(`/auth/confirm-email-change${new URL(request.url).search}`),
       },
       { path: '*', element: <NotFoundPage /> },
     ],

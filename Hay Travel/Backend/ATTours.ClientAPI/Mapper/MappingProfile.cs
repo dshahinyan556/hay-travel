@@ -467,6 +467,11 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.RegisteredIp, opt => opt.MapFrom(src => src.RegisteredIp))
                 .ForMember(dest => dest.LastLoginIp, opt => opt.MapFrom(src => src.LastLoginIp));
 
+            // LoginHistory -> LoginHistoryModel (C2, 2026-08-09). Плоская проекция: UserId
+            // и навигация User наружу не едут — список запрашивается по конкретному
+            // пользователю, чей id клиенту уже известен.
+            CreateMap<LoginHistory, LoginHistoryModel>();
+
             // ============= Mappings for translations =============
 
             // ---- CreateModel -> Entity (создание) ----

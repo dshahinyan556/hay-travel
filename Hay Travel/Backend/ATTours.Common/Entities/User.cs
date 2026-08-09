@@ -49,6 +49,13 @@ namespace ATTours.Common.Entities
         // UserActivityTrackingService (B7).
         public string LastLoginIp { get; set; }
 
+        // Ровно один такой пользователь, и заводится он только сидом/миграцией (D1-D2,
+        // 2026-08-09): эндпоинта «назначить SuperAdmin» нет и не должно быть.
+        // Наружу поле не отдаётся никогда (ни UserInfoModel, ни UserDetailInfoModel) —
+        // по админке нельзя узнать, кто ещё SuperAdmin. Свой собственный статус текущий
+        // пользователь получает claim'ом "is_super_admin" в access-токене.
+        public bool IsSuperAdmin { get; set; }
+
         public int RoleId { get; set; }
         public UserRole Role { get; set; }
 

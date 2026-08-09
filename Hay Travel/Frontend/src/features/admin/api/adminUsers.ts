@@ -6,6 +6,7 @@
 import {
   authFetch,
   type ChangeRoleRequest,
+  type LoginHistoryEntryModel,
   type UserDetailInfoModel,
   type UserInfoModel,
 } from '@/shared/auth'
@@ -23,6 +24,17 @@ export function getUsers(): Promise<UserInfoModel[]> {
  */
 export function getUserDetail(id: number): Promise<UserDetailInfoModel> {
   return authFetch<UserDetailInfoModel>(`api/Users/${id}`)
+}
+
+/**
+ * GET one account's login history (C2, 2026-08-09) — newest first, capped at 100 rows server-side.
+ *
+ * Written on every successful `Login` only; a token refresh is not a login and is not recorded. The
+ * caller (`userDetailLoader`) catches failures on this ONE request so a broken history endpoint
+ * cannot take the whole profile card down with it.
+ */
+export function getUserLoginHistory(id: number): Promise<LoginHistoryEntryModel[]> {
+  return authFetch<LoginHistoryEntryModel[]>(`api/Users/${id}/LoginHistory`)
 }
 
 /**

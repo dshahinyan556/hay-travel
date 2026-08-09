@@ -27,10 +27,16 @@ export function MobileTabBar() {
     { to: '/', label: t('nav.home'), end: true, Icon: HomeIcon },
     { to: '/trips', label: t('nav.trips'), end: false, Icon: CompassIcon },
     { to: '/regions', label: t('nav.regionsShort'), end: false, Icon: MapIcon },
-    // One tab, two labels — `/auth` already renders either the sign-in tabs or the account panel,
-    // so a fifth tab (or a second destination) would only duplicate that branch in the nav. `end`
-    // stays false so the tab also reads as active on `/auth/change-password` & co.
-    { to: '/auth', label: user ? t('nav.account') : t('nav.login'), end: false, Icon: GuideIcon },
+    // One tab, two destinations: the account screen is its own route now (`/account`), and `/auth`
+    // bounces a signed-in visitor there anyway — pointing the tab straight at the right URL avoids
+    // a pointless redirect on every tap. `end` stays false so the tab still reads as active on the
+    // nested `/auth/*` steps.
+    {
+      to: user ? '/account' : '/auth',
+      label: user ? t('nav.account') : t('nav.login'),
+      end: false,
+      Icon: GuideIcon,
+    },
   ] as const
 
   return (

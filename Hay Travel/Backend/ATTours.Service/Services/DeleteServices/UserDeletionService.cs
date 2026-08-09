@@ -40,11 +40,13 @@ namespace ATTours.BusinessServices.Services.DeleteServices
                        ?? throw new ErrorModelException(GlobalErrorCode.RelationalEntityNotFound, HttpStatusCode.NotFound,
                            $"User with id {id} not found.");
 
+            // Первым и безусловно, в том числе для SuperAdmin (D4): удалить себя нельзя
+            // никому, независимо от привилегий.
             if (id == actingUserId)
                 throw new ErrorModelException(GlobalErrorCode.CannotDeleteSelf, HttpStatusCode.BadRequest,
                     "You cannot delete your own account.");
 
-            GuardAdminAccount(user);
+            await GuardAdminAccountAsync(user, actingUserId);
 
             user.IsDeleted = true;
 
@@ -60,18 +62,25 @@ namespace ATTours.BusinessServices.Services.DeleteServices
             await EntityRepository.SaveChangesAsync(cancellationToken);
         }
 
-        // Симметрично GuardAdminDemotion в UserRoleUpdateService (B6): смена роли Admin
-        // безусловно запрещена кем угодно, но до этой правки удаление аккаунта того же Admin
-        // такой защиты не имело — soft-delete обходил guard, которого сама роль обойти не могла.
-        // actingUserId уже проверен отдельно (self-delete, строка выше) — здесь остаётся только
-        // цель.
-        private static void GuardAdminAccount(User user)
+        // Симметрично GuardRoleChange в UserRoleUpdateService (D3, 2026-08-09): удаление
+        // Admin-аккаунта больше не запрещено безусловно — его может выполнить SuperAdmin,
+        // и только он. Self-delete проверен отдельно и раньше (строка выше).
+        //
+        // Действующий пользователь читается из БД, а не из claim'а токена: claim решает
+        // только, что показать в UI, прямой запрос в обход интерфейса должен отбиваться
+        // фактическим состоянием строки.
+        private async Task GuardAdminAccountAsync(User target, int actingUserId)
         {
-            if (user.Role.Type != RoleType.Admin)
+            // Удаление не-админа привилегий не требует — лишний запрос в БД не нужен.
+            if (target.Role.Type != RoleType.Admin)
                 return;
 
-            throw new ErrorModelException(GlobalErrorCode.AdminAccountImmutable, HttpStatusCode.Forbidden,
-                "An Admin account can only be deleted directly in the database.");
+            var actingUser = await EntityRepository.AsQueryable()
+                                                   .SingleOrDefaultAsync(x => x.Id == actingUserId && !x.IsDeleted, cancellationToken);
+
+            if (actingUser is null || !actingUser.IsSuperAdmin)
+                throw new ErrorModelException(GlobalErrorCode.SuperAdminPrivilegeRequired, HttpStatusCode.Forbidden,
+                    "Only a super administrator can delete an administrator account.");
         }
     }
 }

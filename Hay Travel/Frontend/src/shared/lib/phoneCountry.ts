@@ -1,5 +1,6 @@
-import { AsYouType, getCountryCallingCode } from 'libphonenumber-js'
+import { AsYouType, getCountries, getCountryCallingCode } from 'libphonenumber-js'
 import type { CountryCode } from 'libphonenumber-js'
+import { countryFlagEmoji } from './country'
 
 export interface PhoneCountry {
   /** ISO 3166-1 alpha-2 country code, e.g. `'AM'`. */
@@ -51,16 +52,45 @@ export function countryFromPhone(phone: string | null | undefined): PhoneCountry
   const country = asYouType.getCountry()
   if (!country) return null
 
-  return {
-    iso2: country,
-    flag: flagEmoji(country),
-    dialCode: `+${getCountryCallingCode(country)}`,
-  }
+  return entryFor(country)
 }
 
-/** Builds a regional-indicator emoji flag from an ISO 3166-1 alpha-2 code (`'AM'` → `'🇦🇲'`). */
-function flagEmoji(iso2: string): string {
-  return iso2
-    .toUpperCase()
-    .replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
+/* -------------------------------------------------------------------------- */
+/*  The full country table                                                     */
+/* -------------------------------------------------------------------------- */
+
+function entryFor(iso2: CountryCode): PhoneCountry {
+  return { iso2, flag: countryFlagEmoji(iso2), dialCode: `+${getCountryCallingCode(iso2)}` }
 }
+
+/**
+ * Every country `libphonenumber-js` knows a calling code for, built ONCE at module load.
+ *
+ * A module-level constant rather than a hook/memo: the list is ~250 entries and completely static
+ * (it is derived from the bundled metadata, not from anything the user does), so rebuilding it per
+ * mount of a phone field would be pure waste. The ORDER here is the library's own (alphabetical by
+ * ISO code) — callers that show it to a human sort it by the LOCALISED name instead, which is a
+ * per-locale concern and therefore not baked in here.
+ */
+export const PHONE_COUNTRIES: readonly PhoneCountry[] = getCountries().map(entryFor)
+
+const BY_ISO2 = new Map<string, PhoneCountry>(
+  PHONE_COUNTRIES.map((country) => [country.iso2, country]),
+)
+
+/** Look up one country by ISO 3166-1 alpha-2 code. `null` for anything not in the table — an
+ * unknown code from geo-IP or a stored phone number is a normal, non-error state. */
+export function countryByIso2(iso2: string | null | undefined): PhoneCountry | null {
+  if (!iso2) return null
+  return BY_ISO2.get(iso2.trim().toUpperCase()) ?? null
+}
+
+/**
+ * The site's own market — what a phone field shows before geo-IP answers (or when it never does).
+ *
+ * Moved here from `features/auth/components/PhoneField` when the country picker became explicit:
+ * two features now need the same fallback (sign-up and the account screen), and features may not
+ * import from one another.
+ */
+export const DEFAULT_PHONE_COUNTRY: PhoneCountry =
+  BY_ISO2.get('AM') ?? { iso2: 'AM' as CountryCode, flag: '🇦🇲', dialCode: '+374' }

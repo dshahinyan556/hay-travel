@@ -11,8 +11,8 @@ echo   Hay Travel - starting servers
 echo ==========================================
 echo.
 
-echo [1/2] Backend  -^> http://localhost:5254
-start "Hay Travel BACKEND (5254)" cmd /k dotnet run --project "%BACKEND%" --urls http://localhost:5254
+echo [1/2] Backend  -^> http://localhost:5253
+start "Hay Travel BACKEND (5253)" cmd /k dotnet run --project "%BACKEND%" --urls http://localhost:5253
 
 echo [2/2] Frontend -^> http://localhost:5173
 start "Hay Travel FRONTEND (5173)" cmd /k cd /d "%FRONTEND%" ^&^& npm run dev

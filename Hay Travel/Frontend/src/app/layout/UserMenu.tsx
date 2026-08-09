@@ -11,7 +11,7 @@ import { Popover } from '@/shared/ui'
  *
  * Anonymous → the same gold "Войти" pill the header always had, so nothing about the signed-out
  * header changes. Signed in → a trigger showing the username, opening a small menu (панель /
- * смена пароля / выход).
+ * личный кабинет / выход).
  *
  * Desktop-only (`lg`), like the pill it replaces: below that the account entry lives in
  * `MobileTabBar`, which has the room for it.
@@ -84,11 +84,8 @@ export function UserMenu() {
           {canOpenAdminPanel(user.role) && (
             <MenuLink to="/admin" onClick={() => setOpen(false)} label={t('auth.goToPanel')} />
           )}
-          <MenuLink
-            to="/auth/change-password"
-            onClick={() => setOpen(false)}
-            label={t('auth.changePasswordTitle')}
-          />
+          {/* One entry, not three: `/account` is where email, phone and password all live now. */}
+          <MenuLink to="/account" onClick={() => setOpen(false)} label={t('account.title')} />
           <button
             type="button"
             role="menuitem"

@@ -51,6 +51,13 @@ export interface AuthUser {
   lastName?: string | null
   phoneNumber?: string
   isEmailVerified?: boolean
+  /**
+   * The one SuperAdmin flag (ADR 011). Written ONLY from the access token's `is_super_admin`
+   * claim — no DTO carries it, by design (D6: the panel must not reveal who else is a SuperAdmin).
+   * Absent and `false` mean the same thing; never test it truthily, always `=== true`, and prefer
+   * asking `canManageAdmins(user)` in `permissions.ts` over reading the field at a call site.
+   */
+  isSuperAdmin?: boolean
 }
 
 /**
@@ -183,4 +190,25 @@ export interface UserDetailInfoModel {
   /** Misleadingly named on the backend (see B2's note): IP of the last AUTHENTICATED request,
    * not literally the last login. `null` until the first authenticated request after B7. */
   lastLoginIp: string | null
+}
+
+/**
+ * One row of `GET api/Users/{id}/LoginHistory` (C2, 2026-08-09) — written on every SUCCESSFUL
+ * login (not on a token refresh: rotating a token is not a login). Top 100, newest first.
+ *
+ * Admin-only by explicit product decision: the public `/account` screen does NOT show this ("это
+ * для нас инфо" — see block C of `profile-account-checklist-2026-08-09.txt`).
+ *
+ * `ipAddress`/`userAgent` are always present (non-nullable columns); the three geo fields are
+ * nullable — the geo database is optional on the backend and private/unknown addresses resolve to
+ * nothing at all.
+ */
+export interface LoginHistoryEntryModel {
+  ipAddress: string
+  countryCode: string | null
+  countryName: string | null
+  city: string | null
+  userAgent: string
+  /** ISO-8601, UTC, no zone suffix guaranteed — parse before formatting. */
+  loggedInAtUtc: string
 }
