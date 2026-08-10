@@ -648,6 +648,29 @@ body {
 }
 
 /**
+ * ── MENU ROW ENTRANCE (2.4) ───────────────────────────────────────────────────────────────────
+ * Same shape as `.region-in` above and for the same reason: a keyframe, not a transition, because
+ * the row has no "before" state to transition from — the whole `<ul>` mounts fresh every time the
+ * menu opens (`CurrencySwitch`'s `Popover`/`Sheet` panel both unmount their children on close, so
+ * there is nothing already-in-the-DOM to animate FROM). `--i` is set inline per row by the caller,
+ * already clamped there — the `min()` here is just a second floor in case a future caller forgets.
+ */
+@keyframes menu-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.menu-row-in {
+  animation: menu-row-in var(--dur-fast) var(--ease-out-soft) both;
+  animation-delay: calc(min(var(--i, 0), 6) * 16ms);
+}
+
+/**
  * ── HOVER / PRESS (2.4) ───────────────────────────────────────────────────────────────────────
  *
  * These replace `transition-colors`, they do not sit next to it: unlayered CSS outranks Tailwind's
