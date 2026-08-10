@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useBodyScrollLock, useFocusTrap, useReducedMotion } from '@/shared/hooks'
+import { useBodyScrollLock, useFocusTrap, useReducedMotion, useVisualViewportHeight } from '@/shared/hooks'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 
 /**
@@ -165,6 +165,13 @@ export function Sheet({
   const { half: HALF_OFFSET, full: FULL_OFFSET } = detents
 
   const reducedMotion = useReducedMotion()
+  // Keyboard-aware bottom anchor (2026-08-11) — see the hook's own doc comment. Without this the
+  // outer wrapper below spans the full, keyboard-including screen height on several mobile
+  // browsers, so `items-end` pins the sheet's bottom edge behind the on-screen keyboard instead of
+  // above it. Matters most for a short, content-sized sheet (no `heightDvh`, e.g. a filtered
+  // `Select` list): the fewer rows left after filtering, the shorter the sheet, and a short enough
+  // one ends up ENTIRELY inside the region the keyboard covers — invisible, not just clipped.
+  const viewportHeight = useVisualViewportHeight()
 
   const [mounted, setMounted] = useState(false)
   const [offset, setOffsetState] = useState(CLOSED_OFFSET)
@@ -366,7 +373,10 @@ export function Sheet({
   return (
     // Mounted only on compact viewports — the parent owns that gate, so no `lg:hidden` here:
     // a CSS-hidden sheet would still lock the page scroll and trap focus.
-    <div className="fixed inset-0 z-40 flex items-end">
+    <div
+      className="fixed left-0 right-0 z-40 flex items-end"
+      style={{ top: 0, height: viewportHeight }}
+    >
       <button
         type="button"
         aria-label={resolvedBackdropLabel}
