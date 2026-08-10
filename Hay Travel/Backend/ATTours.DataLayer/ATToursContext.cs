@@ -1,4 +1,5 @@
 ﻿using ATTours.Common.Entities;
+using ATTours.Common.Infrastructure.Conversions;
 using Microsoft.EntityFrameworkCore;
 
 namespace ATTours.DataLayer
@@ -6,6 +7,15 @@ namespace ATTours.DataLayer
     public partial class ATToursContext : DbContext
     {
         public ATToursContext(DbContextOptions<ATToursContext> options) : base(options) { }
+
+        // Fix for the "online status stuck N hours in the past" class of bug (2026-08-11) — see
+        // `UtcDateTimeConverters.cs` for the full mechanism. Applies to every DateTime/DateTime?
+        // property in the model, not just User's — every "…AtUtc" column has the same Kind gap.
+        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+        {
+            configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+            configurationBuilder.Properties<DateTime?>().HaveConversion<UtcNullableDateTimeConverter>();
+        }
 
         public DbSet<Tour> Tours {  get; set; }
         public DbSet<TourDay> TourDays { get; set; }
