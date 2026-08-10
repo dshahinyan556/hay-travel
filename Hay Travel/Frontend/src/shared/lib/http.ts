@@ -19,6 +19,34 @@
  */
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim()
 
+/**
+ * Bearer token to opportunistically attach to every request, or `null` when signed out.
+ *
+ * Registered by `shared/auth/authStore.ts` (`setAuthTokenProvider(getAccessToken)`) rather than
+ * imported directly — `authApi.ts`'s own doc comment pins the dependency direction as
+ * `http ← authApi ← authStore`, and `http` reaching up to import `authStore` would invert that
+ * into a cycle. A callback registered from the auth side keeps `shared/lib` free of any `shared/
+ * auth` import while still letting `apiFetch` reach the current token.
+ *
+ * Why `apiFetch` needs this at all (2026-08-11): the backend's `UserActivityTrackingMiddleware`
+ * records "last active" off ANY request that carries a valid token, public endpoints included —
+ * `UseAuthentication()` populates `HttpContext.User` from the header regardless of whether the
+ * matched endpoint requires `[Authorize]`. But only `authFetch` (protected calls: `/account`,
+ * admin, password changes) was attaching the header; ordinary browsing — `tours.ts`, `regions.ts`,
+ * `siteSettings.ts` — went through this file's plain `apiFetch` with no token at all. So a signed-
+ * in visitor's "last active" only ever moved on the rare protected action, not on the browsing
+ * that was actually happening, and the admin "online" badge read stuck/stale. Attaching the token
+ * here — opportunistically, not required — fixes that without adding a heartbeat/poll (an explicit
+ * non-goal, see `onlineStatus.ts`): the requests were already happening, they just weren't carrying
+ * proof of who was making them.
+ */
+let tokenProvider: (() => string | null) | null = null
+
+/** See `tokenProvider` above. */
+export function setAuthTokenProvider(provider: () => string | null): void {
+  tokenProvider = provider
+}
+
 /** Thrown when the server responds with a non-2xx status. Carries the HTTP status and,
  * when the body could be parsed, the raw payload for callers that want to inspect it. */
 export class ApiError extends Error {
@@ -56,6 +84,13 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const headers = new Headers(init?.headers)
   if (init?.body != null && METHODS_WITH_BODY.has(method) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
+  }
+  // Opportunistic, not required — see `tokenProvider` above. `!headers.has(...)` lets `authFetch`'s
+  // own explicit header (set from a just-refreshed token during its 401 retry) win over whatever
+  // this provider would currently return.
+  if (!headers.has('Authorization')) {
+    const token = tokenProvider?.()
+    if (token) headers.set('Authorization', `Bearer ${token}`)
   }
 
   const res = await fetch(url, { ...init, headers })
