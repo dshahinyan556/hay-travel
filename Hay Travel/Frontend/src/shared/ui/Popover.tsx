@@ -69,6 +69,42 @@ function computePosition(
   return { top, left, width: matchAnchorWidth ? width : undefined }
 }
 
+/**
+ * The anchor's RESTING box.
+ *
+ * `getBoundingClientRect()` reports the VISUALLY TRANSFORMED box, and this project's icon buttons
+ * carry `.icon-press`, which scales them to `0.92` for the duration of the `:active` press (see
+ * `index.css`). A popover is opened BY such a button, so the very first measurement happens while
+ * the anchor is still pressed: the panel lands against a box ~8% too small and a few px off. The
+ * press then ends, but nothing re-renders, so the panel stays there — until the next render for any
+ * unrelated reason (in `CurrencySwitch`, the first hover over an option) re-measures the now-resting
+ * anchor and the panel JUMPS. Measured on the currency switch: anchor 97.0x40.0 at rest vs
+ * 89.2x36.8 while pressed, panel jumping `dx=-4 dy=+2` on first hover and back again on close.
+ *
+ * `offsetWidth`/`offsetHeight` are the untransformed border-box size, and a centre-origin scale
+ * (the CSS default, which `.icon-press` relies on) leaves the box's CENTRE where it is. Rebuilding
+ * the rect from the visual centre plus the layout size therefore cancels the press scale while
+ * still following a genuine translation — there `offsetWidth === rect.width`, so the guard below
+ * returns the measured rect untouched.
+ */
+function restingRect(el: HTMLElement): DOMRect {
+  const visual = el.getBoundingClientRect()
+  const layoutWidth = el.offsetWidth
+  const layoutHeight = el.offsetHeight
+  // `offsetWidth`/`offsetHeight` are integers, so an untransformed anchor reads back within a
+  // pixel of its own rect. Bail out there, which keeps every existing call site byte-identical and
+  // limits this correction to anchors that are genuinely mid-scale.
+  if (!layoutWidth || !layoutHeight) return visual
+  if (Math.abs(visual.width - layoutWidth) < 1 && Math.abs(visual.height - layoutHeight) < 1) return visual
+
+  return new DOMRect(
+    visual.left + visual.width / 2 - layoutWidth / 2,
+    visual.top + visual.height / 2 - layoutHeight / 2,
+    layoutWidth,
+    layoutHeight,
+  )
+}
+
 export interface PopoverProps {
   open: boolean
   /** Called on outside click or Escape. Escape also returns focus to `anchorRef.current`. */
@@ -119,7 +155,10 @@ export function Popover({
     const panel = panelRef.current
     if (!anchor || !panel) return
     const next = computePosition(
-      anchor.getBoundingClientRect(),
+      // NOT `anchor.getBoundingClientRect()` — see `restingRect`: the anchor is mid-press-scale on
+      // the open that this measurement belongs to, and measuring that transformed box is what made
+      // the panel jump a few px on its first re-render.
+      restingRect(anchor),
       panel.getBoundingClientRect(),
       matchAnchorWidth,
       window.innerWidth,
