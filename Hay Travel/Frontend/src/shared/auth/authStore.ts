@@ -26,6 +26,7 @@
  * flag, so "not present" there means "unknown", not "false".
  */
 
+import { setAuthTokenProvider } from '@/shared/lib/http'
 import { loginRequest, logoutRequest, refreshRequest, registerRequest } from './authApi'
 import {
   ROLE_NAME_TO_TYPE,
@@ -100,10 +101,20 @@ function setState(next: AuthState): void {
   for (const listener of listeners) listener()
 }
 
-/** The bearer token for `authFetch`. No other module should need it. */
+/**
+ * The bearer token for `authFetch`. Also registered below with `shared/lib/http.ts` as its
+ * opportunistic token provider (2026-08-11) — `apiFetch`'s plain, unauthenticated calls need it
+ * too now, so the backend's activity tracking sees ordinary signed-in browsing, not just the
+ * handful of actions that go through `authFetch`. No OTHER module should call this directly.
+ */
 export function getAccessToken(): string | null {
   return accessToken
 }
+
+// Registered here (not in http.ts, which must not import this module — see `setAuthTokenProvider`'s
+// doc comment) so `apiFetch` can reach the live token without inverting the `http ← authApi ←
+// authStore` dependency direction `authApi.ts` documents.
+setAuthTokenProvider(getAccessToken)
 
 /** Refresh this many ms before the token actually expires, so a request can't die in flight
  * because the token aged out between the check and the server reading it. */
