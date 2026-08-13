@@ -125,7 +125,7 @@ export function HeroSection({ hero }: HeroSectionProps) {
           </a>
           <Link
             to="/regions"
-            className="btn-motion inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm text-gold-light ring-1 ring-gold-deep/60 hover:bg-wine-tint focus-visible:ring-2 focus-visible:ring-gold-light focus-visible:outline-none"
+            className="btn-motion inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm text-gold-light ring-1 ring-gold-deep/60 hover:bg-gold-light/10 hover:ring-gold-light focus-visible:ring-2 focus-visible:ring-gold-light focus-visible:outline-none"
           >
             <MapIcon size={16} />
             {t('home.hero.regionsCta')}

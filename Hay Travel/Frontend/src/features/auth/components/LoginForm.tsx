@@ -50,7 +50,6 @@ export function LoginForm({ onSubmit, error, status, forgotPasswordHref }: Login
   return (
     <Reveal group className="mt-5">
       <form
-        className="space-y-3.5"
         onSubmit={(e) => {
           e.preventDefault()
           const data = new FormData(e.currentTarget)
@@ -60,56 +59,62 @@ export function LoginForm({ onSubmit, error, status, forgotPasswordHref }: Login
           })
         }}
       >
-        {status === 'success' && <AuthSuccess message={t('auth.successLogin')} />}
-        {error && <AuthError message={error} />}
+        <div className="space-y-3.5">
+          {status === 'success' && <AuthSuccess message={t('auth.successLogin')} />}
+          {error && <AuthError message={error} />}
 
-        <fieldset
-          disabled={isBusy}
-          className="m-0 space-y-3.5 border-0 p-0 transition-opacity duration-[var(--dur-fast)] disabled:opacity-55"
-        >
-          <div className="reveal-item">
-            <AuthField
-              name="usernameOrEmail"
-              label={t('auth.usernameOrEmail')}
-              type="text"
-              autoComplete="username"
-              maxLength={256}
-              icon={<UserIcon size={16} />}
-              invalid={Boolean(error)}
-            />
-          </div>
-          <div className="reveal-item">
-            <AuthField
-              name="password"
-              label={t('auth.password')}
-              type="password"
-              autoComplete="current-password"
-              maxLength={128}
-              icon={<LockIcon size={16} />}
-              invalid={Boolean(error)}
-            />
-          </div>
+          <fieldset
+            disabled={isBusy}
+            className="m-0 space-y-3.5 border-0 p-0 transition-opacity duration-[var(--dur-fast)] disabled:opacity-55"
+          >
+            <div className="reveal-item">
+              <AuthField
+                name="usernameOrEmail"
+                label={t('auth.usernameOrEmail')}
+                type="text"
+                autoComplete="username"
+                maxLength={256}
+                icon={<UserIcon size={16} />}
+                invalid={Boolean(error)}
+              />
+            </div>
+            <div className="reveal-item">
+              <AuthField
+                name="password"
+                label={t('auth.password')}
+                type="password"
+                autoComplete="current-password"
+                maxLength={128}
+                icon={<LockIcon size={16} />}
+                invalid={Boolean(error)}
+              />
+            </div>
 
-          <p className="reveal-item text-right">
-            <Link
-              to={forgotPasswordHref}
-              className="link-underline text-xs text-gold-ink hover:text-accent-strong"
-            >
-              {t('auth.forgotPassword')}
-            </Link>
-          </p>
-        </fieldset>
+            <p className="reveal-item text-right">
+              <Link
+                to={forgotPasswordHref}
+                className="link-underline text-xs text-gold-ink hover:text-accent-strong"
+              >
+                {t('auth.forgotPassword')}
+              </Link>
+            </p>
+          </fieldset>
+        </div>
 
-        <AuthSubmitButton
-          isLoading={status === 'submitting'}
-          isSuccess={status === 'success'}
-        >
-          {status === 'submitting'
-            ? t('auth.checking')
-            : status === 'success'
-              ? t('auth.signedIn')
-              : t('auth.submitLogin')}
-        </AuthSubmitButton>
+        {/* `mt-6`, not another `space-y-3.5` step: the button is an action, not another field —
+            it reads clearly separate from the field stack instead of looking glued to it. */}
+        <div className="mt-6">
+          <AuthSubmitButton
+            isLoading={status === 'submitting'}
+            isSuccess={status === 'success'}
+          >
+            {status === 'submitting'
+              ? t('auth.checking')
+              : status === 'success'
+                ? t('auth.signedIn')
+                : t('auth.submitLogin')}
+          </AuthSubmitButton>
+        </div>
       </form>
     </Reveal>
   )

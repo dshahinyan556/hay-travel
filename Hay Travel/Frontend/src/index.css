@@ -913,6 +913,204 @@ body {
 }
 
 /**
+ * ── «СТЕКЛЯННАЯ ЛЕНТА» (вариант навигации `rail`) ─────────────────────────────────────────────
+ *
+ * Второй скин шапки и нижней навигации, выбираемый админом (`theme.navStyle`, см.
+ * `shared/lib/navStyle.ts`). Разметка — `app/layout/frosted/*`; сюда вынесено ровно то, что
+ * Tailwind-утилитами не выражается: маски градиентом на слоях `backdrop-filter` и высоты,
+ * зависящие от `env(safe-area-inset-*)`.
+ *
+ * Вариант `pill` (`Header`/`MobileTabBar`) НИЧЕГО отсюда не использует — ни один селектор ниже
+ * не пересекается с его классами.
+ *
+ * ── Почему три слоя блюра, а не один ─────────────────────────────────────────────────────────
+ * Обычный `backdrop-blur` даёт видимую линию обрезки: контент под лентой резко переходит из
+ * размытого в чёткий. Три слоя разной силы (18/8/3px), каждый со своей маской затухания,
+ * растворяют границу — к низу размытие сходит на нет, линии нет вообще. Слои прозрачны сами по
+ * себе (`backdrop-filter` не рисует пикселей), поэтому их порядок — это порядок наложения
+ * размытий, а тон (`.rail-tint`) кладётся последним, поверх.
+ *
+ * ── Reduced motion ───────────────────────────────────────────────────────────────────────────
+ * Отдельного блока не нужно: все переходы ниже идут на `--dur-base`/`--dur-fast`, а те уже
+ * схлопываются в 1ms в блоке `@media (prefers-reduced-motion)` выше. Состояние меняется, ничего
+ * не «едет». Трансформы (`.rail-tab-notch`) в тот блок НЕ добавляются: `scaleX` здесь — это само
+ * состояние «вкладка активна», а не движение, и `transform: none !important` его бы стёр.
+ */
+:root {
+  /* Тон стекла = панель сайта, а не свой цвет: переключение палитры/темы тянет ленту за собой. */
+  --rail-tint: color-mix(in srgb, var(--surface-panel) 82%, transparent);
+  --rail-tint-mid: color-mix(in srgb, var(--surface-panel) 46%, transparent);
+  /* Высоты ленты. Мобильные — база; десктопные переопределяются в `@media` ниже. */
+  --rail-h: 64px;
+  --rail-h-scrolled: 56px;
+}
+[data-theme='light'] {
+  /* Пергамент светлее и «жиже» обсидиана — при 82% текст ленты начинал просвечивать насквозь. */
+  --rail-tint: color-mix(in srgb, var(--surface-panel) 86%, transparent);
+  --rail-tint-mid: color-mix(in srgb, var(--surface-panel) 50%, transparent);
+}
+@media (min-width: 1024px) {
+  :root {
+    --rail-h: 80px;
+    --rail-h-scrolled: 60px;
+  }
+}
+
+/**
+ * Оболочка ленты — В ПОТОКЕ и постоянной высоты, в отличие от самой ленты.
+ *
+ * Это и есть причина, по которой их двое. Лента сжимается 80→60px при прокрутке; будь она в
+ * потоке сама, каждое пересечение порога дёргало бы всю страницу на 20px вверх/вниз (layout
+ * shift ровно в момент, когда посетитель читает). Оболочка держит постоянные 80px, лента внутри
+ * позиционирована абсолютно и меняет высоту, ни на что не влияя.
+ */
+.rail-shell {
+  height: calc(var(--rail-h) + env(safe-area-inset-top));
+}
+.rail-visual {
+  height: calc(var(--rail-h) + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+  transition: height var(--dur-base) var(--ease-out-soft);
+}
+.rail-visual[data-elevated] {
+  height: calc(var(--rail-h-scrolled) + env(safe-area-inset-top));
+}
+
+/* Стопка стекла. Уходит на 30px НИЖЕ ленты — там доживают маски затухания. */
+.rail-glass {
+  position: absolute;
+  inset: 0 0 -30px 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out-soft);
+}
+.rail-visual[data-elevated] .rail-glass {
+  opacity: 1;
+}
+.rail-glass > i {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.rail-blur-1 {
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 40%, transparent 74%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 40%, transparent 74%);
+}
+.rail-blur-2 {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 62%, transparent 92%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 62%, transparent 92%);
+}
+.rail-blur-3 {
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 82%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0%, #000 82%, transparent 100%);
+}
+.rail-tint {
+  background-image: linear-gradient(180deg, var(--rail-tint), var(--rail-tint-mid) 64%, transparent);
+}
+
+/**
+ * Шов — та же `.seam`, что между секциями главной, поэтому класс НАВЕШИВАЕТСЯ вместе с ней
+ * (`class="seam rail-seam"`), а градиент здесь не повторяется. Переопределяется только позиция и
+ * непрозрачность: `--seam-op` (.55/.45) — это декоративный разделитель, а здесь шов работает
+ * границей хрома над контентом и должен читаться в полную силу. Тот же аргумент, по которому
+ * `.seam-loading` выше переопределяет `--seam-op`.
+ */
+.rail-seam {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out-soft);
+}
+.rail-visual[data-elevated] .rail-seam {
+  opacity: 0.85;
+}
+
+/**
+ * Логотип уменьшается вместе с лентой. `font-size` в CSS, а не `text-[…]`-утилитой: значение
+ * меняется от состояния предка (`[data-elevated]`), а Tailwind таких зависимостей не выражает.
+ */
+.rail-word {
+  font-size: 18px;
+  line-height: 1;
+  transition: font-size var(--dur-base) var(--ease-out-soft);
+}
+/* Планшет: лента ещё мобильной высоты (64px), но 18px в ней уже теряются — тот же промежуточный
+   шаг, что `text-base sm:text-2xl` у словесного знака плавающей шапки. */
+@media (min-width: 640px) {
+  .rail-word {
+    font-size: 21px;
+  }
+}
+@media (min-width: 1024px) {
+  .rail-word {
+    font-size: 25px;
+  }
+  .rail-visual[data-elevated] .rail-word {
+    font-size: 21px;
+  }
+}
+
+/* ── Нижний док (мобильный) ─────────────────────────────────────────────────────────────────── */
+
+/* Зеркало `.rail-glass`: размытие растёт ВВЕРХ, на 34px выше дока, маски — с нулём наверху. */
+.dock-glass {
+  position: absolute;
+  inset: -34px 0 0 0;
+  pointer-events: none;
+}
+.dock-glass > i {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.dock-blur-1 {
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  -webkit-mask-image: linear-gradient(0deg, #000 0%, #000 46%, transparent 80%);
+  mask-image: linear-gradient(0deg, #000 0%, #000 46%, transparent 80%);
+}
+.dock-blur-2 {
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  -webkit-mask-image: linear-gradient(0deg, #000 0%, #000 68%, transparent 96%);
+  mask-image: linear-gradient(0deg, #000 0%, #000 68%, transparent 96%);
+}
+.dock-tint {
+  background-image: linear-gradient(0deg, var(--rail-tint), var(--rail-tint-mid) 62%, transparent);
+}
+.dock-seam {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  opacity: 0.85;
+}
+
+/**
+ * Запасной вариант для браузеров без `backdrop-filter` (Firefox до 103, старые Android WebView):
+ * вместо стекла — сплошная панель, вся остальная геометрия не меняется. Без этого лента там
+ * оказалась бы полностью прозрачной, и контент читался бы прямо сквозь меню.
+ */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .rail-tint {
+    background-image: none;
+    background-color: color-mix(in srgb, var(--surface-panel) 92%, transparent);
+  }
+  .dock-tint {
+    background-image: none;
+    background-color: color-mix(in srgb, var(--surface-panel) 92%, transparent);
+  }
+}
+
+/**
  * Clickable SVG regions on the Armenia map.
  *
  * The browser's default focus ring is a RECTANGLE drawn around the path's bounding box —

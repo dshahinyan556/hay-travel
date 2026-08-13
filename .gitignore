@@ -1,1 +1,7 @@
 graphify-out/
+
+# Local Netlify folder
+.netlify
+
+# Local Vercel folder (project link + pulled env vars)
+.vercel

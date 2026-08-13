@@ -271,22 +271,30 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
                   {visibleTours.length === 0 ? (
                     <p className="px-1 py-2 text-sm text-neutral-500">{calendarCopy.bulkNoTours}</p>
                   ) : (
-                    <ul className="flex flex-col gap-1">
-                      {visibleTours.map((tour) => (
-                        <li key={tour.id} className="min-w-0">
-                          <Checkbox
-                            label={tourTitle(tour.id)}
-                            checked={form.tourIds.includes(tour.id)}
-                            onChange={(event) =>
-                              patch({
-                                tourIds: event.target.checked
-                                  ? [...form.tourIds, tour.id]
-                                  : form.tourIds.filter((id) => id !== tour.id),
-                              })
-                            }
-                          />
-                        </li>
-                      ))}
+                    <ul className="flex flex-col gap-0.5">
+                      {visibleTours.map((tour) => {
+                        const selected = form.tourIds.includes(tour.id)
+                        return (
+                          <li key={tour.id} className="min-w-0">
+                            {/* Same hover-highlighted-row convention as `Select`'s searchable
+                                list (admin surface) — see DayClosureControls' identical list. */}
+                            <Checkbox
+                              label={tourTitle(tour.id)}
+                              checked={selected}
+                              containerClassName={`w-full rounded-lg px-2 py-1.5 transition-colors ${
+                                selected ? 'bg-brand-50 font-semibold' : 'hover:bg-neutral-100'
+                              }`}
+                              onChange={(event) =>
+                                patch({
+                                  tourIds: event.target.checked
+                                    ? [...form.tourIds, tour.id]
+                                    : form.tourIds.filter((id) => id !== tour.id),
+                                })
+                              }
+                            />
+                          </li>
+                        )
+                      })}
                     </ul>
                   )}
                 </div>
