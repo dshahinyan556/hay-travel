@@ -143,8 +143,8 @@ namespace ATTours.Common.Infrastructure.SiteSettings
                 defaultValue: "pill",
                 options:
                 [
-                    new SiteSettingOption("pill", "Плавающее меню (как сейчас)"),
-                    new SiteSettingOption("rail", "Сплошная панель со скролл-блюром (Frosted Rail)"),
+                    new SiteSettingOption("pill", "Плавающая капсула"),
+                    new SiteSettingOption("rail", "Стеклянная лента"),
                 ]),
         ];
 
