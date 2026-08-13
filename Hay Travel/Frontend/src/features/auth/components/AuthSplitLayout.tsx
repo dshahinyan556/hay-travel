@@ -45,7 +45,7 @@ export function AuthSplitLayout({
   const { t } = useLocale()
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[44%_56%]">
+    <div className="grid grid-cols-1 lg:mx-auto lg:max-w-7xl lg:grid-cols-[44%_56%]">
       <AuthPhotoPanel />
 
       <div className="flex items-center justify-center px-4 py-8 lg:px-10 lg:py-12">

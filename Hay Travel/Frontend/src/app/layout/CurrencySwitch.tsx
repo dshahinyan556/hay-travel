@@ -60,7 +60,20 @@ const EXIT_MS = 220
  * renders DISABLED with `֏` rather than disappearing: a control that vanishes reads as a broken
  * page, a disabled one reads as "unavailable right now".
  */
-export function CurrencySwitch() {
+export interface CurrencySwitchProps {
+  /**
+   * Скин ТРИГГЕРА, и только его — панель/шторка у обоих вариантов одна и та же (2026-08-13,
+   * `theme.navStyle`). `pill` (или отсутствующий проп) — капсула с кольцом `ring-edge` для
+   * плавающей шапки `Header`; `rail` — сегмент внутри общего трека «Стеклянной ленты»
+   * (`app/layout/frosted/RailSegmentedControl`), без своего кольца и фона.
+   *
+   * Ветка `pill` обязана оставаться байт-в-байт тем, чем была до появления пропа: это и есть
+   * гарантия, что старая шапка не изменилась ни на пиксель.
+   */
+  variant?: 'pill' | 'rail'
+}
+
+export function CurrencySwitch({ variant = 'pill' }: CurrencySwitchProps) {
   const { t, locale } = useLocale()
   const { rates, selectedCode, active, status, lastFetchedAt, isStale } = useCurrency()
   const isCompact = useIsCompactViewport()
@@ -373,10 +386,25 @@ export function CurrencySwitch() {
         // transitions `box-shadow` (see index.css — the focus ring must snap, not fade), and a ring
         // colour change riding that same exclusion would snap too, out of step with the smooth
         // background/text fade next to it. `ThemeToggle` keeps the same restraint for the same reason.
-        className={[
-          'icon-press relative inline-flex h-10 items-center justify-center rounded-full text-sm text-ink-dim ring-1 ring-edge hover:bg-gold-fill/5 hover:text-gold-ink disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent',
-          isCompact ? 'min-w-11 gap-1 px-2' : 'gap-1.5 px-3',
-        ].join(' ')}
+        //
+        // `rail`: то же самое без собственного кольца и фонового ховера — их роль в «ленте»
+        // играет общий трек `RailSegmentedControl`, а вторая рамка внутри рамки читалась бы как
+        // сбой вёрстки. Высота задана явно (34/38px, высота трека), а не `h-full`: процентная
+        // высота зависела бы от того, растянут ли враппер, и молча ломалась бы при любой правке
+        // трека. Видимые 34px добираются до правила проекта 44×44 невидимым `before:`-
+        // расширителем — тот же приём, что у `ThemeToggle`/`LanguageSwitch`, и он растёт только
+        // по вертикали, поэтому не перехватывает клики у соседних сегментов.
+        className={
+          variant === 'rail'
+            ? [
+                "icon-press relative inline-flex h-[34px] items-center justify-center rounded-full text-ink-dim before:absolute before:inset-x-0 before:-inset-y-1.5 before:content-[''] hover:text-gold-ink disabled:cursor-not-allowed disabled:opacity-60 lg:h-[38px]",
+                isCompact ? 'min-w-11 gap-1 px-2.5 text-xs' : 'gap-1.5 px-3 text-[12.5px]',
+              ].join(' ')
+            : [
+                'icon-press relative inline-flex h-10 items-center justify-center rounded-full text-sm text-ink-dim ring-1 ring-edge hover:bg-gold-fill/5 hover:text-gold-ink disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent',
+                isCompact ? 'min-w-11 gap-1 px-2' : 'gap-1.5 px-3',
+              ].join(' ')
+        }
       >
         <span aria-hidden="true" className="w-4 shrink-0 text-center text-[13px]">
           {triggerRate.symbol}
