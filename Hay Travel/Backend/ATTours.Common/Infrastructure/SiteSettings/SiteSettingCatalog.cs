@@ -103,6 +103,33 @@ namespace ATTours.Common.Infrastructure.SiteSettings
                     [LanguageCode.Russian] = "Для групп от 7 человек мы рассчитываем стоимость индивидуально. Оставьте заявку — мы изучим её и вернёмся к вам с ценой.",
                     [LanguageCode.English] = "For groups of 7 or more we quote the price individually. Send us a request — we will review it and get back to you with a price.",
                 }),
+
+            // ---- Theme ----
+            // sortOrder 24-25 — следующие свободные номера в конце глобальной последовательности
+            // (то же правило, что описано у seo.faviconUrl). Оба ключа язык-нейтральны:
+            // id пресета и режим не зависят от языка (ADR 013). Список допустимых пресетов —
+            // ThemePaletteCatalog, чтобы фронт не хардкодил его, как не хардкодит список ключей.
+            new("theme.activePalette", SiteSettingGroup.Theme, SettingValueType.Select,          isTranslatable: false, isPublic: true, sortOrder: 24,
+                defaultValue: "obsidian",
+                options: ThemePaletteCatalog.Options),
+
+            // Мягкий дефолт режима для новых посетителей: клиентский переключатель темы
+            // остаётся рабочим, это только seed-значение.
+            new("theme.defaultMode",   SiteSettingGroup.Theme, SettingValueType.Select,          isTranslatable: false, isPublic: true, sortOrder: 25,
+                defaultValue: "dark",
+                options:
+                [
+                    new SiteSettingOption("dark",  "Тёмная"),
+                    new SiteSettingOption("light", "Светлая"),
+                ]),
+
+            // ---- Branding (продолжение) ----
+            // sortOrder 26 — следующий свободный номер (Spec 005, дополнение к Spec 002).
+            // Фото левой колонки экрана входа: брендовый ассет того же класса, что логотип,
+            // поэтому группа Branding, а не новая. Пустое значение — нормальное состояние,
+            // фронт подставляет заглушку.
+            new("branding.authImageUrl", SiteSettingGroup.Branding, SettingValueType.ImageUrl,   isTranslatable: false, isPublic: true, sortOrder: 26,
+                defaultValue: ""),
         ];
 
         // Ключи сравниваются точно (Ordinal): ключ — часть контракта API,

@@ -5,6 +5,10 @@
  * `/auth?returnTo=https://evil.example` would turn our own login screen into an open redirect
  * (phishing that starts on the real domain). Everything here exists to make that impossible —
  * only same-origin, path-relative destinations survive.
+ *
+ * Lives in `shared/lib`, not in `features/auth`, because `features/tours`' booking card now builds
+ * a `?returnTo=` link of its own (spec 003 §4.3) — and features may never import from one another,
+ * only through `shared`.
  */
 
 const FALLBACK = '/'

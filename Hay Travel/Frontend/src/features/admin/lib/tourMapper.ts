@@ -143,6 +143,7 @@ export function createModelToForm(dto: TourCreateModel): TourFormState {
     type: (dto.type as TourType) ?? TourType.Tour,
     mainImageUrl: dto.mainImageUrl ?? '',
     isActive: dto.isActive,
+    requiresPrepayment: dto.requiresPrepayment,
     title: readLocalized(dto.translations, TourTranslationType.Title),
     shortDescription: readLocalized(dto.translations, TourTranslationType.ShortDescription),
     description: readLocalized(dto.translations, TourTranslationType.Description),
@@ -187,6 +188,7 @@ export function infoToForm(dto: TourInfoModel): TourFormState {
     type: dto.type as TourType,
     mainImageUrl: dto.mainImageUrl ?? '',
     isActive: dto.isActive,
+    requiresPrepayment: dto.requiresPrepayment,
     title: readLocalized(dto.translations, TourTranslationType.Title),
     shortDescription: readLocalized(dto.translations, TourTranslationType.ShortDescription),
     description: readLocalized(dto.translations, TourTranslationType.Description),
@@ -297,6 +299,7 @@ export function formToCreateModel(form: TourFormState): TourCreateModel {
     type: form.type,
     mainImageUrl: form.mainImageUrl.trim() === '' ? null : form.mainImageUrl.trim(),
     isActive: form.isActive,
+    requiresPrepayment: form.requiresPrepayment,
     translations: [
       ...writeLocalized(TourTranslationType.Title, form.title),
       ...writeLocalized(TourTranslationType.ShortDescription, form.shortDescription),
@@ -383,6 +386,8 @@ export function formToUpdateModel(form: TourFormState, tourId: number): TourInfo
     isArchived: false,
     isFeatured: false,
     featuredSortOrder: 0,
+    // NOT ignored by UpdateTour, unlike the three flags above (B12, 2026-08-13).
+    requiresPrepayment: form.requiresPrepayment,
     mainImageUrl: form.mainImageUrl.trim() === '' ? null : form.mainImageUrl.trim(),
     translations: asInfoTranslations([
       ...writeLocalized(TourTranslationType.Title, form.title),

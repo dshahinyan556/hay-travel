@@ -1,5 +1,6 @@
 import { useId } from 'react'
-import { Field, Input, Textarea } from '@/shared/ui'
+import { Field, Input, Select, Textarea } from '@/shared/ui'
+import type { SelectOption } from '@/shared/ui'
 import { SettingValueType } from '@/features/admin/lib/enums'
 import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
 import { ImageUrlField } from '@/features/admin/ui/ImageUrlField'
@@ -68,7 +69,8 @@ interface PlainSettingFieldProps {
   onChange: (value: string) => void
 }
 
-/** Language-neutral settings: text, multiline text, a link, or an image URL with a preview. */
+/** Language-neutral settings: text, multiline text, a link, an image URL with a preview, or one
+ * value picked from a server-supplied catalog (`Select`). */
 function PlainSettingField({ field, label, hint, onChange }: PlainSettingFieldProps) {
   const id = useId()
   const value = field.value
@@ -109,6 +111,36 @@ function PlainSettingField({ field, label, hint, onChange }: PlainSettingFieldPr
             </a>
           )}
         </div>
+      </Field>
+    )
+  }
+
+  /**
+   * `field.options.length > 0` is not a formality: a backend that ships `valueType: 5` before its
+   * option catalog would otherwise render an empty, uneditable dropdown. Falling through to the
+   * text `Input` below at least lets the admin see and edit the stored value — the same "render
+   * the unknown, don't hide it" principle `toValueType` and `labelFor` already follow.
+   */
+  if (field.valueType === SettingValueType.Select && field.options.length > 0) {
+    // Значение, которого больше нет в каталоге (пресет удалили), показываем отдельной
+    // disabled-опцией: иначе <select> молча отрисовал бы первую опцию, и админ бы решил,
+    // что сохранено именно она.
+    const known = field.options.some((o) => o.value === value)
+    const options: SelectOption[] =
+      known || value === ''
+        ? field.options
+        : [{ value, label: `${value} — неизвестное значение`, disabled: true }, ...field.options]
+
+    return (
+      <Field label={label} htmlFor={id} hint={hint}>
+        <Select
+          id={id}
+          surface="admin"
+          value={value}
+          onChange={onChange}
+          options={options}
+          className="max-w-sm"
+        />
       </Field>
     )
   }

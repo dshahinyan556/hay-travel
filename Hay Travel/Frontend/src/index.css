@@ -1,5 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
 @import "tailwindcss";
+@import './styles/palettes.css';
 
 /**
  * Design tokens (Tailwind v4 `@theme`).
@@ -8,7 +8,12 @@
  * deep wine as the second. Dark is the primary theme; light is a deliberate second skin,
  * not an afterthought (see `[data-theme='light']` below).
  *
- * Only two typefaces: Cormorant Garamond for headings (`font-display`), Inter for text.
+ * Only two typefaces: Prata for display headings (`font-display`), Manrope for everything
+ * else (`font-sans`). Prata has ONE weight (400) and no italic — never pair `font-display`
+ * with `font-bold`/`font-semibold`/`italic`, the browser would synthesise them and a didone
+ * smears badly under synthetic bold. Below 24px use Manrope 600 instead of Prata: the
+ * hairline strokes disappear at small sizes (this is why `.card-title` is no longer display
+ * type). The wordmark in Header/Footer is the one documented exception.
  *
  * Gradients: two sanctioned uses, and nothing else. (1) the metallic sheen on gold display type
  * (`.text-gold-sheen`) — unchanged. (2) as of 2.3 (approved by David — this replaces the older
@@ -22,10 +27,19 @@
  * utilities) pointing at semantic `--surface`/`--ink` vars that flip per theme. That
  * indirection is what lets one utility class work in both themes without `dark:` prefixes
  * everywhere — the admin panel keeps its own light styling untouched.
+ *
+ * ── DO NOT convert this block to `@theme inline` ─────────────────────────────────────────────
+ * Plain `@theme` emits these as custom properties on `:root`, and the generated utilities
+ * reference them as `var(--color-…)`. That indirection is the ONLY reason a palette preset
+ * (`src/styles/palettes.css`, ADR 018) can repaint the whole site by overriding the variables
+ * it points at. `@theme inline` would bake the obsidian values straight into every utility:
+ * the default would keep working perfectly and EVERY preset would silently stop.
  */
 @theme {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Cormorant Garamond', Georgia, serif;
+  /* Prata's fallbacks are didones/transitionals on purpose: if the webfont fails, the page must
+     not fall back into a system grotesque and reflow its whole heading scale. */
+  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Prata', 'Bodoni MT', Didot, Georgia, serif;
 
   /**
    * ── FIXED-DARK LITERALS ───────────────────────────────────────────────────────────────────
@@ -280,6 +294,8 @@
   .parallax,
   .card-lift,
   .skeleton-shimmer,
+  /* An endless running highlight IS motion — it must switch off, not speed up. */
+  .seam-loading,
   .reveal,
   .reveal-seam,
   .reveal-item,
@@ -461,21 +477,28 @@ body {
  */
 .h1-page {
   /*
-   * `leading-[1.08]` used to clip descenders (the tail of a "y"/"g"/"j") on every tour title:
-   * paired with `.text-gold-sheen`'s `background-clip: text`, the gradient fill is clipped to
-   * the line box, and Cormorant Garamond's descenders reach past a box that tight. 1.2 gives them
-   * room without visibly loosening the heading.
+   * `leading-[1.2]` survives the move to Prata, and for the same reason it existed for Cormorant:
+   * `.text-gold-sheen` fills the glyphs via `background-clip: text`, so the gradient is clipped to
+   * the LINE BOX — a tighter leading shears the descenders off "у"/"р"/"g". NEVER take the leading
+   * below 1.15 on an element carrying `.text-gold-sheen`.
    */
-  @apply max-w-[20ch] font-display text-[48px] leading-[1.2] lg:text-[56px];
+  @apply max-w-[20ch] font-display text-[44px] leading-[1.2] lg:text-[52px];
 }
 .h2-section {
-  @apply max-w-[17ch] font-display text-[36px] leading-tight lg:text-[44px];
+  @apply max-w-[17ch] font-display text-[34px] leading-tight lg:text-[42px];
 }
 .h3-sub {
-  @apply font-display text-[32px] leading-snug lg:text-[28px];
+  /* Was 32/lg:28 — i.e. LARGER on mobile than on desktop. Fixed here on the way past. */
+  @apply font-display text-[26px] leading-snug lg:text-[28px];
 }
 .card-title {
-  @apply font-display text-[20px] leading-snug lg:text-[21px];
+  /*
+   * No longer display type. Prata at 19–21px loses its hairline strokes and reads "washed out"
+   * rather than "expensive" — and half of the catalogue's typography lives at that size. Manrope
+   * 600 buys both legibility and the distinction "large heading = event, small = information".
+   * The size no longer has a breakpoint: 19px at every width.
+   */
+  @apply font-sans text-[19px] leading-snug font-semibold;
 }
 
 /**
@@ -484,7 +507,9 @@ body {
  * keeps its icon, every other section gets this instead, as one consistent "signature" mark.
  */
 .section-eyebrow {
-  @apply inline-flex items-center gap-2 text-[11px] tracking-[0.22em] text-gold-ink uppercase;
+  /* Weight 600 (was 400): at 11px Manrope's letterforms are too light to carry `0.22em` of
+     tracking — the word falls apart into loose characters without the extra weight. */
+  @apply inline-flex items-center gap-2 text-[11px] font-semibold tracking-[0.22em] text-gold-ink uppercase;
 }
 .section-eyebrow::before {
   content: '';
@@ -812,6 +837,38 @@ body {
   background-image: linear-gradient(100deg, transparent 30%, var(--gold-soft) 50%, transparent 70%);
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.8s ease-in-out infinite;
+}
+
+/**
+ * Auth (Spec 005). The seam under the heading turns into a running highlight while a sign-in
+ * request is in flight — reusing `skeleton-shimmer`'s keyframe rather than adding a second
+ * one. Overrides `.seam`'s own `--seam-op` on purpose: at rest the hairline is a decoration,
+ * here it is a progress indicator and must read at full strength.
+ */
+.seam-loading {
+  height: 1px;
+  background-image: linear-gradient(100deg, transparent 30%, var(--gold-fill) 50%, transparent 70%);
+  background-size: 200% 100%;
+  opacity: 1;
+  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+}
+
+/**
+ * Form-level alert entrance: 8px up + fade, no shake. Duration is `--dur-fast`, which already
+ * collapses to 1ms under reduced motion, so the message still appears — instantly.
+ */
+@keyframes alert-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.alert-in {
+  animation: alert-in var(--dur-fast) var(--ease-out-soft) both;
 }
 
 /**

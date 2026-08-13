@@ -9,7 +9,7 @@ import {
   type UserInfoModel,
 } from '@/shared/auth'
 import { AuthShell } from '../components/AuthShell'
-import { withReturnTo } from '../lib/returnTo'
+import { withReturnTo } from '@/shared/lib/returnTo'
 import { getMe } from './api/account'
 import { AccountSection } from './components/AccountSection'
 import { EmailChangeForm } from './components/EmailChangeForm'

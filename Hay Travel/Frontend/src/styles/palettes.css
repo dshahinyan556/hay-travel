@@ -1,0 +1,120 @@
+/**
+ * ── PALETTE PRESETS ───────────────────────────────────────────────────────────────────────────
+ *
+ * A preset is a full set of colour-role values, attached by `data-preset` on <html> next to
+ * `data-theme` (ADR 018). Two orthogonal axes: the ADMIN picks the preset (everyone sees it),
+ * the VISITOR picks dark/light within it.
+ *
+ * "Obsidian" is deliberately NOT here: it is the default and lives in `index.css`'s own `:root`
+ * / `[data-theme='light']` blocks, so the site works with no attribute at all — offline,
+ * pre-fetch, or with the backend down.
+ *
+ * ── Adding a preset ───────────────────────────────────────────────────────────────────────────
+ * 1. Append a block PAIR below (dark, then `[data-theme='light']`), copying an existing pair.
+ * 2. Add the id to `PALETTE_IDS` in `src/shared/lib/palette.ts`.
+ * 3. Add its two page colours to `THEME_COLORS` in `src/shared/lib/theme.ts` AND to the
+ *    duplicated `COLORS` map in the pre-paint script in `index.html`.
+ * 4. Add one row to `ThemePaletteCatalog` on the backend (ATTours.Common).
+ * Nothing else. No component, no card, no button is touched — every colour in the app already
+ * goes through these variables.
+ *
+ * ── Why the selector starts with `:root` ──────────────────────────────────────────────────────
+ * `:root[data-preset='x']` is (0,2,0) against the default `:root` (0,1,0), and
+ * `:root[data-preset='x'][data-theme='light']` is (0,3,0) against `[data-theme='light']`
+ * (0,1,0). A preset therefore wins on SPECIFICITY, not on file order — which is what lets this
+ * file be `@import`ed at the TOP of index.css (CSS requires @import before other rules) and
+ * survive any future reordering. Dropping the `:root` prefix would make correctness depend on
+ * source order, and it would break silently, in one theme only.
+ *
+ * ── What a preset deliberately does NOT set ───────────────────────────────────────────────────
+ *  - motion tokens (`--dur-*`, `--ease-*`, `--stagger*`) — palette-neutral, inherited;
+ *  - `--shadow-*` in the DARK block — dark depth is black-based and palette-neutral, so it
+ *    inherits `:root`. The LIGHT block does override them: a warm-brown shadow on cold
+ *    limestone reads as dirt, exactly as a grey one does on parchment;
+ *  - `--color-brand-*` — that is the ADMIN panel's teal, and `/admin` never carries a preset.
+ */
+
+/* ─── PRESET: «Базальт и медь» — dark ──────────────────────────────────────────────────────── */
+:root[data-preset='basalt'] {
+  --surface-page:#0e1214; --surface-panel:#171c1f; --surface-panel-raised:#1e2428;
+  --surface-edge:#2b3237; --surface-edge-strong:#64737c;
+  --ink-primary:#eceff1; --ink-secondary:#b4bec4; --ink-muted:#86929a;
+
+  --accent-base:#de8f5f; --accent-strong:#efae81; --accent-hover:#efae81;
+  --accent-active:#c3743f; --accent-soft:#12211f; --accent-on:#0e1214;
+
+  --gold-ink:#de8f5f; --gold-line:#7b4e30; --gold-fill:#de8f5f;
+  --gold-fill-hover:#efae81; --gold-soft:rgba(222,143,95,.14); --gold-on:#0e1214;
+
+  /* Second accent — what "wine" is in obsidian. Here: patina. */
+  --color-wine:#1f5f55; --color-wine-tint:#12211f;
+
+  /* The "always on a dark backdrop" literals are part of the preset too. */
+  --color-gold:#de8f5f; --color-gold-light:#efae81; --color-gold-deep:#a9663c;
+  --color-obsidian:#0e1214; --color-surface-1:#171c1f; --color-surface-2:#1e2428;
+  --color-cream:#eceff1; --color-cream-dim:#b4bec4; --color-cream-muted:#86929a;
+
+  --veil:rgba(222,143,95,.085); --veil-strong:rgba(222,143,95,.14); --seam-op:.55;
+
+  --sem-success:#58c08f; --sem-success-soft:#0f241e;
+  --sem-danger:#f0736b;  --sem-danger-soft:#2a1210;
+  --sem-warning:#e3a857; --sem-warning-soft:#2a1e0c;
+
+  --state-disabled-bg:#1e2428; --state-disabled-ink:#5c666c; --state-disabled-edge:#2b3237;
+  --focus-ring:#efae81;
+
+  --hero-ink:#fff6ee; --hero-ink-dim:#e2d6cb;
+  --hero-scrim-from:rgba(14,18,20,.94); --hero-scrim-via:rgba(14,18,20,.62);
+  --hero-scrim-to:rgba(14,18,20,.18);   --hero-fade:#0e1214;
+
+  --map-sea:#0e1214; --map-region-fill:#161c1f; --map-region-muted-fill:#090c0d;
+  --map-region-hover-fill:rgba(222,143,95,.18); --map-region-selected-fill:#1f5f55;
+  --map-region-stroke:#7b4e30; --map-region-stroke-hover:#de8f5f;
+  --map-region-stroke-selected:#efae81;
+  --map-label:#b4bec4; --map-label-halo:#0e1214;
+  --map-water-fill:#1d4149; --map-water-stroke:#4e858e;
+  --map-tooltip-bg:rgba(14,18,20,.92); --map-tooltip-edge:rgba(169,102,60,.5);
+  --map-tooltip-text:#eceff1; --map-tooltip-text-muted:#b4bec4;
+}
+
+/* ─── PRESET: «Базальт и медь» — light ─────────────────────────────────────────────────────── */
+:root[data-preset='basalt'][data-theme='light'] {
+  --surface-page:#edeeec; --surface-panel:#f7f7f5; --surface-panel-raised:#ffffff;
+  --surface-edge:#dcdcd7; --surface-edge-strong:#7e868d;
+  --ink-primary:#14191c; --ink-secondary:#3e474c; --ink-muted:#5d686f;
+
+  --accent-base:#1a5b50; --accent-strong:#144a41; --accent-hover:#144a41;
+  --accent-active:#0e382f; --accent-soft:#e2eeea; --accent-on:#f7fbf9;
+
+  --gold-ink:#94491f; --gold-line:#b07641; --gold-fill:#c97a3c;
+  --gold-fill-hover:#b87340; --gold-soft:#f6ebe1; --gold-on:#14191c;
+
+  --color-wine:#1a5b50; --color-wine-tint:#e2eeea;
+
+  --veil:rgba(26,91,80,.075); --veil-strong:rgba(26,91,80,.13); --seam-op:.45;
+
+  --sem-success:#1f6b45; --sem-success-soft:#e4f0e7;
+  --sem-danger:#a3211c;  --sem-danger-soft:#fbe6e3;
+  --sem-warning:#8a5a08; --sem-warning-soft:#fbeedc;
+
+  --state-disabled-bg:#e7e8e5; --state-disabled-ink:#949b9f; --state-disabled-edge:#cfd1cd;
+  --focus-ring:#1a5b50;
+
+  --hero-ink:#fff6ee; --hero-ink-dim:#e2d6cb;
+  --hero-scrim-from:rgba(20,26,28,.92); --hero-scrim-via:rgba(20,26,28,.55);
+  --hero-scrim-to:rgba(20,26,28,.15);   --hero-fade:#edeeec;
+
+  --map-sea:#e4e6e2; --map-region-fill:#dde0da; --map-region-muted-fill:#f8f9f6;
+  --map-region-hover-fill:#ebcbae; --map-region-selected-fill:#1a5b50;
+  --map-region-stroke:#6e7a70; --map-region-stroke-hover:#b07641;
+  --map-region-stroke-selected:#c97a3c;
+  --map-label:#232b27; --map-label-halo:#f7f7f5;
+  --map-water-fill:#b9cbce; --map-water-stroke:#6e9298;
+  --map-tooltip-bg:#ffffff; --map-tooltip-edge:#b07641;
+  --map-tooltip-text:#14191c; --map-tooltip-text-muted:#3e474c;
+
+  --shadow-sm:0 1px 2px rgba(28,40,45,.07), 0 1px 3px rgba(28,40,45,.05);
+  --shadow-md:0 4px 10px -2px rgba(28,40,45,.10), 0 2px 4px -2px rgba(28,40,45,.06);
+  --shadow-lg:0 14px 30px -8px rgba(28,40,45,.15), 0 6px 12px -6px rgba(28,40,45,.08);
+  --shadow-sheet:0 -12px 34px -10px rgba(28,40,45,.18);
+}

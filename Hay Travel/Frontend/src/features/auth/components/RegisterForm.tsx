@@ -10,6 +10,7 @@ import {
   validateUsername,
 } from '../lib/passwordRules'
 import { useDefaultPhoneCountry } from '../hooks/useDefaultPhoneCountry'
+import { Reveal } from '@/shared/ui'
 import { AuthField } from './AuthField'
 import { PhoneField } from './PhoneField'
 import { AuthError, AuthSubmitButton } from './AuthShell'
@@ -17,7 +18,11 @@ import { AuthError, AuthSubmitButton } from './AuthShell'
 interface RegisterFormProps {
   onSubmit: (request: RegisterRequest) => void
   error: string | null
-  isSubmitting: boolean
+  /**
+   * Общий статус отправки, приходит из AuthPage. У регистрации состояния `'success'` нет —
+   * при успехе экран сразу уходит на `/auth/check-email`, у которого своё подтверждение.
+   */
+  status: 'idle' | 'submitting' | 'success'
 }
 
 /** Field-level messages, keyed by input name. */
@@ -35,8 +40,11 @@ type FieldErrors = Partial<Record<'username' | 'password' | 'confirmPassword', s
  * (password/confirm match) or come back from the server as bodyless `ProblemDetails` with no
  * error code (username and password length) — everything else either has a real error code or is
  * covered by the inputs' own `type`/`required`.
+ *
+ * Structure notes (fieldset / Reveal group / button outside the fieldset) are identical to
+ * `LoginForm` — see the long comment there rather than repeating it.
  */
-export function RegisterForm({ onSubmit, error, isSubmitting }: RegisterFormProps) {
+export function RegisterForm({ onSubmit, error, status }: RegisterFormProps) {
   const { t } = useLocale()
   // Geo-IP guess for the country picker; resolves after the first render and only moves the
   // selection while the visitor has not touched the phone field (see `PhoneField`).
@@ -79,71 +87,93 @@ export function RegisterForm({ onSubmit, error, isSubmitting }: RegisterFormProp
   }
 
   return (
-    <form className="mt-5 space-y-3.5" onSubmit={handleSubmit}>
-      {error && <AuthError message={error} />}
+    <Reveal group className="mt-5">
+      <form className="space-y-3.5" onSubmit={handleSubmit}>
+        {error && <AuthError message={error} />}
 
-      <AuthField
-        name="firstName"
-        label={t('auth.firstName')}
-        type="text"
-        autoComplete="given-name"
-        maxLength={128}
-        icon={<UserIcon size={16} />}
-      />
-      <AuthField
-        name="lastName"
-        label={t('auth.lastName')}
-        type="text"
-        autoComplete="family-name"
-        required={false}
-        maxLength={128}
-        icon={<UserIcon size={16} />}
-      />
-      <AuthField
-        name="username"
-        label={t('auth.username')}
-        type="text"
-        autoComplete="username"
-        maxLength={MAX_USERNAME_LENGTH}
-        error={fieldErrors.username}
-        icon={<AtIcon size={16} />}
-      />
-      <AuthField
-        name="email"
-        label={t('auth.email')}
-        type="email"
-        autoComplete="email"
-        maxLength={256}
-        icon={<MailIcon size={16} />}
-      />
-      {/* Composite control (country picker + digits), not `required` — see `PhoneField`. */}
-      <PhoneField name="phoneNumber" label={t('auth.phone')} defaultCountry={defaultCountry} />
-      <AuthField
-        name="password"
-        label={t('auth.password')}
-        type="password"
-        autoComplete="new-password"
-        maxLength={MAX_PASSWORD_LENGTH}
-        error={fieldErrors.password}
-        icon={<LockIcon size={16} />}
-        revealed={passwordRevealed}
-        onToggleRevealed={() => setPasswordRevealed((value) => !value)}
-      />
-      <AuthField
-        name="confirmPassword"
-        label={t('auth.confirmPassword')}
-        type="password"
-        autoComplete="new-password"
-        maxLength={MAX_PASSWORD_LENGTH}
-        error={fieldErrors.confirmPassword}
-        icon={<LockIcon size={16} />}
-        revealed={passwordRevealed}
-        onToggleRevealed={() => setPasswordRevealed((value) => !value)}
-      />
+        <fieldset
+          disabled={status !== 'idle'}
+          className="m-0 space-y-3.5 border-0 p-0 transition-opacity duration-[var(--dur-fast)] disabled:opacity-55"
+        >
+          <div className="reveal-item">
+            <AuthField
+              name="firstName"
+              label={t('auth.firstName')}
+              type="text"
+              autoComplete="given-name"
+              maxLength={128}
+              icon={<UserIcon size={16} />}
+            />
+          </div>
+          <div className="reveal-item">
+            <AuthField
+              name="lastName"
+              label={t('auth.lastName')}
+              type="text"
+              autoComplete="family-name"
+              required={false}
+              maxLength={128}
+              icon={<UserIcon size={16} />}
+            />
+          </div>
+          <div className="reveal-item">
+            <AuthField
+              name="username"
+              label={t('auth.username')}
+              type="text"
+              autoComplete="username"
+              maxLength={MAX_USERNAME_LENGTH}
+              error={fieldErrors.username}
+              icon={<AtIcon size={16} />}
+            />
+          </div>
+          <div className="reveal-item">
+            <AuthField
+              name="email"
+              label={t('auth.email')}
+              type="email"
+              autoComplete="email"
+              maxLength={256}
+              icon={<MailIcon size={16} />}
+            />
+          </div>
+          {/* Composite control (country picker + digits), not `required` — see `PhoneField`. */}
+          <div className="reveal-item">
+            <PhoneField name="phoneNumber" label={t('auth.phone')} defaultCountry={defaultCountry} />
+          </div>
+          <div className="reveal-item">
+            <AuthField
+              name="password"
+              label={t('auth.password')}
+              type="password"
+              autoComplete="new-password"
+              maxLength={MAX_PASSWORD_LENGTH}
+              error={fieldErrors.password}
+              icon={<LockIcon size={16} />}
+              revealed={passwordRevealed}
+              onToggleRevealed={() => setPasswordRevealed((value) => !value)}
+            />
+          </div>
+          <div className="reveal-item">
+            <AuthField
+              name="confirmPassword"
+              label={t('auth.confirmPassword')}
+              type="password"
+              autoComplete="new-password"
+              maxLength={MAX_PASSWORD_LENGTH}
+              error={fieldErrors.confirmPassword}
+              icon={<LockIcon size={16} />}
+              revealed={passwordRevealed}
+              onToggleRevealed={() => setPasswordRevealed((value) => !value)}
+            />
+          </div>
+        </fieldset>
 
-      <AuthSubmitButton disabled={isSubmitting}>
-        {isSubmitting ? t('auth.submitting') : t('auth.submitRegister')}
-      </AuthSubmitButton>
-    </form>
+        {/* «Отправляем…», not «Проверяем…»: registration is a submission, not a credential check. */}
+        <AuthSubmitButton isLoading={status === 'submitting'}>
+          {status === 'submitting' ? t('auth.submitting') : t('auth.submitRegister')}
+        </AuthSubmitButton>
+      </form>
+    </Reveal>
   )
 }

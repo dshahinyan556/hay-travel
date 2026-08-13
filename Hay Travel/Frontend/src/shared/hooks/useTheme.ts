@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { applyTheme, persistTheme, readStoredTheme, type Theme } from '@/shared/lib/theme'
+import {
+  applyTheme,
+  persistTheme,
+  readStoredTheme,
+  THEME_SYNC_EVENT,
+  type Theme,
+} from '@/shared/lib/theme'
 
 /**
  * Single source of truth for the public site's dark/light switch (rendered by `ThemeToggle`,
@@ -32,9 +38,14 @@ export function useTheme() {
       if (document.visibilityState === 'visible') resyncFromStorage()
     }
     window.addEventListener('storage', resyncFromStorage)
+    // `storage` does NOT fire in the tab that wrote the value, so the server-side default cached
+    // by `useSiteDesign` reaches this hook by an explicit event instead (ADR 018, question 3c —
+    // `useTheme` stays the single owner of `data-theme`; nobody else applies a theme).
+    window.addEventListener(THEME_SYNC_EVENT, resyncFromStorage)
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
       window.removeEventListener('storage', resyncFromStorage)
+      window.removeEventListener(THEME_SYNC_EVENT, resyncFromStorage)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [])

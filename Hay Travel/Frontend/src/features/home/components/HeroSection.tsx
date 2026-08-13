@@ -84,7 +84,10 @@ export function HeroSection({ hero }: HeroSectionProps) {
           // One gold block for the whole heading, not a "last word" split: that treatment assumed
           // one fixed Russian phrase, which stopped being true the moment the copy became
           // admin-editable free text (`hero.title` can be any length, any wording).
-          className="text-gold-sheen mt-4 max-w-3xl font-display text-5xl leading-[1.05] sm:text-6xl lg:text-7xl"
+          // 44/56/68 rather than the old 48/60/72: Prata sets denser, and at 72px a two-line
+          // heading starts to topple. The 1.1 leading (was 1.05) is mandatory, not taste — see
+          // `.h1-page` in index.css: `.text-gold-sheen` clips its gradient to the line box.
+          className="text-gold-sheen mt-4 max-w-3xl font-display text-[44px] leading-[1.1] sm:text-[56px] lg:text-[68px]"
         >
           {hero.title}
         </motion.h1>

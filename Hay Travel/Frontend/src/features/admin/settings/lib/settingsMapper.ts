@@ -45,7 +45,8 @@ function readSettingLocalized(translations: TranslatableInfoModel[] | null): Loc
 function toValueType(raw: number): SettingValueType {
   return raw === SettingValueType.MultilineText ||
     raw === SettingValueType.Url ||
-    raw === SettingValueType.ImageUrl
+    raw === SettingValueType.ImageUrl ||
+    raw === SettingValueType.Select
     ? raw
     : SettingValueType.Text
 }
@@ -66,6 +67,8 @@ export function settingsToForm(dto: SiteSettingInfoModel[]): SettingsFormState {
       id: item.id,
       valueType: toValueType(item.valueType),
       isTranslatable: item.isTranslatable,
+      // Каталог опций живёт на сервере; бэкенд без Spec 002 поле просто не пришлёт.
+      options: item.options ?? [],
       value: item.value ?? '',
       translations: readSettingLocalized(item.translations),
     }

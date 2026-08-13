@@ -175,7 +175,7 @@ function RegionTourRow({ tour }: { tour: Tour }) {
       {/* `min-w-0` lets the clamped text actually shrink inside the flex row. */}
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-start gap-2">
-          <h4 className="line-clamp-2 font-display text-base leading-snug text-ink">
+          <h4 className="line-clamp-2 font-semibold text-base leading-snug text-ink">
             {tour.title}
           </h4>
           <span className="ml-auto shrink-0">
@@ -187,7 +187,7 @@ function RegionTourRow({ tour }: { tour: Tour }) {
             <ClockIcon size={13} />
             {formatDuration(tour.durationDays, tour.durationNights, locale)}
           </span>
-          <span className="font-display text-lg text-gold-ink">
+          <span className="font-semibold text-lg text-gold-ink">
             {money.format(tour.priceFrom)}
           </span>
         </div>
@@ -233,7 +233,7 @@ function PanelMessage({
   return (
     <div className="veil-top flex flex-col items-center rounded-2xl border border-dashed border-edge px-4 py-10 text-center">
       <span className={tone === 'error' ? 'text-danger' : 'text-gold-ink'}>{icon}</span>
-      <p className="mt-3 font-display text-lg text-ink">{title}</p>
+      <p className="mt-3 font-semibold text-lg text-ink">{title}</p>
       <p className="mt-1.5 max-w-xs text-sm text-ink-muted">{body}</p>
       <div className="mt-4">{action}</div>
     </div>

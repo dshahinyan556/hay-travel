@@ -52,6 +52,9 @@ export const canManageCatalog = isAdmin
 export const canManageSettings = isAdmin
 /** «Пользователи» (`api/Users`, `api/Users/ChangeRole`). */
 export const canManageUsers = isAdmin
+/** «Календарь» (`api/Availability/*`, `Order/GetAll`) — the whole availability controller and the
+ * admin order list are Admin-only server-side, exactly like «Пользователи». */
+export const canManageCalendar = isAdmin
 
 /**
  * Touch the Admin tier at all (D3/ADR 011): grant or revoke the Admin role, and delete somebody

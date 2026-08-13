@@ -26,6 +26,7 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.IsActive, opt => opt.MapFrom(src => src.IsActive))
                 .ForMember(dest => dest.IsFeatured, opt => opt.MapFrom(src => src.IsFeatured))
                 .ForMember(dest => dest.FeaturedSortOrder, opt => opt.MapFrom(src => src.FeaturedSortOrder))
+                .ForMember(dest => dest.RequiresPrepayment, opt => opt.MapFrom(src => src.RequiresPrepayment))
                 .ForMember(dest => dest.TotalPrice, opt => opt.MapFrom(src => src.TotalPrice))
                 .ForMember(dest => dest.MainImageUrl, opt => opt.MapFrom(src => src.MainImageUrl))
                 .ForMember(dest => dest.Translations,
@@ -50,6 +51,7 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Id, opt => opt.Ignore())
                 .ForMember(dest => dest.TotalPrice, opt => opt.Ignore())
                 .ForMember(dest => dest.IsActive, opt => opt.MapFrom(src => src.IsActive))
+                .ForMember(dest => dest.RequiresPrepayment, opt => opt.MapFrom(src => src.RequiresPrepayment))
                 .ForMember(dest => dest.TourDetails, opt => opt.Ignore())
                 .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations))
                 .ForMember(dest => dest.AdditionalExpenses, opt => opt.MapFrom(src => src.AdditionalExpenses))
@@ -69,6 +71,7 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.IsActive, opt => opt.Ignore())
                 .ForMember(dest => dest.IsFeatured, opt => opt.Ignore())
                 .ForMember(dest => dest.FeaturedSortOrder, opt => opt.Ignore())
+                .ForMember(dest => dest.RequiresPrepayment, opt => opt.MapFrom(src => src.RequiresPrepayment))
                 .ForMember(dest => dest.TourDetails, opt => opt.Ignore())
                 .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations))
                 .ForMember(dest => dest.AdditionalExpenses, opt => opt.MapFrom(src => src.AdditionalExpenses))
@@ -255,6 +258,7 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.IsTranslatable, opt => opt.Ignore())
                 .ForMember(dest => dest.IsPublic, opt => opt.Ignore())
                 .ForMember(dest => dest.SortOrder, opt => opt.Ignore())
+                .ForMember(dest => dest.Options, opt => opt.Ignore())
                 .AfterMap((src, dest) => ApplyCatalogMetadata(src, dest));
 
             // SiteSettingUpdateModel -> SiteSetting (для upsert).
@@ -422,6 +426,56 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.Type))
                 .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
                 .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+
+            // ============= Mappings for ORDER =============
+            // Бронирование (spec 001). Всё, что определяет владельца, деньги и статус,
+            // ставит OrderCreationService — маппер их не трогает.
+
+            // OrderCreateModel -> Order
+            CreateMap<OrderCreateModel, Order>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                // UserId приходит из токена, а не из тела запроса (иначе — бронь на чужой аккаунт).
+                .ForMember(dest => dest.UserId, opt => opt.Ignore())
+                .ForMember(dest => dest.User, opt => opt.Ignore())
+                .ForMember(dest => dest.Tour, opt => opt.Ignore())
+                .ForMember(dest => dest.Status, opt => opt.Ignore())
+                .ForMember(dest => dest.CreatedAtUtc, opt => opt.Ignore())
+                .ForMember(dest => dest.Payment, opt => opt.Ignore())
+                .ForMember(dest => dest.TourId, opt => opt.MapFrom(src => src.TourId))
+                .ForMember(dest => dest.TourDate, opt => opt.MapFrom(src => src.TourDate))
+                .ForMember(dest => dest.GuestCount, opt => opt.MapFrom(src => src.GuestCount));
+
+            // Order -> OrderInfoModel. Поля пользователя и тура денормализуются, чтобы
+            // список не тянул отдельными запросами карточку юзера и граф тура.
+            CreateMap<Order, OrderInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.UserId, opt => opt.MapFrom(src => src.UserId))
+                .ForMember(dest => dest.TourId, opt => opt.MapFrom(src => src.TourId))
+                .ForMember(dest => dest.TourDate, opt => opt.MapFrom(src => src.TourDate))
+                .ForMember(dest => dest.GuestCount, opt => opt.MapFrom(src => src.GuestCount))
+                .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status))
+                .ForMember(dest => dest.CreatedAtUtc, opt => opt.MapFrom(src => src.CreatedAtUtc))
+                .ForMember(dest => dest.ConfirmedAtUtc, opt => opt.MapFrom(src => src.ConfirmedAtUtc))
+                .ForMember(dest => dest.Payment, opt => opt.MapFrom(src => src.Payment))
+                .ForMember(dest => dest.UserEmail, opt => opt.Ignore())
+                .ForMember(dest => dest.UserFullName, opt => opt.Ignore())
+                .ForMember(dest => dest.TourTitle, opt => opt.Ignore())
+                .ForMember(dest => dest.TourMainImageUrl, opt => opt.Ignore())
+                .AfterMap((src, dest) => ApplyOrderDenormalizedFields(src, dest));
+
+            // OrderPayment -> OrderPaymentInfoModel (плоско; свой Id наружу не едет).
+            CreateMap<OrderPayment, OrderPaymentInfoModel>();
+
+            // ============= Mappings for CLOSURERULE =============
+            // Правила закрытия (ADR 012) — плоские 1:1, переводов нет.
+            // Календарные модели (CalendarMonthModel и вложенные) маппер НЕ строит:
+            // это агрегат, его собирает OrderCalendarInfo.
+
+            CreateMap<ClosureRuleCreateModel, ClosureRule>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.Tour, opt => opt.Ignore());
+
+            CreateMap<ClosureRule, ClosureRuleInfoModel>();
 
             // ============= Mappings for USER =============
             // Токен-ответы (LoginResultModel/AccessTokenModel) собираются в AuthService вручную:
@@ -698,6 +752,45 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
             destination.IsTranslatable = definition.IsTranslatable;
             destination.IsPublic = definition.IsPublic;
             destination.SortOrder = definition.SortOrder;
+
+            // Опции Select-ключа тоже метаданные каталога: админка строит выпадающий список
+            // из ответа сервера и не хардкодит состав пресетов/режимов. Для остальных типов
+            // список пустой.
+            destination.Options = definition.Options
+                .Select(option => new SiteSettingOptionModel { Value = option.Value, Label = option.Label })
+                .ToList();
+        }
+
+        // Денормализованные поля заказа: карточка пользователя и заголовок/обложка тура.
+        // Требует загруженных User и Tour.Translations (см. OrderInfo).
+        private static void ApplyOrderDenormalizedFields(Order source, OrderInfoModel destination)
+        {
+            if (source.User is not null)
+            {
+                destination.UserEmail = source.User.Email;
+                destination.UserFullName = $"{source.User.FirstName} {source.User.LastName}".Trim();
+            }
+
+            if (source.Tour is null)
+                return;
+
+            destination.TourMainImageUrl = source.Tour.MainImageUrl;
+            destination.TourTitle = ResolveTourTitle(source.Tour);
+        }
+
+        // Одно правило на оба пути чтения: русский заголовок, иначе — любой оставшийся.
+        // В админском GetAll переводы приезжают всеми языками, и берётся RU; в GetMine
+        // контроллер уже отфильтровал коллекцию до запрошенной локали (ExtractWithNeededLanguage),
+        // поэтому RU там не находится и срабатывает fallback на единственный оставшийся перевод.
+        private static string? ResolveTourTitle(Tour tour)
+        {
+            if (tour.Translations is null)
+                return null;
+
+            var titles = tour.Translations.Where(translation => translation.Type == TourTranslationType.Title).ToList();
+
+            return titles.FirstOrDefault(translation => translation.LanguageCode == LanguageCode.Russian)?.Value
+                   ?? titles.FirstOrDefault()?.Value;
         }
 
         // Собирает TourDetails из списка дней, проставляя порядок (SortOrder).
