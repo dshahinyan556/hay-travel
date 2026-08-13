@@ -16,7 +16,19 @@ import { Popover } from '@/shared/ui'
  * Desktop-only (`lg`), like the pill it replaces: below that the account entry lives in
  * `MobileTabBar`, which has the room for it.
  */
-export function UserMenu() {
+export interface UserMenuProps {
+  /**
+   * Скин ТРИГГЕРА (и «Войти», и кнопки аккаунта), и только его — выпадающее меню у обоих
+   * вариантов одно и то же. `pill` (или отсутствующий проп) — плавающая шапка `Header`;
+   * `rail` — «Стеклянная лента» (`app/layout/frosted/FrostedRailHeader`), где кнопка выше (38px,
+   * вровень с сегментированным треком рядом) и набрана крупнее.
+   *
+   * Ветка `pill` обязана оставаться байт-в-байт тем, чем была до появления пропа.
+   */
+  variant?: 'pill' | 'rail'
+}
+
+export function UserMenu({ variant = 'pill' }: UserMenuProps) {
   const { t } = useLocale()
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -38,7 +50,11 @@ export function UserMenu() {
     return (
       <NavLink
         to={href}
-        className="btn-motion hidden rounded-full bg-gold-fill px-4 py-1.5 text-sm font-medium text-gold-on hover:bg-gold-fill-hover lg:inline-block"
+        className={
+          variant === 'rail'
+            ? 'btn-motion hidden h-[38px] items-center rounded-full bg-gold-fill px-[18px] text-[13.5px] font-semibold text-gold-on hover:bg-gold-fill-hover lg:inline-flex'
+            : 'btn-motion hidden rounded-full bg-gold-fill px-4 py-1.5 text-sm font-medium text-gold-on hover:bg-gold-fill-hover lg:inline-block'
+        }
       >
         {t('nav.login')}
       </NavLink>
@@ -65,7 +81,11 @@ export function UserMenu() {
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-label={t('auth.accountMenu')}
-        className="btn-motion hidden max-w-44 items-center gap-2 rounded-full px-3 py-1.5 text-sm text-ink-dim ring-1 ring-edge transition-colors hover:text-gold-ink lg:inline-flex"
+        className={
+          variant === 'rail'
+            ? 'btn-motion hidden h-[38px] max-w-44 items-center gap-2 rounded-full px-3.5 text-[13px] text-ink-dim ring-1 ring-edge transition-colors hover:text-gold-ink lg:inline-flex'
+            : 'btn-motion hidden max-w-44 items-center gap-2 rounded-full px-3 py-1.5 text-sm text-ink-dim ring-1 ring-edge transition-colors hover:text-gold-ink lg:inline-flex'
+        }
       >
         <GuideIcon size={17} />
         <span className="truncate">{user.username}</span>

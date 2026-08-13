@@ -4,6 +4,10 @@ import type { InputHTMLAttributes } from 'react'
 export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
   /** Visible text next to the box. Checkbox always renders with a label — there is no bare variant. */
   label: string
+  /** Extra classes on the outer `<label>` (the clickable row), not the `<input>` — e.g. to turn a
+   * checkbox into a full-width hover-highlighted list row (`Select`'s searchable-list convention).
+   * Additive: omit for the plain inline checkbox every other caller uses. */
+  containerClassName?: string
 }
 
 /**
@@ -11,7 +15,7 @@ export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement
  * `input` stay associated without the consumer having to invent unique ids.
  */
 export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Checkbox(
-  { label, id, className = '', disabled, ...props },
+  { label, id, className = '', containerClassName = '', disabled, ...props },
   ref,
 ) {
   const generatedId = useId()
@@ -20,7 +24,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
   return (
     <label
       htmlFor={inputId}
-      className={`inline-flex min-h-[28px] cursor-pointer items-center gap-2 ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+      className={`inline-flex min-h-[28px] cursor-pointer items-center gap-2 ${disabled ? 'cursor-not-allowed opacity-50' : ''} ${containerClassName}`}
     >
       <input
         ref={ref}

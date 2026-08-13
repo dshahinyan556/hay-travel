@@ -88,91 +88,97 @@ export function RegisterForm({ onSubmit, error, status }: RegisterFormProps) {
 
   return (
     <Reveal group className="mt-5">
-      <form className="space-y-3.5" onSubmit={handleSubmit}>
-        {error && <AuthError message={error} />}
+      <form onSubmit={handleSubmit}>
+        <div className="space-y-3.5">
+          {error && <AuthError message={error} />}
 
-        <fieldset
-          disabled={status !== 'idle'}
-          className="m-0 space-y-3.5 border-0 p-0 transition-opacity duration-[var(--dur-fast)] disabled:opacity-55"
-        >
-          <div className="reveal-item">
-            <AuthField
-              name="firstName"
-              label={t('auth.firstName')}
-              type="text"
-              autoComplete="given-name"
-              maxLength={128}
-              icon={<UserIcon size={16} />}
-            />
-          </div>
-          <div className="reveal-item">
-            <AuthField
-              name="lastName"
-              label={t('auth.lastName')}
-              type="text"
-              autoComplete="family-name"
-              required={false}
-              maxLength={128}
-              icon={<UserIcon size={16} />}
-            />
-          </div>
-          <div className="reveal-item">
-            <AuthField
-              name="username"
-              label={t('auth.username')}
-              type="text"
-              autoComplete="username"
-              maxLength={MAX_USERNAME_LENGTH}
-              error={fieldErrors.username}
-              icon={<AtIcon size={16} />}
-            />
-          </div>
-          <div className="reveal-item">
-            <AuthField
-              name="email"
-              label={t('auth.email')}
-              type="email"
-              autoComplete="email"
-              maxLength={256}
-              icon={<MailIcon size={16} />}
-            />
-          </div>
-          {/* Composite control (country picker + digits), not `required` — see `PhoneField`. */}
-          <div className="reveal-item">
-            <PhoneField name="phoneNumber" label={t('auth.phone')} defaultCountry={defaultCountry} />
-          </div>
-          <div className="reveal-item">
-            <AuthField
-              name="password"
-              label={t('auth.password')}
-              type="password"
-              autoComplete="new-password"
-              maxLength={MAX_PASSWORD_LENGTH}
-              error={fieldErrors.password}
-              icon={<LockIcon size={16} />}
-              revealed={passwordRevealed}
-              onToggleRevealed={() => setPasswordRevealed((value) => !value)}
-            />
-          </div>
-          <div className="reveal-item">
-            <AuthField
-              name="confirmPassword"
-              label={t('auth.confirmPassword')}
-              type="password"
-              autoComplete="new-password"
-              maxLength={MAX_PASSWORD_LENGTH}
-              error={fieldErrors.confirmPassword}
-              icon={<LockIcon size={16} />}
-              revealed={passwordRevealed}
-              onToggleRevealed={() => setPasswordRevealed((value) => !value)}
-            />
-          </div>
-        </fieldset>
+          <fieldset
+            disabled={status !== 'idle'}
+            className="m-0 space-y-3.5 border-0 p-0 transition-opacity duration-[var(--dur-fast)] disabled:opacity-55"
+          >
+            <div className="reveal-item">
+              <AuthField
+                name="firstName"
+                label={t('auth.firstName')}
+                type="text"
+                autoComplete="given-name"
+                maxLength={128}
+                icon={<UserIcon size={16} />}
+              />
+            </div>
+            <div className="reveal-item">
+              <AuthField
+                name="lastName"
+                label={t('auth.lastName')}
+                type="text"
+                autoComplete="family-name"
+                required={false}
+                maxLength={128}
+                icon={<UserIcon size={16} />}
+              />
+            </div>
+            <div className="reveal-item">
+              <AuthField
+                name="username"
+                label={t('auth.username')}
+                type="text"
+                autoComplete="username"
+                maxLength={MAX_USERNAME_LENGTH}
+                error={fieldErrors.username}
+                icon={<AtIcon size={16} />}
+              />
+            </div>
+            <div className="reveal-item">
+              <AuthField
+                name="email"
+                label={t('auth.email')}
+                type="email"
+                autoComplete="email"
+                maxLength={256}
+                icon={<MailIcon size={16} />}
+              />
+            </div>
+            {/* Composite control (country picker + digits), not `required` — see `PhoneField`. */}
+            <div className="reveal-item">
+              <PhoneField name="phoneNumber" label={t('auth.phone')} defaultCountry={defaultCountry} />
+            </div>
+            <div className="reveal-item">
+              <AuthField
+                name="password"
+                label={t('auth.password')}
+                type="password"
+                autoComplete="new-password"
+                maxLength={MAX_PASSWORD_LENGTH}
+                error={fieldErrors.password}
+                icon={<LockIcon size={16} />}
+                revealed={passwordRevealed}
+                onToggleRevealed={() => setPasswordRevealed((value) => !value)}
+              />
+            </div>
+            <div className="reveal-item">
+              <AuthField
+                name="confirmPassword"
+                label={t('auth.confirmPassword')}
+                type="password"
+                autoComplete="new-password"
+                maxLength={MAX_PASSWORD_LENGTH}
+                error={fieldErrors.confirmPassword}
+                icon={<LockIcon size={16} />}
+                revealed={passwordRevealed}
+                onToggleRevealed={() => setPasswordRevealed((value) => !value)}
+              />
+            </div>
+          </fieldset>
+        </div>
 
-        {/* «Отправляем…», not «Проверяем…»: registration is a submission, not a credential check. */}
-        <AuthSubmitButton isLoading={status === 'submitting'}>
-          {status === 'submitting' ? t('auth.submitting') : t('auth.submitRegister')}
-        </AuthSubmitButton>
+        {/* `mt-6`, not another `space-y-3.5` step: the button is an action, not another field —
+            it reads clearly separate from the field stack instead of looking glued to it. */}
+        <div className="mt-6">
+          {/* «Отправляем…», not «Проверяем…»: registration is a submission, not a credential check. */}
+          <AuthSubmitButton isLoading={status === 'submitting'}>
+            {status === 'submitting' ? t('auth.submitting') : t('auth.submitRegister')}
+          </AuthSubmitButton>
+        </div>
       </form>
     </Reveal>
   )

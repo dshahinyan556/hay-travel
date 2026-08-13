@@ -133,6 +133,10 @@ export const fieldCopy: Record<string, FieldCopy> = {
     label: 'Тема по умолчанию',
     hint: 'С какой темы открывается сайт у того, кто ещё ни разу не нажимал переключатель. Чужой выбор не сбрасывается.',
   },
+  'theme.navStyle': {
+    label: 'Стиль навигации',
+    hint: 'Оформление шапки и нижнего меню на публичном сайте.',
+  },
 }
 
 /** Caption of a field. An unknown key falls back to the key itself — visible, not hidden. */
