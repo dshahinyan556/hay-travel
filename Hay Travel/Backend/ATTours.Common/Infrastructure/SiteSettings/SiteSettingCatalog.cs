@@ -130,6 +130,22 @@ namespace ATTours.Common.Infrastructure.SiteSettings
             // фронт подставляет заглушку.
             new("branding.authImageUrl", SiteSettingGroup.Branding, SettingValueType.ImageUrl,   isTranslatable: false, isPublic: true, sortOrder: 26,
                 defaultValue: ""),
+
+            // ---- Theme (продолжение) ----
+            // sortOrder 27 — следующий свободный номер в конце глобальной последовательности
+            // (то же правило, что у seo.faviconUrl). Стиль навигации сайта: текущее плавающее
+            // меню-пилюля против сплошной панели со скролл-блюром ("Frosted Rail"). Ключ живёт в
+            // Theme, а не в новой группе Layout: это тот же класс решения, что theme.activePalette —
+            // кураторский визуальный вариант, который админ только выбирает, а реальная реализация
+            // (компоненты/CSS) живёт во фронте (ADR 013). Дефолт "pill" сохраняет текущий вид сайта,
+            // пока Давид не переключит в админке. Список опций — часть контракта с фронтом.
+            new("theme.navStyle", SiteSettingGroup.Theme, SettingValueType.Select, isTranslatable: false, isPublic: true, sortOrder: 27,
+                defaultValue: "pill",
+                options:
+                [
+                    new SiteSettingOption("pill", "Плавающее меню (как сейчас)"),
+                    new SiteSettingOption("rail", "Сплошная панель со скролл-блюром (Frosted Rail)"),
+                ]),
         ];
 
         // Ключи сравниваются точно (Ordinal): ключ — часть контракта API,

@@ -192,6 +192,11 @@ export async function getFaviconUrl(): Promise<string> {
 export interface ThemeSettings {
   activePalette: string
   defaultMode: string
+  /**
+   * `pill` (плавающая капсула, дефолт) или `rail` («Стеклянная лента»). Сырая строка — сужает её
+   * `shared/lib/navStyle.ts` в `useSiteDesign`, см. комментарий к функции ниже.
+   */
+  navStyle: string
 }
 
 /**
@@ -210,9 +215,11 @@ export async function getThemeSettings(): Promise<ThemeSettings> {
     return {
       activePalette: res.values['theme.activePalette'] ?? '',
       defaultMode: res.values['theme.defaultMode'] ?? '',
+      // Тот же запрос и та же группа (7), что у палитры — отдельного вызова НЕ добавляется.
+      navStyle: res.values['theme.navStyle'] ?? '',
     }
   } catch {
-    return { activePalette: '', defaultMode: '' }
+    return { activePalette: '', defaultMode: '', navStyle: '' }
   }
 }
 

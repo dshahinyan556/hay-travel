@@ -183,23 +183,33 @@ export function DayClosureControls({
               {closableTours.length === 0 ? (
                 <p className="px-1 py-2 text-sm text-neutral-500">{calendarCopy.closeTourNoResults}</p>
               ) : (
-                <ul className="flex flex-col gap-1">
-                  {closableTours.map((tour) => (
-                    <li key={tour.id} className="min-w-0">
-                      <Checkbox
-                        label={tourTitle(tour.id)}
-                        checked={selectedTourIds.includes(tour.id)}
-                        disabled={locked}
-                        onChange={(event) =>
-                          setSelectedTourIds((prev) =>
-                            event.target.checked
-                              ? [...prev, tour.id]
-                              : prev.filter((id) => id !== tour.id),
-                          )
-                        }
-                      />
-                    </li>
-                  ))}
+                <ul className="flex flex-col gap-0.5">
+                  {closableTours.map((tour) => {
+                    const selected = selectedTourIds.includes(tour.id)
+                    return (
+                      <li key={tour.id} className="min-w-0">
+                        {/* Same hover-highlighted-row convention as `Select`'s searchable list
+                            (admin surface): a tint, not a border, on hover; a soft fill when
+                            checked — so the list reads as one system with the country/currency
+                            pickers instead of a bare row of checkboxes. */}
+                        <Checkbox
+                          label={tourTitle(tour.id)}
+                          checked={selected}
+                          disabled={locked}
+                          containerClassName={`w-full rounded-lg px-2 py-1.5 transition-colors ${
+                            selected ? 'bg-brand-50 font-semibold' : 'hover:bg-neutral-100'
+                          }`}
+                          onChange={(event) =>
+                            setSelectedTourIds((prev) =>
+                              event.target.checked
+                                ? [...prev, tour.id]
+                                : prev.filter((id) => id !== tour.id),
+                            )
+                          }
+                        />
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </div>
