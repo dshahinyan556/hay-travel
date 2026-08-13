@@ -29,6 +29,12 @@ interface AuthFieldProps {
   autoFocus?: boolean
   /** Field-level validation message, already translated. */
   error?: string
+  /**
+   * Визуальная отметка «поле участвует в ошибке уровня формы» (неверный логин/пароль).
+   * В отличие от `error`, своего текста не даёт: сообщение живёт в общей плашке над формой.
+   * Красная рамка + `aria-invalid`, без `aria-describedby`.
+   */
+  invalid?: boolean
   /** Leading icon, already sized (e.g. `<UserIcon size={16} />`). Purely decorative — the icon
    * components themselves carry `aria-hidden`. */
   icon?: ReactNode
@@ -51,12 +57,16 @@ export function AuthField({
   defaultValue,
   autoFocus,
   error,
+  invalid = false,
   icon,
   revealed: revealedProp,
   onToggleRevealed,
 }: AuthFieldProps) {
   const errorId = `${name}-error`
   const isPassword = type === 'password'
+  // `error` owns a message and points at it with `aria-describedby`; `invalid` only tints. Both
+  // mark the control invalid to assistive tech.
+  const isFaulty = Boolean(error) || invalid
   const [localRevealed, setLocalRevealed] = useState(false)
   const isControlled = revealedProp !== undefined
   const revealed = isControlled ? revealedProp : localRevealed
@@ -71,11 +81,15 @@ export function AuthField({
         // `group` scopes the icon's focus colour to THIS control's own input (`group-focus-within`)
         // rather than the nearest ancestor with that class — there is no other `group` nested here.
         className={`group mt-1.5 flex h-[46px] items-center gap-2.5 rounded-xl bg-panel-raised px-3.5 ring-1 transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] focus-within:ring-2 focus-within:ring-focus ${
-          error ? 'ring-danger' : 'ring-edge-strong hover:ring-gold-line'
+          isFaulty ? 'ring-danger' : 'ring-edge-strong hover:ring-gold-line'
         }`}
       >
         {icon && (
-          <span className="shrink-0 text-ink-muted transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] group-focus-within:text-gold-ink">
+          <span
+            className={`shrink-0 transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] group-focus-within:text-gold-ink ${
+              isFaulty ? 'text-danger' : 'text-ink-muted'
+            }`}
+          >
             {icon}
           </span>
         )}
@@ -89,7 +103,7 @@ export function AuthField({
           minLength={minLength}
           defaultValue={defaultValue}
           autoFocus={autoFocus}
-          aria-invalid={error ? true : undefined}
+          aria-invalid={isFaulty ? true : undefined}
           aria-describedby={error ? errorId : undefined}
           className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-muted"
         />
@@ -99,7 +113,10 @@ export function AuthField({
             onClick={toggleRevealed}
             aria-label={revealed ? 'Скрыть пароль' : 'Показать пароль'}
             aria-pressed={revealed}
-            className="icon-press -mr-1 flex shrink-0 cursor-pointer items-center rounded-full p-1 text-ink-muted hover:text-gold-ink focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
+            // `before:-inset-2.5` grows the tap target to 44×44 CSS px around the visible glyph
+            // instead of enlarging the button itself — the same invisible hit-area expander
+            // `ThemeToggle` uses, so the icon stays the size the layout was drawn for.
+            className="icon-press relative -mr-1 flex shrink-0 cursor-pointer items-center rounded-full p-1 text-ink-muted before:absolute before:-inset-2.5 before:content-[''] hover:text-gold-ink focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
           >
             {revealed ? <EyeOffIcon size={17} /> : <EyeIcon size={17} />}
           </button>

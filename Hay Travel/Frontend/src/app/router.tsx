@@ -173,6 +173,24 @@ export const router = createBrowserRouter([
           import('@/features/admin').then((m) => ({ Component: m.ProductsPage, loader: m.productsLoader })),
       },
       {
+        path: 'calendar',
+        lazy: () =>
+          import('@/features/admin').then((m) => ({ Component: m.CalendarPage, loader: m.calendarLoader })),
+      },
+      {
+        path: 'orders',
+        lazy: () =>
+          import('@/features/admin').then((m) => ({ Component: m.OrdersPage, loader: m.ordersLoader })),
+      },
+      {
+        path: 'orders/:id',
+        lazy: () =>
+          import('@/features/admin').then((m) => ({
+            Component: m.OrderDetailPage,
+            loader: m.orderDetailLoader,
+          })),
+      },
+      {
         path: 'catalog',
         lazy: () =>
           import('@/features/admin').then((m) => ({ Component: m.CatalogPage, loader: m.catalogLoader })),

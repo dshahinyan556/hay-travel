@@ -50,6 +50,7 @@ namespace ATTours.BusinessServices.Services.UpdateServices
 
             // Скалярные поля тура (IsActive/IsArchived/TotalPrice здесь не трогаем).
             existing.MainImageUrl = incoming.MainImageUrl;
+            existing.RequiresPrepayment = incoming.RequiresPrepayment;
 
             ReconcileCollection(existing.Translations, incoming.Translations,
                 (target, src) => { target.Type = src.Type; target.LanguageCode = src.LanguageCode; target.Value = src.Value; });

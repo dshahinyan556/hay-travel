@@ -57,7 +57,7 @@ export function RegionPreviewBar({ region, tourCount, onOpen, onDismiss }: Regio
       className="fixed inset-x-3 z-30 flex items-center gap-3 rounded-2xl bg-panel/95 p-3 pl-4 shadow-2xl ring-1 ring-gold-line backdrop-blur-sm"
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate font-display text-xl leading-tight text-accent-strong">
+        <p className="truncate font-semibold text-xl leading-tight text-accent-strong">
           {locale === 'en' ? region.en : region.ru}
         </p>
         <p className="mt-0.5 text-xs text-ink-muted">{formatTourCount(tourCount, locale)}</p>

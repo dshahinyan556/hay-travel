@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useFocusTrap, useIsCompactViewport } from '@/shared/hooks'
-import { addMonths, formatISODate, parseISODate, stripTime } from '@/shared/lib/date'
+import {
+  addDays,
+  addMonths,
+  formatISODate,
+  getMonthGrid,
+  isAfterDay,
+  isBeforeDay,
+  isSameDay,
+  mondayFirstWeekday,
+  parseISODate,
+  startOfMonth,
+  stripTime,
+} from '@/shared/lib/date'
 import type { Locale } from '@/shared/lib/locale'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { Popover } from './Popover'
@@ -26,29 +38,9 @@ const WEEKDAYS_FULL: Record<Locale, string[]> = {
   en: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
 }
 
-/* `parseISODate`/`formatISODate`/`stripTime`/`addMonths` moved to `shared/lib/date` so `BookingCard`
-   can compute the 3-month booking window with the same day-of-month clamp and the same
-   local-time-not-UTC formatting. The helpers below stay private: only this grid needs them. */
-
-function isBeforeDay(a: Date, b: Date): boolean {
-  return stripTime(a).getTime() < stripTime(b).getTime()
-}
-function isAfterDay(a: Date, b: Date): boolean {
-  return stripTime(a).getTime() > stripTime(b).getTime()
-}
-function isSameDay(a: Date, b: Date): boolean {
-  return stripTime(a).getTime() === stripTime(b).getTime()
-}
-function addDays(date: Date, delta: number): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + delta)
-}
-function startOfMonth(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), 1)
-}
-/** Monday-first weekday index: 0 = Monday … 6 = Sunday (native `getDay()` is Sunday-first). */
-function mondayFirstWeekday(date: Date): number {
-  return (date.getDay() + 6) % 7
-}
+/* All date arithmetic — including the 42-cell grid — now lives in `shared/lib/date`: the admin
+   availability calendar (spec 003) draws the same Monday-first month grid, and one grid
+   implementation is the point. Nothing about this picker's behaviour changed with the move. */
 
 /**
  * Resolves the text content of the element `aria-labelledby` points to — see `Select`'s identical
@@ -64,13 +56,6 @@ function useLabelledByText(id: string | undefined): string | undefined {
     setText(id ? (document.getElementById(id)?.textContent ?? undefined) : undefined)
   }, [id])
   return text
-}
-
-/** Always 42 cells (6 full weeks) so the grid never resizes between months. */
-function getMonthGrid(viewMonth: Date): Date[] {
-  const first = startOfMonth(viewMonth)
-  const gridStart = addDays(first, -mondayFirstWeekday(first))
-  return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i))
 }
 
 function formatDisplay(date: Date, locale: Locale): string {
@@ -92,6 +77,19 @@ export interface DatePickerProps {
    * opposite (e.g. a date of birth) can pass `false`.
    */
   disablePast?: boolean
+  /**
+   * Additional days to grey out (`YYYY-MM-DD`), ON TOP OF `min`/`max`/`disablePast` — e.g. days
+   * closed for booking. These render differently from the other disabled days (`line-through` and
+   * an "недоступно" suffix on the accessible name): "outside the allowed range" and "this exact
+   * day is taken" are different messages and must not look identical.
+   *
+   * A `Set` rather than a predicate callback: it matches the shape `GetClosedDates` already
+   * returns, stays O(1) across the 42 cells, and asks the caller for exactly one `useMemo`.
+   *
+   * IMPORTANT: the reference must be stable (memoize it) — it is a dependency of `isDisabledDate`,
+   * so a fresh `Set` on every render defeats that memoization.
+   */
+  disabledDates?: ReadonlySet<string>
   placeholder?: string
   disabled?: boolean
   /** Marks the field as invalid: red border. Pair with `Field`'s `error` text. */
@@ -134,7 +132,8 @@ export interface DatePickerProps {
  * already traps focus over its whole surface, so a second nested trap here would fight it, and is
  * skipped.
  *
- * Disabled days (past dates, or outside `min`/`max`) stay focusable and reachable by arrow keys —
+ * Disabled days (past dates, outside `min`/`max`, or listed in `disabledDates`) stay focusable and
+ * reachable by arrow keys —
  * only `aria-disabled` and a no-op click/Enter — because a genuinely `disabled` button cannot
  * receive focus, which would break arrow-key roving across a disabled stretch (e.g. every day
  * before today).
@@ -146,6 +145,7 @@ export function DatePicker({
   min,
   max,
   disablePast = true,
+  disabledDates,
   placeholder,
   disabled = false,
   error = false,
@@ -178,13 +178,18 @@ export function DatePicker({
       if (disablePast && isBeforeDay(date, today)) return true
       if (minDate && isBeforeDay(date, minDate)) return true
       if (maxDate && isAfterDay(date, maxDate)) return true
+      if (disabledDates?.has(formatISODate(date))) return true
       return false
     },
     // `today` (below) is a `new Date()` snapshot taken fresh every render and deliberately left
     // out here: it never usefully changes within a session, and including it would defeat the
     // memoization above by recreating this callback on every render anyway.
-    [disablePast, minDate, maxDate],
+    [disablePast, minDate, maxDate, disabledDates],
   )
+
+  /** A day blocked by `disabledDates` specifically, as opposed to one merely out of range — the
+   * two get different affordances (see `dayClasses` and the cell's `aria-label`). */
+  const isUnavailable = (date: Date): boolean => disabledDates?.has(formatISODate(date)) === true
 
   const initialFocusDate = selectedDate && !isDisabledDate(selectedDate) ? selectedDate : today
 
@@ -318,7 +323,10 @@ export function DatePicker({
     // otherwise sit flush at a column's start instead of centered in it.
     const base = 'mx-auto flex h-11 w-11 items-center justify-center rounded-full text-sm transition-colors focus-visible:outline-none focus-visible:ring-2'
     if (dayDisabled) {
-      return `${base} cursor-not-allowed ${isAdmin ? 'text-neutral-300' : 'text-ink-muted opacity-50'}`
+      // `line-through` ONLY for explicitly unavailable days: a struck-through past date would read
+      // as "we cancelled this", which is not what "yesterday" means.
+      const strike = isUnavailable(date) ? ' line-through' : ''
+      return `${base} cursor-not-allowed${strike} ${isAdmin ? 'text-neutral-300' : 'text-ink-muted opacity-50'}`
     }
     if (isAdmin) {
       return `${base} cursor-pointer focus-visible:ring-brand-600/40 ${
@@ -351,7 +359,7 @@ export function DatePicker({
         >
           <ChevronDownIcon size={16} className="rotate-90" />
         </button>
-        <p aria-live="polite" className={`font-display text-base ${isAdmin ? 'text-neutral-900' : 'text-ink'}`}>
+        <p aria-live="polite" className={`font-semibold text-base ${isAdmin ? 'text-neutral-900' : 'text-ink'}`}>
           {MONTHS_NOMINATIVE[locale][viewMonth.getMonth()]} {viewMonth.getFullYear()}
         </p>
         <button
@@ -389,7 +397,9 @@ export function DatePicker({
                   aria-pressed={selectedDate ? isSameDay(date, selectedDate) : false}
                   aria-current={isSameDay(date, today) ? 'date' : undefined}
                   aria-disabled={dayDisabled || undefined}
-                  aria-label={`${date.getDate()} ${MONTHS_GENITIVE[locale][date.getMonth()]} ${date.getFullYear()}, ${WEEKDAYS_FULL[locale][mondayFirstWeekday(date)]}`}
+                  aria-label={`${date.getDate()} ${MONTHS_GENITIVE[locale][date.getMonth()]} ${date.getFullYear()}, ${WEEKDAYS_FULL[locale][mondayFirstWeekday(date)]}${
+                    isUnavailable(date) ? `, ${t('datePicker.unavailable')}` : ''
+                  }`}
                   onClick={() => commit(date)}
                   onKeyDown={(event) => handleDayKeyDown(event, date)}
                   onFocus={() => setFocusedDate(date)}

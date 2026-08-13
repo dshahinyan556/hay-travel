@@ -32,6 +32,18 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
                 .IsRequired()
                 .HasMaxLength(4000);
 
+            // Default true (B12, 2026-08-13): предоплата и раньше показывалась на каждом туре
+            // безусловно (BookingCard), это поле только добавляет возможность её отключить —
+            // существующие туры (миграция) должны молча стать "true", не потерять блок.
+            // ValueGeneratedNever() специально ПОВЕРХ HasDefaultValue: без него EF Core трактует
+            // "значение == default(bool) (false)" как "не задано" и опускает колонку из INSERT,
+            // подставляя DB-дефолт (true) — тогда админ, явно выбравший false для НОВОГО тура,
+            // молча получил бы true. С ValueGeneratedNever() EF всегда шлёт то, что реально в
+            // сущности; DB-дефолт остаётся страховкой только для миграции и внешних INSERT.
+            builder.Property(a => a.RequiresPrepayment)
+                .HasDefaultValue(true)
+                .ValueGeneratedNever();
+
             builder.HasIndex(t => t.Type);
             builder.HasIndex(t => t.TotalPrice);
             builder.HasIndex(t => t.IsArchived);

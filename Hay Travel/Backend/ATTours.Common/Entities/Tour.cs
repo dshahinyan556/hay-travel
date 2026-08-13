@@ -18,6 +18,10 @@ namespace ATTours.Common.Entities
         public bool IsFeatured { get; set; }
         // Порядок внутри избранного (0-based); осмыслен только пока IsFeatured == true.
         public int FeaturedSortOrder { get; set; }
+        // Показывать ли блок предоплаты на публичной странице тура (B12, 2026-08-13). Сама
+        // сумма предоплаты по-прежнему глобальная константа (OrderCreationService.
+        // ResolvePrepayment) — это только видимость блока, не per-tour процент.
+        public bool RequiresPrepayment { get; set; }
         public string MainImageUrl { get; set; }
         public HashSet<TourDetail> TourDetails { get; set; } = [];
         public HashSet<TourInfoTranslation> Translations { get; set; } = [];

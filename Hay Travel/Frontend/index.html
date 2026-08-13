@@ -8,6 +8,21 @@
          report real values anywhere in the app (Header's top padding, MobileTabBar's bottom
          padding). Without it those env() calls always resolve to 0. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Шрифты подключены здесь, а не через `@import` в index.css, намеренно: `@import` внутри
+         CSS сериализует загрузку (браузер сначала должен скачать и распарсить index.css, только
+         потом обнаружит запрос к fonts.googleapis.com, и лишь потом дойдёт до самих файлов
+         шрифтов). Для дисплейной гарнитуры на H1 первого экрана это видимая поздняя подмена.
+         `<link>` в разметке подхватывает preload-сканер браузера, и запрос уходит параллельно
+         с таблицей стилей. `preconnect` к gstatic обязателен с `crossorigin` — файлы шрифтов
+         запрашиваются в CORS-режиме.
+         Manrope запрашивается как variable-шрифт одним диапазоном `wght@400..700` — это один
+         файл вместо четырёх статических начертаний. У Prata один вес (400) и оси нет. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400..700&family=Prata&display=swap"
+    />
     <!--
       Tells the browser this page implements both colour schemes itself. Without this, some
       mobile browsers (notably Chrome for Android's "force dark" / "darken web pages" setting)
@@ -37,16 +52,45 @@
       // otherwise open the admin panel — built entirely for a light shell — skinned in the public
       // site's dark "obsidian" palette. Checked here (not only in `AdminLayout`) so there is no
       // flash of the wrong theme before React mounts and the layout's own effect can run.
+      //
+      // The PALETTE PRESET (`data-preset`, Spec 006 / ADR 018) rides along for the same reason and
+      // by the same means. The preset is chosen by the admin and only arrives over the network
+      // (`GET SiteSettings/GetPublic?group=7`), i.e. principally after first paint — so the last
+      // known value is cached in `localStorage` and re-applied here. The price is ONE flash of the
+      // default palette on the visitor's very first visit in this browser (no cache yet), and
+      // never again; the alternatives were either blocking first paint on a network round-trip or
+      // that same flash on every single page load. Obsidian is the absence of the attribute.
       ;(function () {
         var isAdmin = location.pathname.indexOf('/admin') === 0
+        // Дублирует THEME_COLORS из src/shared/lib/theme.ts — модуль сюда импортировать нельзя,
+        // скрипт обязан отработать синхронно, до стилей и бандла. Новый пресет — строка и там, и тут.
+        var COLORS = {
+          obsidian: { dark: '#0f0c08', light: '#f7f1e6' },
+          basalt: { dark: '#0e1214', light: '#edeeec' },
+        }
+        var root = document.documentElement
         try {
-          var stored = localStorage.getItem('hay-travel-theme')
-          var theme = isAdmin ? 'light' : stored === 'light' ? 'light' : 'dark'
-          document.documentElement.dataset.theme = theme
+          // Приоритет тем же порядком, что в readStoredTheme(): выбор посетителя → серверный
+          // дефолт → dark.
+          var chosen = localStorage.getItem('hay-travel-theme')
+          var fallback = localStorage.getItem('hay-travel-theme-default')
+          var preferred =
+            chosen === 'light' || chosen === 'dark' ? chosen : fallback === 'light' ? 'light' : 'dark'
+          var theme = isAdmin ? 'light' : preferred
+
+          var palette = localStorage.getItem('hay-travel-palette')
+          if (!COLORS[palette]) palette = 'obsidian'
+
+          root.dataset.theme = theme
+          // Обсидиан = отсутствие атрибута. `/admin` не носит пресет никогда.
+          if (!isAdmin && palette !== 'obsidian') root.dataset.preset = palette
+          else delete root.dataset.preset
+
           var meta = document.querySelector('meta[name="theme-color"]')
-          if (meta) meta.setAttribute('content', theme === 'light' ? '#f7f1e6' : '#0f0c08')
+          if (meta) meta.setAttribute('content', COLORS[isAdmin ? 'obsidian' : palette][theme])
         } catch (e) {
-          document.documentElement.dataset.theme = isAdmin ? 'light' : 'dark'
+          root.dataset.theme = isAdmin ? 'light' : 'dark'
+          delete root.dataset.preset
         }
       })()
     </script>

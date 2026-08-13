@@ -77,7 +77,14 @@ export function SidePanel({ open, onClose, title, children }: SidePanelProps) {
         aria-labelledby={titleId}
         tabIndex={-1}
         className="absolute inset-y-0 right-0 flex w-full max-w-full flex-col bg-white shadow-2xl outline-none transition-transform duration-200 sm:w-[420px]"
-        style={{ transform: open ? 'translateX(0)' : 'translateX(100%)' }}
+        // `undefined` (i.e. `transform: none`) when open, NOT `translateX(0)`: a non-`none`
+        // transform makes this element the containing block for `position: fixed` DESCENDANTS.
+        // `shared/ui/Sheet` — which `DatePicker` opens on compact viewports, and the availability
+        // calendar's bulk panel puts two of those in here — is `fixed` and rendered inline (it does
+        // NOT portal, unlike `Modal`/`Popover`), so it would have been laid out against this 420px
+        // column instead of the viewport on tablet widths. CSS interpolates `none` as the identity
+        // matrix, so the slide-in/out transition is unchanged.
+        style={{ transform: open ? undefined : 'translateX(100%)' }}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-5 py-4">
           <h2 id={titleId} className="text-base font-bold text-neutral-900">

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router'
 import {
+  canManageCalendar,
   canManageCatalog,
   canManageSettings,
   canManageUsers,
@@ -34,6 +35,8 @@ interface NavItem {
 const navItems: NavItem[] = [
   { to: '/admin', label: 'Дашборд', icon: '▦', end: true },
   { to: '/admin/products', label: 'Продукты', icon: '🧳' },
+  { to: '/admin/calendar', label: 'Календарь', icon: '📅', can: canManageCalendar },
+  { to: '/admin/orders', label: 'Заказы', icon: '🧾', can: canManageCalendar },
   { to: '/admin/catalog', label: 'Справочники', icon: '📚', can: canManageCatalog },
   { to: '/admin/users', label: 'Пользователи', icon: '👤', can: canManageUsers },
   { to: '/admin/settings', label: 'Настройки', icon: '⚙', can: canManageSettings },

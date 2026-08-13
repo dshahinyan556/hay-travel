@@ -13,6 +13,7 @@ namespace ATTours.Common.DTO.Info
         // Управляется отдельным SetFeatured (как IsActive/IsArchived) — UpdateTour их игнорирует.
         public bool IsFeatured { get; set; }
         public int FeaturedSortOrder { get; set; }
+        public bool RequiresPrepayment { get; set; }
         public decimal? TotalPrice { get; set; }
         public string MainImageUrl { get; set; }
         public List<TourDayInfoModel> TourDays { get; set; }

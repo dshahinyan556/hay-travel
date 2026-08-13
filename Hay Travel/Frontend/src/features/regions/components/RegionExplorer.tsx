@@ -276,7 +276,7 @@ export function RegionExplorer({ tours, defaultOpen = false }: RegionExplorerPro
                           <span className="inline-flex text-gold-ink">
                             <MapIcon size={26} />
                           </span>
-                          <p className="mt-3 font-display text-lg text-ink">{t('regions.empty.placeholder')}</p>
+                          <p className="mt-3 font-semibold text-lg text-ink">{t('regions.empty.placeholder')}</p>
                           <p className="mt-1.5 text-sm text-ink-muted">{t('regions.empty.hint')}</p>
                         </div>
                       )}

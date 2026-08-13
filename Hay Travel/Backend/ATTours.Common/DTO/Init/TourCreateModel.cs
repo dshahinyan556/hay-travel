@@ -8,6 +8,7 @@ namespace ATTours.Common.Dto.Init
         public TourType Type { get; set; }
         public string MainImageUrl { get; set; }
         public bool IsActive { get; set; }
+        public bool RequiresPrepayment { get; set; }
         public List<TourDayCreateModel> TourDays { get; set; }
         public List<TranslatableCreateModel> Translations { get; set; }
         public List<AdditionalExpenseCreateModel> AdditionalExpenses { get; set; }

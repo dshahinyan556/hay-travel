@@ -54,6 +54,9 @@ export interface Tour {
 }
 
 export interface TourDetail extends Tour {
+  /** Показывать ли блок предоплаты в BookingCard (B12, 2026-08-13). Сумма предоплаты
+   * по-прежнему единая для всех туров (`useTierPrice`) — это только видимость блока. */
+  requiresPrepayment: boolean
   gallery: readonly string[]
   itinerary: readonly ItineraryDay[]
   /** Organizational notes (`TourNoteType.OrganizationalDetail` on the backend) — practical

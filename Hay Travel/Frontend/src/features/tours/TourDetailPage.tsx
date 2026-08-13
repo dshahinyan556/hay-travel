@@ -1,5 +1,6 @@
 import { Link, useLoaderData, type LoaderFunctionArgs } from 'react-router'
 import { getTourInfo, getToursByRegion } from '@/shared/api/tours'
+import { getClosedDates } from '@/shared/api/booking'
 import { getContentText, type ContentText } from '@/shared/api/siteSettings'
 import { REGION_BY_SLUG } from '@/shared/data/armeniaRegions'
 import type { Tour, TourDetail } from '@/shared/types/tour'
@@ -13,6 +14,7 @@ import { CheckIcon, ClockIcon, CloseIcon, MapPinIcon, TagIcon } from '@/shared/u
 import { TourGallery } from './components/TourGallery'
 import { TourItinerary } from './components/TourItinerary'
 import { BookingCard } from './components/BookingCard'
+import { getBookingWindow } from './lib/bookingWindow'
 
 export async function tourDetailLoader({ params }: LoaderFunctionArgs) {
   const tour = await getTourInfo(params.id!)
@@ -27,18 +29,33 @@ export async function tourDetailLoader({ params }: LoaderFunctionArgs) {
   // `getContentText` rides along in the same `Promise.all` rather than serially: it never rejects
   // (same contract `ToursPage`/`HomePage` already rely on), so it cannot take this page down, and
   // it carries the 7+ invitation copy `BookingCard` needs.
-  const [related, content] = await Promise.all([
+  //
+  // Closed dates ride along too, and are the loader's job rather than an effect in `BookingCard`
+  // for the same reason `largeGroupInvitation` is: the card stays presentational w.r.t. the
+  // network. `.catch(() => [])` is mandatory — availability must NEVER take the tour page down
+  // (same contract as `getContentText`). Losing the list only means a visitor can pick a closed
+  // day and get it rejected on submit (error code 2014, handled in the card).
+  const window = getBookingWindow()
+  const [related, content, closedDates] = await Promise.all([
     tour.regionSlugs[0] ? getToursByRegion(tour.regionSlugs[0]) : Promise.resolve<readonly Tour[]>([]),
     getContentText(),
+    // The public `Tour.id` is a string; the backend wants a number. Converted here, once.
+    getClosedDates(Number(tour.id), window.fromISO, window.toISO).catch(() => [] as string[]),
   ])
-  return { tour, related: related.filter((t) => t.id !== tour.id).slice(0, 3), content }
+  return {
+    tour,
+    related: related.filter((t) => t.id !== tour.id).slice(0, 3),
+    content,
+    closedDates,
+  }
 }
 
 export function TourDetailPage() {
-  const { tour, related, content } = useLoaderData() as {
+  const { tour, related, content, closedDates } = useLoaderData() as {
     tour: TourDetail
     related: readonly Tour[]
     content: ContentText
+    closedDates: readonly string[]
   }
   const regions = tour.regionSlugs.map((slug) => REGION_BY_SLUG[slug])
   const { locale, t } = useLocale()
@@ -130,7 +147,7 @@ export function TourDetailPage() {
               <Reveal as="section" className="mt-10 grid gap-5 sm:grid-cols-2">
                 {tour.included.length > 0 && (
                   <div className="rounded-2xl bg-panel p-5 ring-1 ring-edge">
-                    <h3 className="font-display text-lg text-ink">{t('tourDetail.included')}</h3>
+                    <h3 className="font-semibold text-lg text-ink">{t('tourDetail.included')}</h3>
                     <ul className="mt-3 space-y-2">
                       {tour.included.map((item) => (
                         <li key={item} className="flex items-start gap-2 text-sm text-ink-dim">
@@ -145,7 +162,7 @@ export function TourDetailPage() {
                 )}
                 {tour.notIncluded.length > 0 && (
                   <div className="rounded-2xl bg-panel p-5 ring-1 ring-edge">
-                    <h3 className="font-display text-lg text-ink">{t('tourDetail.notIncluded')}</h3>
+                    <h3 className="font-semibold text-lg text-ink">{t('tourDetail.notIncluded')}</h3>
                     <ul className="mt-3 space-y-2">
                       {tour.notIncluded.map((item) => (
                         <li key={item} className="flex items-start gap-2 text-sm text-ink-muted">
@@ -160,7 +177,7 @@ export function TourDetailPage() {
                 )}
                 {tour.organizationalDetails.length > 0 && (
                   <div className="rounded-2xl bg-panel p-5 ring-1 ring-edge">
-                    <h3 className="font-display text-lg text-ink">{t('tourDetail.organizationalDetails')}</h3>
+                    <h3 className="font-semibold text-lg text-ink">{t('tourDetail.organizationalDetails')}</h3>
                     <ul className="mt-3 space-y-2">
                       {tour.organizationalDetails.map((item) => (
                         <li key={item} className="text-sm text-ink-dim">
@@ -172,7 +189,7 @@ export function TourDetailPage() {
                 )}
                 {tour.restrictions.length > 0 && (
                   <div className="rounded-2xl bg-panel p-5 ring-1 ring-edge">
-                    <h3 className="font-display text-lg text-ink">{t('tourDetail.restrictions')}</h3>
+                    <h3 className="font-semibold text-lg text-ink">{t('tourDetail.restrictions')}</h3>
                     <ul className="mt-3 space-y-2">
                       {tour.restrictions.map((item) => (
                         <li key={item} className="text-sm text-ink-muted">
@@ -184,7 +201,7 @@ export function TourDetailPage() {
                 )}
                 {tour.expenses.length > 0 && (
                   <div className="rounded-2xl bg-panel p-5 ring-1 ring-edge">
-                    <h3 className="font-display text-lg text-ink">{t('tourDetail.expenses')}</h3>
+                    <h3 className="font-semibold text-lg text-ink">{t('tourDetail.expenses')}</h3>
                     <ul className="mt-3 space-y-2">
                       {tour.expenses.map((expense, index) => (
                         <li
@@ -226,6 +243,7 @@ export function TourDetailPage() {
               <BookingCard
                 tour={tour}
                 largeGroupInvitation={content.largeGroupInvitation || t('booking.largeGroupFallback')}
+                closedDates={closedDates}
               />
             </Reveal>
           </aside>

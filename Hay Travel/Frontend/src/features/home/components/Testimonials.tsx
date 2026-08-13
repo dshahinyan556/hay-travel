@@ -103,7 +103,7 @@ export function Testimonials() {
                 <StarIcon key={i} size={15} />
               ))}
             </div>
-            <p className="mt-3 font-display text-lg leading-relaxed text-ink-dim">
+            <p className="mt-3 text-[19px] leading-relaxed text-ink-dim">
               {locale === 'en' ? `“${review.text}”` : `«${review.text}»`}
             </p>
             <div className="mt-auto pt-4">
