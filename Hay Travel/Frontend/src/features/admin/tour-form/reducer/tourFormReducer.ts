@@ -47,6 +47,7 @@ export type TourFormAction =
   | { kind: 'setType'; value: TourType }
   | { kind: 'setField'; field: 'mainImageUrl'; value: string }
   | { kind: 'setField'; field: 'isActive'; value: boolean }
+  | { kind: 'setField'; field: 'requiresPrepayment'; value: boolean }
   | { kind: 'setLocalized'; field: TourLocalizedField; lang: LangKey; value: string }
   // days
   | { kind: 'addDay' }
@@ -173,9 +174,9 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
     }
 
     case 'setField':
-      return action.field === 'mainImageUrl'
-        ? { ...state, mainImageUrl: action.value }
-        : { ...state, isActive: action.value }
+      if (action.field === 'mainImageUrl') return { ...state, mainImageUrl: action.value }
+      if (action.field === 'isActive') return { ...state, isActive: action.value }
+      return { ...state, requiresPrepayment: action.value }
 
     case 'setLocalized':
       return { ...state, [action.field]: setLoc(state[action.field], action.lang, action.value) }

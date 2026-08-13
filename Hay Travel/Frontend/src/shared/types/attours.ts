@@ -58,6 +58,7 @@ export interface TourCreateModel {
   type: number
   mainImageUrl: string | null
   isActive: boolean
+  requiresPrepayment: boolean
   tourDays: TourDayCreateModel[]
   translations: TranslatableCreateModel[]
   additionalExpenses: AdditionalExpenseCreateModel[]
@@ -129,6 +130,10 @@ export interface TourInfoModel {
   /** Position within the featured set (0-based). Only meaningful while `isFeatured`. Managed via
    * `ReorderFeatured`; ignored by `UpdateTour`. */
   featuredSortOrder: number
+  /** Показывать ли блок предоплаты на публичной странице тура (B12, 2026-08-13). В отличие
+   * от isFeatured/isActive — редактируется прямо через `UpdateTour`, отдельного toggle-
+   * эндпоинта нет. */
+  requiresPrepayment: boolean
   /** Sum of every day's price, computed on the server. Read-only; omitted from update payloads. */
   totalPrice?: number | null
   mainImageUrl: string | null
@@ -170,6 +175,12 @@ export interface TourCardModel {
  * Metadata (`group`, `valueType`, `isTranslatable`, `isPublic`, `sortOrder`) is not stored in
  * the DB — it is stamped onto the response from the catalog and is read-only for the client.
  */
+/** Одна опция Select-настройки. `label` — подпись для админки, не публикуется на сайте. */
+export interface SiteSettingOptionModel {
+  value: string
+  label: string
+}
+
 export interface SiteSettingInfoModel {
   /** 0 = the key is known to the catalog but has never been saved to the DB. */
   id: number
@@ -181,6 +192,12 @@ export interface SiteSettingInfoModel {
   isTranslatable: boolean
   isPublic: boolean
   sortOrder: number
+  /**
+   * Опции для `valueType === Select`, из каталога бэкенда; в БД не хранятся.
+   * Необязательное поле: бэкенд, ещё не выкативший Spec 002, его просто не пришлёт — фронт
+   * не должен от этого падать.
+   */
+  options?: SiteSettingOptionModel[]
   value: string | null
   /** Present only for translatable keys. `type` is meaningless here (server sends 0). */
   translations: TranslatableInfoModel[]

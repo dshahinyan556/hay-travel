@@ -83,6 +83,9 @@ export interface TourFormState {
   type: TourType
   mainImageUrl: string
   isActive: boolean
+  /** Показывать ли блок предоплаты на публичной странице тура (B12, 2026-08-13). В отличие
+   * от isActive — не игнорируется UpdateTour, редактируется прямо здесь. */
+  requiresPrepayment: boolean
   title: Localized
   shortDescription: Localized
   description: Localized

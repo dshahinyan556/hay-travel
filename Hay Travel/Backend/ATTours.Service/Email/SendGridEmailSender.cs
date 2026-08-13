@@ -50,6 +50,13 @@ namespace ATTours.BusinessServices.Email
                          EmailMessageFactory.BuildEmailChangeConfirmBody(toName, EmailMessageFactory.BuildEmailChangeConfirmUrl(settings, token)),
                          cancellationToken);
 
+        public Task SendNewOrderNotificationAsync(string tourTitle, DateOnly tourDate, int guestCount,
+            string customerName, string customerEmail, CancellationToken cancellationToken = default)
+            => SendAsync(settings.AdminNotificationEmail, settings.FromName,
+                         EmailMessageFactory.NewOrderNotificationSubject,
+                         EmailMessageFactory.BuildNewOrderNotificationBody(tourTitle, tourDate, guestCount, customerName, customerEmail),
+                         cancellationToken);
+
         // Сбой провайдера не должен ронять запрос: регистрация/восстановление уже записаны
         // в БД, а повторная отправка достигается повторным вызовом эндпоинта.
         private async Task SendAsync(string toEmail, string toName, string subject, string body, CancellationToken cancellationToken)

@@ -15,7 +15,8 @@ namespace ATTours.Common.Infrastructure.SiteSettings
             bool isPublic,
             int sortOrder,
             string defaultValue = "",
-            IReadOnlyDictionary<LanguageCode, string> defaultTranslations = null)
+            IReadOnlyDictionary<LanguageCode, string> defaultTranslations = null,
+            IReadOnlyList<SiteSettingOption> options = null)
         {
             Key = key;
             Group = group;
@@ -25,6 +26,7 @@ namespace ATTours.Common.Infrastructure.SiteSettings
             SortOrder = sortOrder;
             DefaultValue = defaultValue;
             DefaultTranslations = defaultTranslations ?? new Dictionary<LanguageCode, string>();
+            Options = options ?? [];
         }
 
         // Уникальный ключ вида <группа>.<camelCase>, например hero.imageUrl.
@@ -50,5 +52,8 @@ namespace ATTours.Common.Infrastructure.SiteSettings
 
         // Дефолты по языкам для переводимых ключей.
         public IReadOnlyDictionary<LanguageCode, string> DefaultTranslations { get; }
+
+        // Допустимые опции для ValueType.Select. Пусто для всех остальных типов.
+        public IReadOnlyList<SiteSettingOption> Options { get; }
     }
 }

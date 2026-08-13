@@ -4,7 +4,7 @@ import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { authErrorMessageKey, forgotPasswordRequest } from '@/shared/auth'
 import { AuthField } from './components/AuthField'
 import { AuthShell, AuthError, AuthNotice, AuthSubmitButton } from './components/AuthShell'
-import { readReturnTo, withReturnTo } from './lib/returnTo'
+import { readReturnTo, withReturnTo } from '@/shared/lib/returnTo'
 
 /**
  * `/auth/forgot-password` — request a password-reset link.

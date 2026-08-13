@@ -11,6 +11,9 @@ namespace ATTours.BusinessServices.Services.InitServices
             var initModel = new TourCreateModel()
             {
                 Type = tourType,
+                // Раньше предоплата показывалась на КАЖДОМ туре безусловно — новый тур
+                // сохраняет это поведение, пока админ явно не отключит (B12, 2026-08-13).
+                RequiresPrepayment = true,
                 Translations = InitTranslations<TourTranslationType>(),
                 TourDays = InitTourDays(),
                 Notes = new List<TourNoteCreateModel>(),

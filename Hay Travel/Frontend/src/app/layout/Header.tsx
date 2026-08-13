@@ -63,7 +63,7 @@ export function Header() {
                 tradeoff, so it stays and shrinks instead. Utility-cluster gaps/padding were tightened
                 to compensate (see below) rather than sacrificing the wordmark.
               */}
-              <span className="text-gold-sheen font-display text-base leading-none font-semibold tracking-wide sm:text-2xl">
+              <span className="text-gold-sheen font-display text-base leading-none tracking-wide sm:text-2xl">
                 Hay Travel
               </span>
             </>

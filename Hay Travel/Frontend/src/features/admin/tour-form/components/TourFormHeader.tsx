@@ -126,6 +126,15 @@ export function TourFormHeader({
             onChange={(e) => actions.setIsActive(e.target.checked)}
           />
         </div>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-semibold text-neutral-700">Оплата</span>
+          <Checkbox
+            label="Требуется предоплата"
+            checked={state.requiresPrepayment}
+            onChange={(e) => actions.setRequiresPrepayment(e.target.checked)}
+          />
+        </div>
       </div>
     </Card>
   )
