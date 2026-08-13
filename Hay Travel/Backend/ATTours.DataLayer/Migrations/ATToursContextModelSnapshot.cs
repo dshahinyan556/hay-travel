@@ -77,6 +77,50 @@ namespace ATTours.DataLayer.Migrations
                     b.ToTable("AdditionalExpenseTranslation", (string)null);
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.ClosureRule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Action")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly?>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("DayOfWeek")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly?>("EffectiveFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EffectiveTo")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("TourId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date");
+
+                    b.HasIndex("DayOfWeek");
+
+                    b.HasIndex("TourId", "Type");
+
+                    b.ToTable("ClosureRule", (string)null);
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.EmailChangeRequest", b =>
                 {
                     b.Property<int>("Id")
@@ -283,6 +327,84 @@ namespace ATTours.DataLayer.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("LoginHistory", (string)null);
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.Order", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ConfirmedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("GuestCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<DateOnly>("TourDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("TourId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("TourDate");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("TourId", "TourDate");
+
+                    b.ToTable("Order", (string)null);
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.OrderPayment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("PrepaidAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("TourPriceSnapshot")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique();
+
+                    b.ToTable("OrderPayment", (string)null);
                 });
 
             modelBuilder.Entity("ATTours.Common.Entities.Place", b =>
@@ -599,6 +721,10 @@ namespace ATTours.DataLayer.Migrations
                         .IsRequired()
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
+
+                    b.Property<bool>("RequiresPrepayment")
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
                     b.Property<decimal?>("TotalPrice")
                         .HasPrecision(18, 2)
@@ -1061,6 +1187,16 @@ namespace ATTours.DataLayer.Migrations
                     b.Navigation("AdditionalExpense");
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.ClosureRule", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.Tour", "Tour")
+                        .WithMany()
+                        .HasForeignKey("TourId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Tour");
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.EmailChangeRequest", b =>
                 {
                     b.HasOne("ATTours.Common.Entities.User", "User")
@@ -1103,6 +1239,36 @@ namespace ATTours.DataLayer.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.Order", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.Tour", "Tour")
+                        .WithMany()
+                        .HasForeignKey("TourId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ATTours.Common.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Tour");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.OrderPayment", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.Order", "Order")
+                        .WithOne("Payment")
+                        .HasForeignKey("ATTours.Common.Entities.OrderPayment", "OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
                 });
 
             modelBuilder.Entity("ATTours.Common.Entities.Place", b =>
@@ -1332,6 +1498,11 @@ namespace ATTours.DataLayer.Migrations
                     b.Navigation("AdditionalExpenses");
 
                     b.Navigation("Translations");
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.Order", b =>
+                {
+                    b.Navigation("Payment");
                 });
 
             modelBuilder.Entity("ATTours.Common.Entities.Place", b =>

@@ -9,6 +9,7 @@
 
 import type { SettingValueType } from '@/features/admin/lib/enums'
 import type { Localized } from '@/features/admin/types/localized'
+import type { SiteSettingOptionModel } from '@/shared/types/attours'
 
 /** One editable setting. */
 export interface SettingFieldState {
@@ -23,6 +24,8 @@ export interface SettingFieldState {
   /** Which control renders this setting. Unknown wire values are normalised to `Text`. */
   valueType: SettingValueType
   isTranslatable: boolean
+  /** Допустимые значения для `valueType === Select`. Для остальных типов — пустой массив. */
+  options: SiteSettingOptionModel[]
   /** Language-neutral value. Used ONLY when `isTranslatable === false`. */
   value: string
   /** The RU/EN pair. Used ONLY when `isTranslatable === true`. */

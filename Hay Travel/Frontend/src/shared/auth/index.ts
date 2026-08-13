@@ -49,6 +49,7 @@ export {
   canDeleteTours,
   canFeatureTours,
   canManageAdmins,
+  canManageCalendar,
   canManageCatalog,
   canManageSettings,
   canManageTours,

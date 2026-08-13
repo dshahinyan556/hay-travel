@@ -45,5 +45,13 @@ namespace ATTours.BusinessServices.Email
                 toEmail, EmailMessageFactory.BuildEmailChangeConfirmUrl(settings, token));
             return Task.CompletedTask;
         }
+
+        public Task SendNewOrderNotificationAsync(string tourTitle, DateOnly tourDate, int guestCount,
+            string customerName, string customerEmail, CancellationToken cancellationToken = default)
+        {
+            logger.LogInformation("[DevEmailSender] New order notification for {AdminEmail}: {Tour} on {Date}, {Guests} guests, from {Customer} ({CustomerEmail})",
+                settings.AdminNotificationEmail, tourTitle, tourDate, guestCount, customerName, customerEmail);
+            return Task.CompletedTask;
+        }
     }
 }

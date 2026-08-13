@@ -89,7 +89,7 @@ export function Footer() {
             <span className="text-gold-ink">
               <MountainIcon size={20} />
             </span>
-            <span className="text-gold-sheen font-display text-xl font-semibold tracking-wide">
+            <span className="text-gold-sheen font-display text-xl tracking-wide">
               Hay Travel
             </span>
           </div>

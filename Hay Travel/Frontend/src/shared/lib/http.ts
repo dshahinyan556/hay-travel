@@ -85,6 +85,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   if (init?.body != null && METHODS_WITH_BODY.has(method) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
+  // No-op against a real backend; only matters when tunneled through ngrok's free tier, which
+  // otherwise serves an HTML "visit site" interstitial in place of the JSON response.
+  headers.set('ngrok-skip-browser-warning', 'true')
   // Opportunistic, not required — see `tokenProvider` above. `!headers.has(...)` lets `authFetch`'s
   // own explicit header (set from a just-refreshed token during its 401 retry) win over whatever
   // this provider would currently return.

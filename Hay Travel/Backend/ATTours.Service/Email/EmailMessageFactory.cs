@@ -44,6 +44,17 @@ namespace ATTours.BusinessServices.Email
                $"Чтобы подтвердить новый адрес почты, перейдите по ссылке: {confirmUrl}\n\n" +
                "Ссылка действует 1 час. Если вы не запрашивали смену почты, просто проигнорируйте это письмо.";
 
+        public static string NewOrderNotificationSubject => "Новая заявка на бронь — Hay Travel";
+
+        public static string BuildNewOrderNotificationBody(string tourTitle, DateOnly tourDate, int guestCount,
+            string customerName, string customerEmail)
+            => $"Новая заявка ждёт подтверждения в админке.\n\n" +
+               $"Тур: {tourTitle}\n" +
+               $"Дата: {tourDate:yyyy-MM-dd}\n" +
+               $"Гостей: {guestCount}\n" +
+               $"Клиент: {customerName} ({customerEmail})\n\n" +
+               "Подтвердите или отмените заявку в разделе «Заказы» админ-панели.";
+
         // База может уже содержать query (?lang=ru) — тогда токен присоединяется через '&'.
         private static string AppendToken(string urlBase, string token)
         {

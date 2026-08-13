@@ -50,6 +50,35 @@ namespace ATTours.Helper.Enums
         // Если хоть один курс когда-либо записан, эндпоинт отдаёт его с IsStale = true, а не ошибку.
         [Description("Exchange rates are not available yet.")]
         ExchangeRatesUnavailable = 2012,
+        // Значение Select-настройки вне списка допустимых опций каталога
+        // (неизвестный id пресета палитры, неизвестный режим темы).
+        [Description("Site setting value is not an allowed option.")]
+        SiteSettingValueNotAllowed = 2013,
+        // Календарь занятости и бронирования (spec 001).
+        // Дата закрыта правилом (ADR 012) — серверная блокировка брони на закрытый день.
+        [Description("Selected date is not available for booking.")]
+        TourDateUnavailable = 2014,
+        [Description("Guest count must be at least 1.")]
+        InvalidGuestCount = 2015,
+        [Description("Order date cannot be in the past.")]
+        OrderDateInPast = 2016,
+        [Description("Closure rule is invalid.")]
+        InvalidClosureRule = 2017,
+        // Заказы держат тур по FK Restrict: удалять тур с бронями нельзя.
+        [Description("Tour has orders and cannot be deleted.")]
+        TourHasOrders = 2018,
+        [Description("Order belongs to another user.")]
+        OrderAccessForbidden = 2019,
+        // Спецификация 001 резервировала под этот код 2013, но к моменту реализации 2013
+        // занял SiteSettingValueNotAllowed (параллельная фича), а дублировать значение
+        // enum нельзя — коды уходят наружу числом. Сдвинут именно OrderNotFound, потому
+        // что остальной блок (2014-2019) уже зашит во фронт (BookingCard, calendarCopy).
+        [Description("Order not found.")]
+        OrderNotFound = 2020,
+        [Description("Order can no longer be edited.")]
+        OrderNotEditable = 2021,
+        [Description("Date cannot be in the past.")]
+        ClosureDateInPast = 2022,
 
         #endregion
 

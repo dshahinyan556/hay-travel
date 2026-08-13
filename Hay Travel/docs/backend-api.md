@@ -80,5 +80,59 @@
   стоимость индивидуально»), показывается на публичном сайте вместо цены, редактируется
   в админке без деплоя.
 
+## Заказы (`api/Order`) и доступность (`api/Availability`) — 2026-08-13
+Первая реальная система бронирования: до этого `BookingCard` на публичном сайте был UI-заглушкой без бэкенда (см. `client-site.md`). Спецификации — `docs/specs/001-booking-calendar-backend.md` (+ `docs/adr/012`, `014`), `docs/specs/003-calendar-frontend.md` (+ `docs/adr/015`, `016`).
+
+**Сущности**: `Order` (User, Tour, дата, кол-во гостей, статус) + `OrderPayment` — 1:1, своя таблица, не owned-type (ADR 014): деньги вынесены отдельно как точка расширения под будущий платёжный шлюз, чтобы не переделывать `Order` при его подключении. `ClosureRule` — правило закрытия дня/дней: `Type` (`SpecificDate` | `Weekly`), `Action` (`Close` | `Open` — `Open` нужен, чтобы точечно переоткрыть день поверх недельного правила), `TourId` nullable (`null` = глобально, для всех туров). Правила закрытия хранятся как правила и резолвятся на чтении (`ClosureRuleResolver`, чистая функция в `ATTours.Service`), а не материализуются в отдельные строки-даты (ADR 012) — приоритет: тур+дата > глобально+дата > тур+неделя > глобально+неделя.
+
+**`OrderStatus`**: `PendingConfirmation=1` (начальный статус ЛЮБОГО нового заказа, с B12 — 2026-08-13), `Confirmed=2` (только через `PATCH Order/Confirm`, Admin-only), `Cancelled=3` (не попадает в занятость календаря). Начальный статус по-прежнему выбирается в одном месте (`OrderCreationService`).
+
+**`Order.ConfirmedAtUtc`** (nullable `DateTime`, миграция `AddOrderConfirmedAtUtc`, 2026-08-13) — момент подтверждения, ставит `OrderConfirmationService` тем же присваиванием, что и `Status = Confirmed`. `null`, пока заказ `PendingConfirmation`; старые заказы, подтверждённые до этой миграции, остаются с `null` навсегда — задним числом не проставлялось (нет достоверного момента, только неизвестно какой `Status`-апдейт это был).
+
+### Правка/подтверждение заказа (B12, 2026-08-13)
+Раньше апдейта заказа не было вообще — только отмена. "Редактирование" на фронте физически било в `Order/Create` и плодило дубликаты броней. Закрыто:
+- **`PUT api/Order/Update`** (`OrderUpdateModel { id, tourDate, guestCount }`) — только пока `Status == PendingConfirmation` (иначе `OrderNotEditable=2021`); тот же владелец/админ-доступ, что у `Cancel`. `OrderUpdateService` пересчитывает `OrderPayment.TotalAmount` от уже зафиксированного `TourPriceSnapshot` (снапшот не переоценивается) и повторно гоняет `OrderValidationService` (гостей, дату, доступность).
+- **`PATCH api/Order/Confirm`** (Admin-only) — `PendingConfirmation → Confirmed`, `OrderConfirmationService`, тот же паттерн, что `OrderCancellationService`.
+- **Email-уведомление** админу при каждом новом заказе (`IEmailSender.SendNewOrderNotificationAsync`, все 3 реализации) — на `EmailSettings.AdminNotificationEmail` (по умолчанию = `FromEmail`, отдельно не задан).
+
+**Бронирование — только для залогиненных** (`Order.UserId` — обязательный FK из токена, не из тела запроса). Оплата на этом этапе — без платёжного шлюза: `OrderPayment` фиксирует сумму/предоплату как число, оплата идёт вне сайта (звонок/перевод).
+
+**Групповой тариф теперь и на бэкенде (B12, 2026-08-13, было расхождение)**: раньше `OrderCreationService` считал `TotalAmount = TourPriceSnapshot × GuestCount` безусловно — для 1–4 гостей это давало сумму В РАЗЫ больше, чем «Итого» на сайте (цена там фиксирована за бронь целиком, не за гостя). Обнаружилось, когда `order.payment` наконец стали показывать в админке (`OrderDetailPage`, см. `admin-panel.md`) — до этого поле нигде не рендерилось именно по этой причине. Исправлено: `OrderCreationService.ResolveTotalAmount` дублирует правило `shared/currency/pricing.ts` (`resolveTier`/`applyGroupTier`) в C# — 1–4 гостя: `TotalAmount = TourPriceSnapshot` (флэт, без умножения); 5–6: `× 1.2`; 7+: `0` («цена по запросу», как и на сайте — `largeGroupInvitation`, сумма не автоматическая). TS и C# не делят код в этом репозитории, так что тариф меняется в обоих местах вручную. **Старые заказы, созданные до фикса, оставлены как есть** — Давид решил не делать бэкфилл (тестовые данные, реальных платежей ещё нет).
+
+| Метод | Route | Возврат |
+| --- | --- | --- |
+| POST | `api/Order/Create` | `OrderInfoModel` |
+| PUT | `api/Order/Update` | `OrderInfoModel` (только `PendingConfirmation`) |
+| PATCH | `api/Order/Confirm` | — (Admin-only, только `PendingConfirmation`) |
+| GET | `api/Order/GetMine` | `OrderInfoModel[]` (заказы текущего пользователя) |
+| GET | `api/Order/GetAll` | `OrderInfoModel[]` (Admin-only, фильтры `tourId`/`from`/`to`/`status` — все опциональны) |
+| GET | `api/Order/{id}` | `OrderInfoModel` (Admin-only, B12 2026-08-13 — деталь одного заказа для `OrderDetailPage`; 404 `OrderNotFound` если нет) |
+| PATCH | `api/Order/Cancel` | — |
+| GET | `api/Availability/GetCalendar` | `CalendarMonthModel` (по дню: кол-во заказов по турам + статус закрытия, Admin-only) |
+| GET | `api/Availability/GetRules` | `ClosureRuleInfoModel[]` |
+| POST | `api/Availability/CreateRules` | — (массовое создание, кап `MAX_BULK_RULES` на фронте) |
+| DELETE | `api/Availability/DeleteRule` | — |
+| GET | `api/Availability/GetClosedDates` | список закрытых дат (публичный, для `DatePicker` на детальной странице тура) |
+
+**Гард на удаление тура**: `TourDeletionService` теперь проверяет `TourHasOrders` — тур с существующими заказами удалить нельзя (внятный код ошибки вместо сырой FK-ошибки).
+
+**Коды ошибок** (`GlobalErrorCode`): `SiteSettingValueNotAllowed=2013`, `TourDateUnavailable=2014`, `InvalidGuestCount=2015`, `OrderDateInPast=2016`, `InvalidClosureRule=2017`, `TourHasOrders=2018`, `OrderAccessForbidden=2019`, `OrderNotFound=2020` (сдвинут с зарезервированного в спеке 2013 — коллизия с параллельно реализованным `SiteSettingValueNotAllowed`, разрешена смещением неиспользуемого на фронте кода), `OrderNotEditable=2021` (B12 — `Update`/`Confirm` на не-`PendingConfirmation` заказе), `ClosureDateInPast=2022` (B12 — см. ниже).
+
+### Бэкдейтинг запрещён везде (B12, 2026-08-13)
+Раньше массовое закрытие дней сознательно разрешало прошедшие даты ("хозяйственный смысл"), а точечный клик по прошедшему дню в админке вообще не проверялся. Решение Давида: запретить полностью и без исключений — единственная и общая для single-day/bulk точка входа (`ClosureRuleCreateModel` → `ClosureRuleCreationService` → `ClosureRuleValidationService`) теперь отбивает `SpecificDate.Date < today` и `Weekly.EffectiveFrom < today` кодом `ClosureDateInPast=2022`. На фронте — `BulkClosurePanel`'s `DatePicker`ы теперь `disablePast` + та же проверка в `compileBulkForm`, и `DayClosureControls` полностью блокируется (не просто прячется) для прошедших дней.
+
+### Причина закрытия дня в календаре (B12, 2026-08-13)
+`ClosureRuleResolver.IsClosed` раньше отдавал только `bool`, выбрасывая победившее правило (и его `Reason`). Добавлен `ClosureRuleResolver.Resolve(...)`, возвращающий само правило; `CalendarDayModel` получил поле `ClosureReason` (только для глобального закрытия — tour-scope причина по-прежнему видна лишь во вкладке «Правила»). Плюс: одиночное закрытие дня (`DayClosureControls`) теперь тоже собирает `Reason` — раньше поле было только у массовой операции.
+
+**Админка**: раздел «Заказы» (`/admin/orders` — список + `/admin/orders/:id` деталь) + «Календарь» (`/admin/calendar`) — см. `admin-panel.md`.
+
+## Настройки темы/палитры (`api/SiteSettings` — группа `Theme`) — 2026-08-13
+Спецификация — `docs/specs/002-design-settings-backend.md` (+ `docs/adr/013`). Новая группа `SiteSettingGroup.Theme = 7` (не `Branding` — там только логотип):
+- **`theme.activePalette`** — id активного пресета палитры сайта, тип контрола `Select` (новый `SettingValueType.Select=5`), допустимые значения — код-каталог `ThemePaletteCatalog` (не миграция): `obsidian` (дефолт, «Обсидиан + золото») и `basalt` («Базальт и медь», см. `client-site.md` — НЕ дефолт). Сервер валидирует значение против `definition.Options` (код 2013 при недопустимом).
+- **`theme.defaultMode`** — `dark`/`light`, мягкий дефолт для новых посетителей; существующий клиентский переключатель темы не убирается.
+- **`branding.authImageUrl`** (группа `Branding`, `sortOrder: 26`) — URL фото для сплит-экрана `/auth`, тот же паттерн, что `hero.imageUrl`/`branding.logoUrl`.
+
+Новых сущностей/репозиториев/миграции не потребовалось — всё укладывается в уже существующий каталог-в-коде `SiteSettingCatalog` (ADR 002).
+
 ## Миграции
-Актуальные (в `ATTours.DataLayer/Migrations`): `InitialCreate`, `AddRoutePoint`, `AddOrganizationalDetailAndRestriction`, `ChangeTourDayChildrenToCascade`, `AddTourIsArchived`, `AddSiteSettings`, `AddRegionAndTourRegion`, `SeedArmenianRegions`, `MergeRestrictionAndOrganizationalDetailIntoTourNote`, `AddReferenceCatalogs`, `AddTourFeatured`, `SeedRegionBlurbs`, `AddExchangeRate`.
+Актуальные (в `ATTours.DataLayer/Migrations`): `InitialCreate`, `AddRoutePoint`, `AddOrganizationalDetailAndRestriction`, `ChangeTourDayChildrenToCascade`, `AddTourIsArchived`, `AddSiteSettings`, `AddRegionAndTourRegion`, `SeedArmenianRegions`, `MergeRestrictionAndOrganizationalDetailIntoTourNote`, `AddReferenceCatalogs`, `AddTourFeatured`, `SeedRegionBlurbs`, `AddExchangeRate`, `AddOrdersAndClosureRules`, `AddTourRequiresPrepayment` (2026-08-13 — `Tour.RequiresPrepayment`, `bit NOT NULL DEFAULT 1`; см. `product-model.md`). Обе миграции 2026-08-13 подтверждены применёнными (backend перезапущен, EF-лог показал `Applying migration`).

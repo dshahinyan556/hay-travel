@@ -1,0 +1,45 @@
+Batch fixes — started 2026-08-13, завершено 2026-08-13
+Делал сам (без субагентов), по указанию Давида.
+
+СТАТУС: [x] готово, [!] не сделано / нужен доп. диалог
+
+BACKEND
+[x] 1. Order update flow: OrderUpdateModel(Id) + PUT /api/Order/Update + OrderUpdateService
+        Правило: апдейт разрешён только пока Status == PendingConfirmation
+        Плюс: PATCH /api/Order/Confirm (Admin-only)
+        Плюс: флоу заказов переключён — новые заказы больше НЕ авто-Confirmed,
+        стартуют PendingConfirmation + email-уведомление админу (подтверждено с Давидом)
+[x] 2. ClosureRuleResolver.Resolve(...) отдаёт правило целиком; CalendarDayModel.ClosureReason
+[x] 3. Бэкдейтинг запрещён ВЕЗДЕ (single day close + bulk/mass close) — валидация на бэке
+        (ClosureDateInPast=2022) + на фронте (disablePast + compileBulkForm)
+[x] 4. Tour.RequiresPrepayment (bool) + миграция AddTourRequiresPrepayment (применена) + DTO
+
+ADMIN (Frontend)
+[x] 5. Sidebar: пункт "Заказы" + роут /admin/orders
+[x] 6. Страница "Заказы": список + фильтр по статусу + подтверждение + отмена + правка
+        (дата/кол-во гостей, пока PendingConfirmation)
+[x] 7. settingsCopy.ts: лейбл для content.largeGroupInvitation
+[x] 8. Календарь: прошедшие дни — все действия задизейблены (не просто закрашены)
+        + BulkClosurePanel disablePast
+[x] 9. DayClosureControls: показывает Reason закрытия дня (для точечного SpecificDate)
+[x] 10. DayClosureControls: добавлено поле "причина" при одиночном закрытии (было только у bulk)
+[x] 11. Мультивыбор туров при одиночном закрытии дня (поиск + чекбоксы, как у Bulk)
+[!] 12. Тема оформления: пайплайн прочитан построчно, бага в коде НЕ найдено — должно работать
+         после hard-reload. Живой клик-через не подтверждён (нет админских учёток в сессии).
+         НУЖНА РУЧНАЯ ПРОВЕРКА Давидом.
+[x] 13. Admin product form: toggle "Требуется предоплата" в TourFormHeader.tsx
+
+PUBLIC SITE
+[x] 14. ArmeniaMap.tsx: откатил font-semibold -> font-display (2 места)
+[x] 15. dictionary.ts EN '20% deposit' -> '20% prepayment', сумма предоплаты приглушена
+[x] 16. BookingCard: блок предоплаты показывается только если tour.requiresPrepayment
+
+ОТЛОЖЕНО / нужен доп. диалог
+[!] 17. Размер календаря — редизайн layout, нужен визуальный концепт отдельно (не в этом батче)
+
+ПРОВЕРКА
+- Backend: dotnet build — 0 ошибок компиляции (MSB3027 лок-файла из-за живого процесса —
+  не связано с кодом)
+- Frontend: npx tsc --noEmit — чисто; npm run build — успешно; oxlint — только 2 уже
+  существовавших предупреждения (fast-refresh), не новых
+- Живой клик-через в браузере: не подтверждён, нет админских учётных данных в сессии

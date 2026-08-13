@@ -118,6 +118,8 @@ export const SiteSettingGroup = {
   /** Public-site text blocks outside Hero (catalog heading, footer tagline, home "featured"
    * section heading) — previously hardcoded in `shared/i18n/dictionary.ts`. */
   Content: 6,
+  /** Тема оформления сайта: палитра-пресет + мягкий дефолт dark/light (backend Spec 002). */
+  Theme: 7,
 } as const
 
 export type SiteSettingGroup = (typeof SiteSettingGroup)[keyof typeof SiteSettingGroup]
@@ -129,6 +131,8 @@ export const SettingValueType = {
   MultilineText: 2,
   Url: 3,
   ImageUrl: 4,
+  /** Значение — один id из фиксированного набора `options`. Хранится строкой. */
+  Select: 5,
 } as const
 
 export type SettingValueType = (typeof SettingValueType)[keyof typeof SettingValueType]

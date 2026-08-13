@@ -15,6 +15,8 @@ namespace ATTours.Common.DTO.Info
         public bool IsTranslatable { get; set; }
         public bool IsPublic { get; set; }
         public int SortOrder { get; set; }
+        // Список опций для ValueType.Select (иначе пустой список). Из каталога, в БД не хранится.
+        public List<SiteSettingOptionModel> Options { get; set; } = [];
         #endregion
 
         public string Value { get; set; }

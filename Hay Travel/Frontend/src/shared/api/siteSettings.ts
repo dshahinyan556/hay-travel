@@ -15,6 +15,7 @@ const SITE_SETTING_GROUP_SOCIAL = 3
 const SITE_SETTING_GROUP_BRANDING = 4
 const SITE_SETTING_GROUP_SEO = 5
 const SITE_SETTING_GROUP_CONTENT = 6
+const SITE_SETTING_GROUP_THEME = 7
 
 export interface HeroContent {
   imageUrl: string
@@ -151,6 +152,27 @@ export async function getContentText(): Promise<ContentText> {
   }
 }
 
+/**
+ * Photograph shown in the left column of `/auth` (Spec 005). '' = the admin has not set one, and
+ * the caller substitutes `AUTH_IMAGE_FALLBACK`. Never throws.
+ *
+ * Its own request to group 4, rather than being folded into `getLogoUrl`: every function in this
+ * module fetches its own group (see `getContacts`, `getSocialLinks`, `getFaviconUrl`), and one
+ * extra small request on one route is not a reason to break that. Also '' while the backend has
+ * not shipped the `branding.authImageUrl` catalog entry yet — a missing key and a blank one are
+ * indistinguishable here, which is exactly the fallback behaviour wanted.
+ */
+export async function getAuthImageUrl(): Promise<string> {
+  try {
+    const res = await apiFetch<SiteSettingsPublicModel>(
+      `api/SiteSettings/GetPublic?languageCode=${LANGUAGE_CODE_BY_LOCALE[getStoredLocale()]}&group=${SITE_SETTING_GROUP_BRANDING}`,
+    )
+    return res.values['branding.authImageUrl'] ?? ''
+  } catch {
+    return ''
+  }
+}
+
 /** '' means no custom favicon has been uploaded in Settings → SEO — callers fall back to the
  * static `/favicon.svg` already wired up in `index.html`. Also '' if the backend catalog
  * doesn't have a `seo.faviconUrl` key yet (B9 is a separate backend task); an unknown key is
@@ -164,6 +186,33 @@ export async function getFaviconUrl(): Promise<string> {
     return res.values['seo.faviconUrl'] ?? ''
   } catch {
     return ''
+  }
+}
+
+export interface ThemeSettings {
+  activePalette: string
+  defaultMode: string
+}
+
+/**
+ * Дизайн-настройки сайта (`theme.*`, backend Spec 002).
+ *
+ * Возвращает СЫРЫЕ строки, а не `PaletteId`/`Theme`: сузить их — работа `shared/lib/palette.ts`
+ * и `useSiteDesign`, чтобы неизвестный с сервера id деградировал в дефолт, а не ломал тип.
+ * Никогда не бросает; при ошибке/отсутствии ключей отдаёт пустые строки, что для вызывающего
+ * означает «оставить дефолт».
+ */
+export async function getThemeSettings(): Promise<ThemeSettings> {
+  try {
+    const res = await apiFetch<SiteSettingsPublicModel>(
+      `api/SiteSettings/GetPublic?languageCode=${LANGUAGE_CODE_BY_LOCALE[getStoredLocale()]}&group=${SITE_SETTING_GROUP_THEME}`,
+    )
+    return {
+      activePalette: res.values['theme.activePalette'] ?? '',
+      defaultMode: res.values['theme.defaultMode'] ?? '',
+    }
+  } catch {
+    return { activePalette: '', defaultMode: '' }
   }
 }
 

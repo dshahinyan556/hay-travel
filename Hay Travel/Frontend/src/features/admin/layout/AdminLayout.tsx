@@ -40,11 +40,20 @@ export function AdminLayout() {
   // mount inside the public `Header`), but if that ever changes, this keeps `/admin` pinned to
   // light for as long as this layout stays mounted instead of silently drifting dark. Deliberately
   // does not restore the public theme on unmount: leaving `/admin` remounts `RootLayout` →
-  // `Header` → `useTheme`, which re-applies the stored preference on its own.
+  // `useSiteDesign`, whose own `useLayoutEffect` puts the cached preset back before the frame,
+  // and `Header` → `useTheme`, which re-applies the stored preference.
+  //
+  // `data-preset` (Spec 006 / ADR 018) is stripped here for exactly the same reason and in the
+  // same two places: the pre-paint script runs once per document load and does NOT re-run on a
+  // client-side nav from the public site into `/admin`, so without this the admin panel would
+  // render in basalt's colours. `/admin` is built on `brand-*` teal and white surfaces and must
+  // never carry a preset, whichever palette the admin has chosen for the public site.
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = 'light'
+    delete document.documentElement.dataset.preset
     function forceLight() {
       document.documentElement.dataset.theme = 'light'
+      delete document.documentElement.dataset.preset
     }
     window.addEventListener('storage', forceLight)
     return () => window.removeEventListener('storage', forceLight)

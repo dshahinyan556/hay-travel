@@ -4,7 +4,7 @@ import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { useAuth } from '@/shared/auth'
 import { PasswordChangeForm } from './account/components/PasswordChangeForm'
 import { AuthShell, AuthNotice } from './components/AuthShell'
-import { readReturnTo, withReturnTo } from './lib/returnTo'
+import { readReturnTo, withReturnTo } from '@/shared/lib/returnTo'
 
 /**
  * `/auth/change-password` — change your own password while signed in.

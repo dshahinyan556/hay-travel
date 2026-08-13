@@ -171,12 +171,31 @@ const ru = {
   // просто исчез бы без объяснения.
   'booking.largeGroupFallback':
     'Для групп от 7 человек мы считаем стоимость индивидуально — оставьте заявку, и мы вернёмся с ценой.',
+  // Ветка `PendingConfirmation` экрана успеха — заказ создан, но менеджер ещё не подтвердил.
   'booking.submittedTitle': 'Заявка отправлена',
   'booking.submittedBody': 'Мы свяжемся с вами в течение дня и подтвердим даты. Предоплата — после подтверждения.',
   'booking.editSubmission': 'Изменить заявку',
+  // Ветка `Confirmed` — сервер вернул уже подтверждённый заказ.
+  'booking.submittedTitleConfirmed': 'Бронь подтверждена',
+  'booking.submittedBodyConfirmed':
+    'Мы написали вам на почту. Детали и предоплата — по договорённости с менеджером.',
+  'booking.orderNumber': 'Заказ №{id}',
+  'booking.submitting': 'Отправляем…',
+  // Бронь только для залогиненных: анонимного не редиректим молча, а объясняем и даём ссылку.
+  'booking.authTitle': 'Нужен вход в аккаунт',
+  'booking.authBody':
+    'Бронирование доступно только авторизованным гостям — так мы сможем показать вам статус заказа.',
+  'booking.authAction': 'Войти и продолжить',
+  'booking.dateUnavailable': 'Эта дата уже недоступна — выберите другую.',
+  'booking.datePast': 'Эта дата уже прошла — выберите другую.',
+  'booking.submitFailed': 'Не удалось отправить заявку. Проверьте соединение и попробуйте ещё раз.',
+  'booking.sessionExpired': 'Сессия истекла — войдите заново, чтобы завершить бронь.',
 
   // ── Date picker ───────────────────────────────────────────────────────────────────────────
   'datePicker.placeholder': 'Выберите дату',
+  /* Суффикс к `aria-label` погашенной даты: визуальное отличие (зачёркивание) должно быть
+     продублировано словом. */
+  'datePicker.unavailable': 'недоступно',
   'datePicker.prevMonth': 'Предыдущий месяц',
   'datePicker.nextMonth': 'Следующий месяц',
   'datePicker.month.0': 'Январь',
@@ -241,6 +260,20 @@ const ru = {
   'auth.submitting': 'Отправляем…',
   'auth.terms': 'Продолжая, вы соглашаетесь с условиями сервиса.',
   'auth.backHome': 'Вернуться на главную',
+
+  // Split screen `/auth` only (Spec 005) — the photo column's copy and the sign-in states.
+  // Deliberately dictionary strings, not `SiteSetting` keys: nothing here is copy David has
+  // asked to tune, and adding four admin fields for it would be four fields to maintain.
+  'auth.photo.eyebrow': 'Личный кабинет',
+  'auth.photo.title': 'Ваши поездки по Армении',
+  'auth.photo.titleShort': 'Ваши поездки',
+  'auth.photo.subtitle': 'Бронирования, история и данные для связи — в одном месте.',
+  'auth.photo.trust1': '11 регионов, только Армения',
+  'auth.photo.trust2': 'Подтверждение брони на почту',
+  'auth.photo.trust3': 'Предоплата 20 %, остальное на месте',
+  'auth.checking': 'Проверяем…',
+  'auth.successLogin': 'Готово. Открываем ваш личный кабинет…',
+  'auth.signedIn': 'Вход выполнен',
 
   // Registration → «письмо отправлено»
   'auth.checkEmailTitle': 'Проверьте почту',
@@ -472,7 +505,7 @@ const en: Record<TranslationKey, string> = {
   'booking.guestsFewer': 'Fewer guests',
   'booking.guestsMore': 'More guests',
   'booking.total': 'Total',
-  'booking.prepayment': '20% deposit',
+  'booking.prepayment': '20% prepayment',
   'booking.submit': 'Book now',
   'booking.submitHint': 'No payment now — we’ll confirm and send the details',
   'booking.submitLargeGroup': 'Request a quote',
@@ -482,8 +515,22 @@ const en: Record<TranslationKey, string> = {
   'booking.submittedTitle': 'Request sent',
   'booking.submittedBody': 'We’ll get in touch within a day to confirm dates. The deposit is due after confirmation.',
   'booking.editSubmission': 'Edit request',
+  'booking.submittedTitleConfirmed': 'Booking confirmed',
+  'booking.submittedBodyConfirmed':
+    'We’ve emailed you. Details and the deposit are arranged with your manager.',
+  'booking.orderNumber': 'Order #{id}',
+  'booking.submitting': 'Sending…',
+  'booking.authTitle': 'Sign in to book',
+  'booking.authBody':
+    'Booking is available to signed-in guests only, so you can track your order.',
+  'booking.authAction': 'Sign in and continue',
+  'booking.dateUnavailable': 'That date is no longer available — please pick another.',
+  'booking.datePast': 'That date is in the past — please pick another.',
+  'booking.submitFailed': 'Could not send the request. Check your connection and try again.',
+  'booking.sessionExpired': 'Your session expired — sign in again to finish booking.',
 
   'datePicker.placeholder': 'Pick a date',
+  'datePicker.unavailable': 'unavailable',
   'datePicker.prevMonth': 'Previous month',
   'datePicker.nextMonth': 'Next month',
   'datePicker.month.0': 'January',
@@ -543,6 +590,17 @@ const en: Record<TranslationKey, string> = {
   'auth.submitting': 'Sending…',
   'auth.terms': 'By continuing, you agree to the terms of service.',
   'auth.backHome': 'Back to home',
+
+  'auth.photo.eyebrow': 'Your account',
+  'auth.photo.title': 'Your trips across Armenia',
+  'auth.photo.titleShort': 'Your trips',
+  'auth.photo.subtitle': 'Bookings, history and contact details in one place.',
+  'auth.photo.trust1': '11 regions, Armenia only',
+  'auth.photo.trust2': 'Booking confirmation by email',
+  'auth.photo.trust3': '20% deposit, the rest on arrival',
+  'auth.checking': 'Checking…',
+  'auth.successLogin': 'Done. Opening your account…',
+  'auth.signedIn': 'Signed in',
 
   'auth.checkEmailTitle': 'Check your email',
   'auth.checkEmailBody':

@@ -1,5 +1,6 @@
 using ATTours.BusinessServices.DataConversion.Core.EntityValidations;
 using ATTours.Common.Entities;
+using ATTours.Common.Enums;
 using ATTours.Common.Infrastructure.SiteSettings;
 using ATTours.Exceptions;
 using ATTours.Helper.Enums;
@@ -31,10 +32,34 @@ namespace ATTours.BusinessServices.Services.ValidationServices
                     throw new ErrorModelException(GlobalErrorCode.InvalidEntityRelation, HttpStatusCode.BadRequest,
                         $"Site setting key '{entity.Key}' is duplicated in the request!");
 
+                ValidateSelectValue(entity);
                 ValidateTranslations(entity);
             }
 
             await Task.CompletedTask;
+        }
+
+        // Для Select-ключей значение обязано быть одним из id, объявленных каталогом:
+        // произвольный id палитры/режима не имеет соответствующего CSS на сайте и должен
+        // отбиваться как ошибка ввода, а не сохраняться молча (ADR 013).
+        // Список опций не дублируется здесь — берётся из definition.Options.
+        private static void ValidateSelectValue(SiteSetting entity)
+        {
+            // Ключ уже проверен на известность выше, definition не null.
+            var definition = SiteSettingCatalog.ByKey(entity.Key);
+            if (definition.ValueType != SettingValueType.Select)
+                return;
+
+            // Пустое значение допустимо: настройка ещё не выбрана, наружу уйдёт DefaultValue.
+            if (string.IsNullOrWhiteSpace(entity.Value))
+                return;
+
+            var isAllowed = definition.Options
+                .Any(option => string.Equals(option.Value, entity.Value, StringComparison.Ordinal));
+
+            if (!isAllowed)
+                throw new ErrorModelException(GlobalErrorCode.SiteSettingValueNotAllowed, HttpStatusCode.BadRequest,
+                    $"Site setting '{entity.Key}' has value '{entity.Value}' that is not an allowed option.");
         }
 
         // У настройки не больше одной строки перевода на язык — переводы сверяются

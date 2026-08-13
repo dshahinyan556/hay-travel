@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
 import { redirect, useLocation, useNavigate } from 'react-router'
 import type { LoaderFunctionArgs } from 'react-router'
+import { useReducedMotion } from '@/shared/hooks'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import {
   authErrorMessageKey,
@@ -10,12 +12,22 @@ import {
   type LoginRequest,
   type RegisterRequest,
 } from '@/shared/auth'
-import { AuthShell } from './components/AuthShell'
+import { AuthSplitLayout } from './components/AuthSplitLayout'
+import { AuthModeToggle, type AuthMode } from './components/AuthModeToggle'
 import { LoginForm } from './components/LoginForm'
 import { RegisterForm } from './components/RegisterForm'
-import { readReturnTo, withReturnTo } from './lib/returnTo'
+import { readReturnTo, withReturnTo } from '@/shared/lib/returnTo'
 
-type Mode = 'login' | 'register'
+/**
+ * `'success'` exists only for sign-IN. Registration hands straight off to `/auth/check-email`,
+ * which is already a confirmation screen — a second one in a row would be noise.
+ */
+type SubmitStatus = 'idle' | 'submitting' | 'success'
+
+/** Пауза между «вход удался» и переходом. Не гейтится на `prefers-reduced-motion`: это пауза,
+ *  а не движение — без неё человек не успевает понять, что вход прошёл, особенно если до этого
+ *  он пару раз ошибся. */
+const SUCCESS_HOLD_MS = 400
 
 /**
  * `/auth` is for signing IN. A visitor who already has a session is sent away (ADR 010, decision 3)
@@ -38,43 +50,55 @@ export async function authPageLoader({ request }: LoaderFunctionArgs) {
 /**
  * `/auth` — the container for signing in and signing up.
  *
- * `?returnTo=` is honoured on successful sign-in (sanitised in `lib/returnTo`). Registration does
- * NOT sign anyone in: the account is unverified until the emailed link is used, so it hands off to
- * `/auth/check-email` with the address and, in dev, the token the backend echoed back.
+ * `?returnTo=` is honoured on successful sign-in (sanitised in `shared/lib/returnTo`). Registration
+ * does NOT sign anyone in: the account is unverified until the emailed link is used, so it hands off
+ * to `/auth/check-email` with the address and, in dev, the token the backend echoed back.
  */
 export function AuthPage() {
-  const [mode, setMode] = useState<Mode>('login')
+  const [mode, setMode] = useState<AuthMode>('login')
   const [error, setError] = useState<string | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [status, setStatus] = useState<SubmitStatus>('idle')
 
   const { t } = useLocale()
   const navigate = useNavigate()
   const location = useLocation()
+  const reducedMotion = useReducedMotion()
+
+  // Без этого размонтирование во время паузы «Вход выполнен» даёт `navigate` на снятом компоненте.
+  const successTimer = useRef<number | null>(null)
+  useEffect(
+    () => () => {
+      if (successTimer.current !== null) clearTimeout(successTimer.current)
+    },
+    [],
+  )
 
   const returnTo = readReturnTo(location.search)
   const isRegister = mode === 'register'
 
   async function handleLogin(request: LoginRequest) {
     setError(null)
-    setIsSubmitting(true)
+    setStatus('submitting')
     try {
       const state = await login(request)
+      setStatus('success')
       // A forced password change outranks the requested destination — but keep carrying it, so
       // the visitor still lands where they were going once the new password is set.
-      navigate(
-        state.forceChangePassword ? withReturnTo('/auth/change-password', returnTo) : returnTo,
-        { replace: true },
-      )
+      const destination = state.forceChangePassword
+        ? withReturnTo('/auth/change-password', returnTo)
+        : returnTo
+      successTimer.current = window.setTimeout(() => {
+        navigate(destination, { replace: true })
+      }, SUCCESS_HOLD_MS)
     } catch (err) {
       setError(t(authErrorMessageKey(err)))
-    } finally {
-      setIsSubmitting(false)
+      setStatus('idle')
     }
   }
 
   async function handleRegister(request: RegisterRequest) {
     setError(null)
-    setIsSubmitting(true)
+    setStatus('submitting')
     try {
       const result = await register(request)
       navigate('/auth/check-email', {
@@ -83,60 +107,44 @@ export function AuthPage() {
       })
     } catch (err) {
       setError(t(authErrorMessageKey(err)))
-    } finally {
-      setIsSubmitting(false)
+      setStatus('idle')
     }
   }
 
+  function handleModeChange(next: AuthMode) {
+    setMode(next)
+    setError(null)
+  }
+
   return (
-    <AuthShell
+    <AuthSplitLayout
       title={isRegister ? t('auth.createAccount') : t('auth.welcomeBack')}
       subtitle={isRegister ? t('auth.subtitleRegister') : t('auth.subtitleLogin')}
       note={isRegister ? t('auth.terms') : undefined}
+      isBusy={status === 'submitting'}
     >
+      <AuthModeToggle value={mode} onChange={handleModeChange} disabled={status !== 'idle'} />
       {/*
-        Segmented control, same treatment as the filter toggles elsewhere in the app
-        (`ProductsToolbar.ViewTab`, `TourTypeToggle`): colour cross-fade on the shared
-        `--dur-micro`/`--ease-in-out-soft` tokens (index.css, "colour swap, toggles" — the same
-        pair `shared/ui/Tabs` already uses) plus a `shadow-sm` elevation pop on the selected
-        segment. Colour durations are NOT collapsed under `prefers-reduced-motion` (index.css
-        ~250-260) — this is a tint, not travel, so nothing here needs its own reduced-motion
-        branch.
+        `layout` animates the card's height across the 2-field ↔ 7-field swap; without it the panel
+        doubles in size in one frame and the page jerks. The literals `0.34` and `[0.22, 1, 0.36, 1]`
+        ARE the `--dur-base` and `--ease-out-soft` tokens — framer cannot read CSS custom
+        properties, so they are duplicated here on purpose. Keep them in sync with index.css.
       */}
-      <div role="radiogroup" aria-label={t('auth.modeToggleLabel')} className="flex rounded-full p-0.5 ring-1 ring-edge">
-        {(['login', 'register'] as const).map((value) => (
-          <button
-            key={value}
-            type="button"
-            role="radio"
-            onClick={() => {
-              setMode(value)
-              setError(null)
-            }}
-            aria-checked={mode === value}
-            className={[
-              // `transition-colors` alone leaves `shadow-sm` snapping in/out instantly while the
-              // background fades — the mismatch is what reads as "not smooth". Listing `box-shadow`
-              // explicitly alongside color puts both on the same fade.
-              'flex-1 cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition-[color,background-color,box-shadow] duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)]',
-              mode === value ? 'bg-wine text-gold-light shadow-sm' : 'text-ink-dim hover:text-gold-ink',
-            ].join(' ')}
-          >
-            {value === 'login' ? t('auth.tabLogin') : t('auth.tabRegister')}
-          </button>
-        ))}
-      </div>
-
-      {isRegister ? (
-        <RegisterForm onSubmit={handleRegister} error={error} isSubmitting={isSubmitting} />
-      ) : (
-        <LoginForm
-          onSubmit={handleLogin}
-          error={error}
-          isSubmitting={isSubmitting}
-          forgotPasswordHref={withReturnTo('/auth/forgot-password', returnTo)}
-        />
-      )}
-    </AuthShell>
+      <motion.div
+        layout
+        transition={reducedMotion ? { duration: 0 } : { duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+      >
+        {isRegister ? (
+          <RegisterForm onSubmit={handleRegister} error={error} status={status} />
+        ) : (
+          <LoginForm
+            onSubmit={handleLogin}
+            error={error}
+            status={status}
+            forgotPasswordHref={withReturnTo('/auth/forgot-password', returnTo)}
+          />
+        )}
+      </motion.div>
+    </AuthSplitLayout>
   )
 }

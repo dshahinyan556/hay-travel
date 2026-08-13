@@ -138,6 +138,7 @@ function mapDetail(info: TourInfoModel): TourDetail {
     priceFrom: info.totalPrice ?? 0,
     coverImage,
     shortDescription: pickTranslation(info.translations, TRANSLATION_SHORT_DESCRIPTION),
+    requiresPrepayment: info.requiresPrepayment,
     gallery: gallery.length > 0 ? gallery : [coverImage],
     itinerary,
     organizationalDetails: notesOfType(info.notes, NOTE_TYPE_ORGANIZATIONAL_DETAIL),

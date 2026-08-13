@@ -29,6 +29,11 @@ namespace ATTours.Common.Settings
         // нового адреса (фронту ещё предстоит завести этот роут).
         public string EmailChangeConfirmUrlBase => Section[nameof(EmailChangeConfirmUrlBase)] ?? "http://localhost:5173/confirm-email-change";
 
+        // Флоу заказов (B12, 2026-08-13): куда падает уведомление о новой брони. Без
+        // отдельно заданного адреса уходит на FromEmail — тот же ящик, с которого сейчас
+        // шлётся вся остальная почта сайта.
+        public string AdminNotificationEmail => Section[nameof(AdminNotificationEmail)] ?? FromEmail;
+
         // SendGrid включается только когда он явно выбран И ключ реально задан —
         // иначе тихо падали бы все письма.
         public bool IsSendGridConfigured =>
