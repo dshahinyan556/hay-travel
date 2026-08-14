@@ -8,7 +8,7 @@
 import { formatISODate, getMonthGrid, isSameDay, stripTime } from '@/shared/lib/date'
 import { LanguageCode, TourTranslationType } from '@/features/admin/lib/enums'
 import type { TourInfoModel } from '@/shared/types/attours'
-import type { CalendarDayModel, CalendarMonthModel } from '@/shared/types/booking'
+import { ClosureRuleType, type CalendarDayModel, type CalendarMonthModel, type ClosureRuleInfoModel } from '@/shared/types/booking'
 
 /** Cache/lookup key of a month: `YYYY-MM`. `month` is 1..12. */
 export function monthKey(year: number, month: number): string {
@@ -89,4 +89,69 @@ export function tourTitleResolver(tours: TourInfoModel[]): (tourId: number) => s
     if (title) titles.set(tour.id, title)
   }
   return (tourId: number) => titles.get(tourId) ?? `Тур #${tourId}`
+}
+
+/**
+ * Ordering for the «Блокировки» table: global rules first, then by tour name; within the same
+ * scope, by type (date rules before weekly) and then by date/weekday. Exported so it can order
+ * both individual rules (inside a group) and groups themselves (by their first rule).
+ */
+export function compareClosureRules(
+  a: ClosureRuleInfoModel,
+  b: ClosureRuleInfoModel,
+  tourTitle: (tourId: number) => string,
+): number {
+  if ((a.tourId === null) !== (b.tourId === null)) return a.tourId === null ? -1 : 1
+  if (a.tourId !== null && b.tourId !== null && a.tourId !== b.tourId) {
+    return tourTitle(a.tourId).localeCompare(tourTitle(b.tourId), 'ru')
+  }
+  if (a.type !== b.type) return a.type === ClosureRuleType.SpecificDate ? -1 : 1
+  if (a.type === ClosureRuleType.SpecificDate) return (a.date ?? '').localeCompare(b.date ?? '')
+  return (a.dayOfWeek ?? 0) - (b.dayOfWeek ?? 0)
+}
+
+export interface ClosureRuleGroup {
+  /** The real `BatchId` for a batch of 2+, or a synthetic `rule-${id}` key for a standalone rule
+   * (no batch, or a batch of exactly one) — every group gets a stable React key even though only
+   * some of them are an actual "group" the table renders as expandable. */
+  key: string
+  rules: ClosureRuleInfoModel[]
+}
+
+/**
+ * Buckets rules by `batchId` — every rule created by the same `CreateRules` call (one bulk
+ * operation, or a single toggle) lands in one group. A `null` batchId (data from before this
+ * column existed) always gets its own singleton group, never merged with anything.
+ *
+ * `action`/`type`/`reason` are NOT re-checked for being the same across a group: both creation
+ * paths (`BulkClosurePanel`, `DayClosureControls`) submit one action/type/reason per `CreateRules`
+ * call and only vary `tourId`/`date`/`dayOfWeek` across the list, so a batch is guaranteed
+ * homogeneous in those three columns by construction — the table's group-summary row relies on
+ * this and reads them off the first rule rather than re-deriving them.
+ */
+export function groupClosureRules(
+  rules: ClosureRuleInfoModel[],
+  tourTitle: (tourId: number) => string,
+): ClosureRuleGroup[] {
+  const byBatch = new Map<string, ClosureRuleGroup>()
+  const groups: ClosureRuleGroup[] = []
+
+  for (const rule of rules) {
+    if (rule.batchId === null) {
+      groups.push({ key: `rule-${rule.id}`, rules: [rule] })
+      continue
+    }
+    const existing = byBatch.get(rule.batchId)
+    if (existing) {
+      existing.rules.push(rule)
+    } else {
+      const group: ClosureRuleGroup = { key: rule.batchId, rules: [rule] }
+      byBatch.set(rule.batchId, group)
+      groups.push(group)
+    }
+  }
+
+  for (const group of groups) group.rules.sort((a, b) => compareClosureRules(a, b, tourTitle))
+  groups.sort((a, b) => compareClosureRules(a.rules[0], b.rules[0], tourTitle))
+  return groups
 }

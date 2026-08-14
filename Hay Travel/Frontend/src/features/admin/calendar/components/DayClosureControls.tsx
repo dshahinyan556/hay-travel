@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Checkbox, Input, Textarea } from '@/shared/ui'
+import { Button, Input, Textarea } from '@/shared/ui'
+import { HelpButton } from '@/shared/ui/HelpButton'
 import type { TourInfoModel } from '@/shared/types/attours'
 import {
   ClosureRuleType,
@@ -28,14 +29,47 @@ export interface DayClosureControlsProps {
   onToggle: (tourIds: (number | null)[], close: boolean, reason: string | null) => void
 }
 
+interface ToggleChipProps {
+  label: string
+  selected: boolean
+  disabled?: boolean
+  onClick: () => void
+}
+
+/** Tour picker item (2026-08-14, replaces the earlier checkbox list): a pill that fills solid
+ * when picked. Reads faster at a glance than a checkbox column once a day has more than a
+ * handful of tours, and pairs with the "nothing picked = whole day" rule below — an empty state
+ * with no ticked boxes anywhere used to look identical to "I haven't decided yet", a filled chip
+ * makes a deliberate pick visually unambiguous. */
+function ToggleChip({ label, selected, disabled, onClick }: ToggleChipProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={selected}
+      className={`cursor-pointer rounded-full border px-3 py-1.5 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 disabled:cursor-not-allowed disabled:opacity-50 ${
+        selected
+          ? 'border-brand-700 bg-brand-700 text-white hover:bg-brand-800'
+          : 'border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100'
+      }`}
+    >
+      {label}
+    </button>
+  )
+}
+
 /**
- * Availability controls for one day: the whole-day switch, the list of tours closed on it, and a
- * picker to close one more.
+ * Availability controls for one day: close tours (or the whole day), and re-open whichever of
+ * them is currently closed — both through the same picker + one-button shape (F16, 2026-08-14):
+ * pick specific tours and the button acts on just those; pick none and it acts on the whole day
+ * (opening always at least covers "everything currently closed", since there is no narrower
+ * "whole day" target left once a per-tour set is already open).
  *
  * The DISPLAYED state always comes from the server's `CalendarDayModel` (ADR 015) — `rules` is
  * read here for one purpose only: to tell the admin that a day is closed by a WEEKLY rule, because
  * in that case unticking the box does not delete anything, it creates a one-day exception. Hiding
- * that difference would make the «Правила» tab look like it ignored the click.
+ * that difference would make the «Блокировки» tab look like it ignored the click.
  */
 export function DayClosureControls({
   dateISO,
@@ -46,16 +80,18 @@ export function DayClosureControls({
   isPast,
   onToggle,
 }: DayClosureControlsProps) {
-  const [selectedTourIds, setSelectedTourIds] = useState<number[]>([])
+  const [selectedCloseIds, setSelectedCloseIds] = useState<number[]>([])
+  const [selectedOpenIds, setSelectedOpenIds] = useState<number[]>([])
   const [tourSearch, setTourSearch] = useState('')
   const [reason, setReason] = useState('')
   const locked = pending || isPast
 
-  // Reset the picker (and the reason draft) whenever the day or its data changes — after a
-  // successful toggle the parent hands down a fresh `day`, and stale state there would invite a
-  // second, pointless close or leak one day's note into the next.
+  // Reset every draft whenever the day or its data changes — after a successful toggle the parent
+  // hands down a fresh `day`, and stale state there would invite a second, pointless action or
+  // leak one day's note into the next.
   useEffect(() => {
-    setSelectedTourIds([])
+    setSelectedCloseIds([])
+    setSelectedOpenIds([])
     setTourSearch('')
     setReason('')
   }, [dateISO, day])
@@ -87,9 +123,37 @@ export function DayClosureControls({
       .sort((a, b) => tourTitle(a.id).localeCompare(tourTitle(b.id), 'ru'))
   }, [tours, day, tourSearch, tourTitle])
 
+  function toggleClose(id: number) {
+    setSelectedCloseIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  function toggleOpen(id: number) {
+    setSelectedOpenIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  function handleClose() {
+    const targets: (number | null)[] = selectedCloseIds.length > 0 ? selectedCloseIds : [null]
+    onToggle(targets, true, trimmedReason || null)
+  }
+
+  function handleOpen() {
+    if (closedGlobally) {
+      onToggle([null], false, trimmedReason || null)
+      return
+    }
+    const targets = selectedOpenIds.length > 0 ? selectedOpenIds : closedTourIds
+    if (targets.length === 0) return
+    onToggle(targets, false, trimmedReason || null)
+  }
+
   return (
     <section className="flex flex-col gap-4">
-      <h3 className="text-sm font-bold text-neutral-900">{calendarCopy.availabilityTitle}</h3>
+      <div className="flex items-center gap-1.5">
+        <h3 className="text-sm font-bold text-neutral-900">{calendarCopy.availabilityTitle}</h3>
+        <HelpButton surface="admin" title={calendarCopy.availabilityTitle}>
+          {calendarCopy.availabilityHelpBody}
+        </HelpButton>
+      </div>
 
       {isPast && (
         <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-500">
@@ -97,24 +161,16 @@ export function DayClosureControls({
         </p>
       )}
 
-      <div>
-        <Checkbox
-          label={calendarCopy.closeWholeDay}
-          checked={closedGlobally}
-          disabled={locked}
-          onChange={(event) => onToggle([null], event.target.checked, trimmedReason || null)}
-        />
-        {closedByRecurringRule && (
-          <p className="mt-1.5 text-xs text-neutral-500">{calendarCopy.closedByWeeklyHint}</p>
-        )}
-        {/* Причина видна только у точечного закрытия (SpecificDate) — недельное правило её
-            несёт на вкладке «Правила», не в CalendarDayModel (B12). */}
-        {closedGlobally && !closedByRecurringRule && day?.closureReason && (
-          <p className="mt-1.5 text-xs text-neutral-500">
-            {calendarCopy.closureReasonLabel}: {day.closureReason}
-          </p>
-        )}
-      </div>
+      {closedByRecurringRule && (
+        <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-500">
+          {calendarCopy.closedByWeeklyHint}
+        </p>
+      )}
+      {closedGlobally && !closedByRecurringRule && day?.closureReason && (
+        <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-500">
+          {calendarCopy.closureReasonLabel}: {day.closureReason}
+        </p>
+      )}
 
       {!isPast && (
         <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
@@ -130,34 +186,55 @@ export function DayClosureControls({
         </label>
       )}
 
-      {closedTourIds.length > 0 && (
+      {/* Open: whole day (nothing left to pick when `closedGlobally`) or specific already-closed
+          tours — pick some and the button opens just those, pick none and it opens everything
+          currently closed. */}
+      {closedGlobally ? (
         <div>
           <h4 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
             {calendarCopy.closedToursTitle}
           </h4>
-          <ul className="mt-2 flex flex-col gap-1.5">
-            {closedTourIds.map((tourId) => (
-              <li
-                key={tourId}
-                className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 px-3 py-2"
-              >
-                <span className="min-w-0 truncate text-sm text-neutral-800" title={tourTitle(tourId)}>
-                  {tourTitle(tourId)}
-                </span>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={locked}
-                  onClick={() => onToggle([tourId], false, trimmedReason || null)}
-                  className="min-h-11 shrink-0"
-                >
-                  {calendarCopy.openTour}
-                </Button>
-              </li>
-            ))}
-          </ul>
+          <p className="mt-2 text-sm text-neutral-600">{calendarCopy.wholeDayClosedNote}</p>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={locked}
+            onClick={handleOpen}
+            className="mt-2 min-h-11 w-full sm:w-auto"
+          >
+            {calendarCopy.openWholeDay}
+          </Button>
         </div>
+      ) : (
+        closedTourIds.length > 0 && (
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              {calendarCopy.closedToursTitle}
+            </h4>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {closedTourIds.map((tourId) => (
+                <ToggleChip
+                  key={tourId}
+                  label={tourTitle(tourId)}
+                  selected={selectedOpenIds.includes(tourId)}
+                  disabled={locked}
+                  onClick={() => toggleOpen(tourId)}
+                />
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={locked}
+              onClick={handleOpen}
+              className="mt-2 min-h-11 w-full sm:w-auto"
+            >
+              {calendarCopy.openTour}
+            </Button>
+          </div>
+        )
       )}
 
       <div>
@@ -177,50 +254,31 @@ export function DayClosureControls({
               disabled={locked}
               aria-label={calendarCopy.closeTourSearch}
             />
-            {/* Мультивыбор (B12, 2026-08-13) — раньше можно было закрыть только один тур за
-                раз; тот же паттерн (поиск + список чекбоксов), что у BulkClosurePanel. */}
-            <div className="max-h-56 overflow-y-auto rounded-lg border border-neutral-200 p-2">
-              {closableTours.length === 0 ? (
-                <p className="px-1 py-2 text-sm text-neutral-500">{calendarCopy.closeTourNoResults}</p>
-              ) : (
-                <ul className="flex flex-col gap-0.5">
-                  {closableTours.map((tour) => {
-                    const selected = selectedTourIds.includes(tour.id)
-                    return (
-                      <li key={tour.id} className="min-w-0">
-                        {/* Same hover-highlighted-row convention as `Select`'s searchable list
-                            (admin surface): a tint, not a border, on hover; a soft fill when
-                            checked — so the list reads as one system with the country/currency
-                            pickers instead of a bare row of checkboxes. */}
-                        <Checkbox
-                          label={tourTitle(tour.id)}
-                          checked={selected}
-                          disabled={locked}
-                          containerClassName={`w-full rounded-lg px-2 py-1.5 transition-colors ${
-                            selected ? 'bg-brand-50 font-semibold' : 'hover:bg-neutral-100'
-                          }`}
-                          onChange={(event) =>
-                            setSelectedTourIds((prev) =>
-                              event.target.checked
-                                ? [...prev, tour.id]
-                                : prev.filter((id) => id !== tour.id),
-                            )
-                          }
-                        />
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
+            {closableTours.length === 0 ? (
+              <p className="px-1 py-2 text-sm text-neutral-500">{calendarCopy.closeTourNoResults}</p>
+            ) : (
+              <div className="max-h-56 overflow-y-auto rounded-lg border border-neutral-200 p-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {closableTours.map((tour) => (
+                    <ToggleChip
+                      key={tour.id}
+                      label={tourTitle(tour.id)}
+                      selected={selectedCloseIds.includes(tour.id)}
+                      disabled={locked}
+                      onClick={() => toggleClose(tour.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
             <Button
               type="button"
               size="sm"
-              disabled={locked || selectedTourIds.length === 0}
-              onClick={() => onToggle(selectedTourIds, true, trimmedReason || null)}
+              disabled={locked}
+              onClick={handleClose}
               className="min-h-11 w-full sm:w-auto"
             >
-              {calendarCopy.closeTourAction}
+              {selectedCloseIds.length > 0 ? calendarCopy.closeTourAction : calendarCopy.closeWholeDay}
             </Button>
           </div>
         )}

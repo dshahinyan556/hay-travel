@@ -51,7 +51,7 @@ const ru = {
   'currency.rateStale': 'Курс мог устареть',
 
   // ── Home page ─────────────────────────────────────────────────────────────────────────────
-  'home.hero.season': 'Сезон 2026 открыт',
+  // 'home.hero.season' removed (2026-08-14) — the season eyebrow above the hero heading is gone.
   'home.hero.regionsCta': 'Карта регионов',
   // 'home.featured.eyebrow' removed (2026-08-02) — the eyebrow above the heading is gone, see
   // `FeaturedTours`. 'home.featured.title' moved to the backend, same as the footer above.
@@ -406,7 +406,6 @@ const en: Record<TranslationKey, string> = {
   'currency.updatedAt': 'Rate updated at {time}',
   'currency.rateStale': 'Rate may be outdated',
 
-  'home.hero.season': '2026 season is open',
   'home.hero.regionsCta': 'Region map',
   'home.featured.allCatalog': 'View all',
   'home.testimonials.eyebrow': 'Reviews',

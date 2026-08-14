@@ -14,7 +14,9 @@ interface SettingFieldProps {
   hint?: string
   /** Blocking per-language errors. Only translatable settings can have them. */
   errors?: LocalizedErrors
-  /** Non-blocking note about a suspicious value; replaces `hint` while it is set. */
+  /** Non-blocking, always-visible note about a suspicious value — separate from `hint` (which now
+   * hides behind a `HelpButton`) precisely because a warning must stay in view, not require a
+   * click to discover. */
   warning?: string
   onChangeValue: (value: string) => void
   onChangeTranslation: (lang: LangKey, value: string) => void
@@ -43,19 +45,18 @@ export function SettingField({
           value={field.translations}
           error={errors?.ru}
           errorEn={errors?.en}
+          hint={hint}
           onChange={onChangeTranslation}
         />
       ) : (
         <PlainSettingField
           field={field}
           label={label}
-          hint={warning ?? hint}
+          hint={hint}
+          warning={warning}
           onChange={onChangeValue}
         />
       )}
-      {/* A translatable setting has no language-neutral control to hang the hint on, so its
-          helper text goes here, under the RU/EN pair. */}
-      {field.isTranslatable && hint && <p className="text-xs text-neutral-500">{hint}</p>}
     </div>
   )
 }
@@ -66,22 +67,23 @@ interface PlainSettingFieldProps {
   field: SettingFieldState
   label: string
   hint?: string
+  warning?: string
   onChange: (value: string) => void
 }
 
 /** Language-neutral settings: text, multiline text, a link, an image URL with a preview, or one
  * value picked from a server-supplied catalog (`Select`). */
-function PlainSettingField({ field, label, hint, onChange }: PlainSettingFieldProps) {
+function PlainSettingField({ field, label, hint, warning, onChange }: PlainSettingFieldProps) {
   const id = useId()
   const value = field.value
 
   if (field.valueType === SettingValueType.ImageUrl) {
-    return <ImageUrlField label={label} value={value} hint={hint} onChange={onChange} />
+    return <ImageUrlField label={label} value={value} hint={hint} warning={warning} onChange={onChange} />
   }
 
   if (field.valueType === SettingValueType.MultilineText) {
     return (
-      <Field label={label} htmlFor={id} hint={hint}>
+      <Field label={label} htmlFor={id} hint={hint} warning={warning}>
         <Textarea id={id} value={value} onChange={(e) => onChange(e.target.value)} />
       </Field>
     )
@@ -89,7 +91,7 @@ function PlainSettingField({ field, label, hint, onChange }: PlainSettingFieldPr
 
   if (field.valueType === SettingValueType.Url) {
     return (
-      <Field label={label} htmlFor={id} hint={hint}>
+      <Field label={label} htmlFor={id} hint={hint} warning={warning}>
         <div className="flex items-center gap-2">
           <Input
             id={id}

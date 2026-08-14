@@ -29,6 +29,14 @@ export const THEME_SYNC_EVENT = 'hay-travel-theme-sync'
 export const THEME_COLORS: Record<PaletteId, Record<Theme, string>> = {
   obsidian: { dark: '#0f0c08', light: '#f7f1e6' },
   basalt: { dark: '#0e1214', light: '#edeeec' },
+  // Превью-варианты (см. `palette.ts`) — только gold/copper отличается от базовой палитры,
+  // страница/поверхности те же, поэтому цвета here идентичны своей базовой строке выше.
+  'obsidian-champagne': { dark: '#0f0c08', light: '#f7f1e6' },
+  'obsidian-brass': { dark: '#0f0c08', light: '#f7f1e6' },
+  'obsidian-rosegold': { dark: '#0f0c08', light: '#f7f1e6' },
+  'basalt-terracotta': { dark: '#0e1214', light: '#edeeec' },
+  'basalt-warmcopper': { dark: '#0e1214', light: '#edeeec' },
+  'basalt-rust': { dark: '#0e1214', light: '#edeeec' },
 }
 
 /**

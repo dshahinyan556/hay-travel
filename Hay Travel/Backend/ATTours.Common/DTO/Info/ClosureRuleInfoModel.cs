@@ -16,5 +16,9 @@ namespace ATTours.Common.DTO.Info
         public DateOnly? EffectiveFrom { get; set; }
         public DateOnly? EffectiveTo { get; set; }
         public string Reason { get; set; }
+        // Правила одного CreateRules-вызова делят один BatchId — экран «Блокировки» группирует
+        // по нему. null у правил, созданных до этой колонки, и у одиночных toggle-закрытий из
+        // старых клиентов (тоже проходят через CreateRules, так что в норме тоже не null).
+        public Guid? BatchId { get; set; }
     }
 }

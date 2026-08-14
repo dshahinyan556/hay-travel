@@ -31,5 +31,19 @@ namespace ATTours.BusinessServices.Services.DeleteServices
             EntityRepository.Delete(rule);
             await EntityRepository.SaveChangesAsync(cancellationToken);
         }
+
+        // Массовое удаление — группа правил (один BatchId) или произвольная выборка отмеченных
+        // чекбоксами строк, обе с одного экрана «Блокировки» (2026-08-14). В отличие от
+        // DeleteAsync ничего не бросает на отсутствующий id: список приходит с уже загруженного
+        // экрана, а гонка с параллельным удалением в другой вкладке — не ошибка, а норма для
+        // массовой операции, ей не стоит проваливать всю пачку.
+        public async Task DeleteManyAsync(List<int> ids)
+        {
+            if (ids is null || ids.Count == 0)
+                return;
+
+            EntityRepository.DeleteWhere(x => ids.Contains(x.Id));
+            await EntityRepository.SaveChangesAsync(cancellationToken);
+        }
     }
 }

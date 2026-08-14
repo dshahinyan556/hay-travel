@@ -88,7 +88,7 @@ export function RegisterForm({ onSubmit, error, status }: RegisterFormProps) {
 
   return (
     <Reveal group className="mt-5">
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         <div className="space-y-3.5">
           {error && <AuthError message={error} />}
 

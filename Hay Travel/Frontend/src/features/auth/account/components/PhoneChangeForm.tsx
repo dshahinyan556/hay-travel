@@ -55,7 +55,7 @@ export function PhoneChangeForm({ currentPhone, onSaved }: PhoneChangeFormProps)
   }
 
   return (
-    <form className="flex flex-col gap-3.5" onSubmit={handleSubmit}>
+    <form className="flex flex-col gap-3.5" onSubmit={handleSubmit} noValidate>
       {error && <AuthError message={error} />}
       {saved && <AuthNotice message={t('account.phoneSaved')} />}
 

@@ -9,7 +9,7 @@ import { DayOfWeekCode } from '@/shared/types/booking'
 
 /** `GlobalErrorCode` values this screen's mutations can report (spec 001 §7) — local numeric
  * constants, the established admin convention (see `userCopy.ts`/`catalogErrors.ts`). */
-const RELATIONAL_ENTITY_NOT_FOUND = 2003 // DeleteRule — the rule is already gone.
+const RELATIONAL_ENTITY_NOT_FOUND = 2003 // DeleteRule/DeleteRules — the rule is already gone.
 const TOUR_NOT_FOUND = 2004 // CreateRules — a rule points at a tour that no longer exists.
 const INVALID_CLOSURE_RULE = 2017 // CreateRules — the rule's shape is wrong.
 const CLOSURE_DATE_IN_PAST = 2022 // CreateRules — backdating is forbidden everywhere (B12).
@@ -30,21 +30,22 @@ export const ordersUnit = (count: number): string =>
   `${count} ${plural(count, 'заказ', 'заказа', 'заказов')}`
 export const guestsUnit = (count: number): string =>
   `${count} ${plural(count, 'гость', 'гостя', 'гостей')}`
-export const rulesUnit = (count: number): string =>
-  `${count} ${plural(count, 'правило', 'правила', 'правил')}`
+// Слово «правило» показалось Давиду канцелярским — «блокировка» читается как то, что оно есть
+// с точки зрения админа: конкретные даты стали недоступны для брони (2026-08-14).
+export const blockingsUnit = (count: number): string =>
+  `${count} ${plural(count, 'блокировка', 'блокировки', 'блокировок')}`
 
 export const calendarCopy = {
   title: 'Календарь',
-  subtitle: 'Занятость по дням и правила закрытия дат.',
+  subtitle: 'Занятость по дням и блокировки дат.',
 
   tabsLabel: 'Разделы календаря',
   tabCalendar: 'Календарь',
-  tabRules: 'Правила',
+  tabRules: 'Блокировки',
 
   /* ── Toolbar ────────────────────────────────────────────────────────────────────────────── */
   prevMonth: 'Предыдущий месяц',
   nextMonth: 'Следующий месяц',
-  today: 'Сегодня',
   bulk: 'Массовые операции',
   monthLoading: 'Загружаем месяц',
 
@@ -60,17 +61,21 @@ export const calendarCopy = {
 
   /* ── Day panel ──────────────────────────────────────────────────────────────────────────── */
   availabilityTitle: 'Доступность',
+  availabilityHelpBody:
+    'Если не выбрать ни одного тура — действие применится сразу к целому дню. Если выбрать конкретные туры — оно затронет только их.',
   ordersTitle: 'Заказы',
   closeWholeDay: 'Закрыть весь день (все туры)',
+  openWholeDay: 'Открыть весь день',
+  wholeDayClosedNote: 'День закрыт целиком.',
   closedByWeeklyHint:
-    'День закрыт правилом по дню недели — снятие галочки не удалит это правило, а создаст исключение на эту дату.',
+    'День закрыт блокировкой по дню недели — кнопка «Открыть» не удалит эту блокировку, а создаст исключение на эту дату.',
   closedToursTitle: 'Закрытые туры этого дня',
   openTour: 'Открыть',
   closeTourTitle: 'Закрыть отдельный тур',
   closeTourSearch: 'Поиск по названию',
   closeTourNoResults: 'Туры не найдены',
   closeTourAction: 'Закрыть',
-  dayAlreadyClosedHint: 'День уже закрыт целиком — отдельное правило на тур ничего не изменит.',
+  dayAlreadyClosedHint: 'День уже закрыт целиком — отдельная блокировка на тур ничего не изменит.',
   pastDayLockedHint: 'Прошедший день — задним числом закрывать или открывать нельзя.',
   closureReasonLabel: 'Причина',
   noOrders: 'Заказов на этот день нет.',
@@ -98,16 +103,18 @@ export const calendarCopy = {
   bulkPresetAll: 'Все',
   bulkPresetTours: 'Туры',
   bulkPresetExcursions: 'Экскурсии',
+  bulkPresetByRegion: 'По региону:',
+  bulkResetFilters: 'Сбросить',
   bulkTourSearch: 'Поиск по названию',
   bulkNoTours: 'Туры не найдены.',
   bulkReasonTitle: 'Причина (необязательно)',
-  bulkPreview: (count: number) => `Будет создано ${rulesUnit(count)}`,
+  bulkPreview: (count: number) => `Будет создано ${blockingsUnit(count)}`,
   bulkApply: 'Применить',
   bulkApplying: 'Применяем…',
   bulkCancel: 'Отмена',
   bulkConfirmTitle: 'Применить массовую операцию?',
   bulkConfirmBody: (count: number) =>
-    `Будет создано ${rulesUnit(count)}. Удалять их придётся по одному — на вкладке «Правила».`,
+    `Будет создано ${blockingsUnit(count)}. Их можно будет удалить — целиком группой или по одной — на вкладке «Блокировки».`,
   bulkConfirmAction: 'Применить',
 
   /* ── Bulk validation (returned by `compileBulkForm`) ────────────────────────────────────── */
@@ -117,10 +124,10 @@ export const calendarCopy = {
   bulkErrorWeekdaysRequired: 'Выберите хотя бы один день недели.',
   bulkErrorReasonTooLong: 'Причина не может быть длиннее 500 символов.',
   bulkErrorTooMany: (count: number, max: number) =>
-    `Слишком много правил: ${count} при максимуме ${max}. Сузьте диапазон или выберите повтор по дням недели.`,
+    `Слишком много блокировок: ${count} при максимуме ${max}. Сузьте диапазон или выберите повтор по дням недели.`,
 
   /* ── Rules tab ──────────────────────────────────────────────────────────────────────────── */
-  rulesEmpty: 'Правил закрытия пока нет.',
+  rulesEmpty: 'Блокировок пока нет.',
   rulesEmptyHint: 'Создать их можно кнопкой «Массовые операции» на вкладке «Календарь».',
   rulesScope: 'Область',
   rulesType: 'Тип',
@@ -129,14 +136,23 @@ export const calendarCopy = {
   rulesAction: 'Действие',
   rulesReason: 'Причина',
   rulesAllTours: 'Все туры',
+  rulesManyTours: (count: number) => `${count} туров`,
   rulesTypeDate: 'Дата',
   rulesTypeWeekly: 'По дню недели',
   rulesActionClose: 'Закрыто',
   rulesActionOpen: 'Открыто',
-  rulesDelete: 'Удалить',
-  rulesDeleteTitle: 'Удалить правило?',
+  // Группа (2+ блокировок одной массовой операции): раскрытие/сворачивание и агрегированная
+  // сводка вместо N визуально неотличимых строк.
+  rulesGroupExpand: 'Развернуть группу',
+  rulesGroupCollapse: 'Свернуть группу',
+  rulesGroupDatesCount: (count: number) => `${count} дат`,
+  rulesGroupWeekdaysCount: (count: number) => `${count} дней недели`,
+  rulesSelectAll: 'Выбрать все',
+  rulesSelectedCount: (count: number) => `Выбрано: ${blockingsUnit(count)}`,
+  rulesDeleteSelected: 'Удалить выбранное',
+  rulesDeleteTitle: (count: number) => `Удалить ${blockingsUnit(count)}?`,
   rulesDeleteBody:
-    'Правило может закрывать сразу много дней. После удаления эти дни снова станут доступны для брони.',
+    'Выбранные блокировки могут закрывать сразу много дней. После удаления эти дни снова станут доступны для брони.',
   rulesDeleteConfirm: 'Удалить',
   rulesDeleting: 'Удаляем…',
   dash: '—',
@@ -201,7 +217,7 @@ export function calendarErrorMessage(err: unknown, action: string): string {
   if (err instanceof ApiError) {
     const code = errorCodeOf(err.body)
     if (code === INVALID_CLOSURE_RULE) {
-      return 'Правило заполнено неверно — проверьте даты и день недели.'
+      return 'Блокировка заполнена неверно — проверьте даты и день недели.'
     }
     if (code === CLOSURE_DATE_IN_PAST) {
       return 'Нельзя закрывать или открывать даты задним числом.'
@@ -210,7 +226,7 @@ export function calendarErrorMessage(err: unknown, action: string): string {
       return 'Тур не найден — обновите страницу.'
     }
     if (code === RELATIONAL_ENTITY_NOT_FOUND) {
-      return 'Правило уже удалено — обновите страницу.'
+      return 'Блокировка уже удалена — обновите страницу.'
     }
     if (err.status === 403) {
       return `Не удалось ${action}: недостаточно прав.`

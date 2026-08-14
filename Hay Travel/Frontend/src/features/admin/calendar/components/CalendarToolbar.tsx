@@ -11,7 +11,6 @@ export interface CalendarToolbarProps {
   isLoading: boolean
   onPrev: () => void
   onNext: () => void
-  onToday: () => void
   onOpenBulk: () => void
 }
 
@@ -20,7 +19,9 @@ export interface CalendarToolbarProps {
  * decides which months exist — the page passes `canGoBack`/`canGoForward` from its own range.
  *
  * Mobile: two rows below `sm` (month nav, then the actions), with «Массовые операции» full-width.
- * The nav buttons are 44px squares at every width.
+ * The nav buttons are 44px squares at every width. «Сегодня» removed (2026-08-14, on request) —
+ * jumping back to the current month didn't earn its place next to the one action the admin
+ * actually reaches for here.
  */
 export function CalendarToolbar({
   year,
@@ -30,7 +31,6 @@ export function CalendarToolbar({
   isLoading,
   onPrev,
   onNext,
-  onToday,
   onOpenBulk,
 }: CalendarToolbarProps) {
   const navButtonClasses =
@@ -75,14 +75,9 @@ export function CalendarToolbar({
         </button>
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <Button type="button" variant="secondary" size="sm" onClick={onToday} className="min-h-11">
-          {calendarCopy.today}
-        </Button>
-        <Button type="button" size="sm" onClick={onOpenBulk} className="min-h-11 w-full sm:w-auto">
-          {calendarCopy.bulk}
-        </Button>
-      </div>
+      <Button type="button" size="sm" onClick={onOpenBulk} className="min-h-11 w-full sm:w-auto">
+        {calendarCopy.bulk}
+      </Button>
     </div>
   )
 }

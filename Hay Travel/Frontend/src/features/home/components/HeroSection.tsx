@@ -3,14 +3,14 @@ import { motion } from 'framer-motion'
 import { useReducedMotion } from '@/shared/hooks'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import type { HeroContent } from '@/shared/api/siteSettings'
-import { ArrowRightIcon, MapIcon, StarIcon } from '@/shared/ui/icons'
+import { ArrowRightIcon, MapIcon } from '@/shared/ui/icons'
 
 interface HeroSectionProps {
   /**
    * `hero.imageUrl`/`title`/`subtitle`/`ctaLabel`/`ctaHref` from the admin "Настройки" screen
    * (stage 5.2) — the only five hero fields the catalog exposes (`SiteSettingCatalog.cs`). The
-   * season eyebrow and the secondary "Карта регионов" button below are NOT among them and stay
-   * hardcoded, same as before.
+   * secondary "Карта регионов" button below is NOT among them and stays hardcoded, same as
+   * before.
    */
   hero: HeroContent
 }
@@ -67,20 +67,10 @@ export function HeroSection({ hero }: HeroSectionProps) {
       />
 
       <div className="mx-auto w-full max-w-7xl px-4 pb-16 sm:px-6 sm:pb-24">
-        <motion.p
-          initial={{ opacity: 0, y: reducedMotion ? 0 : 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: reducedMotion ? 0 : 0.6 }}
-          className="flex items-center gap-2 text-[11px] tracking-[0.22em] text-gold uppercase"
-        >
-          <StarIcon size={14} />
-          {t('home.hero.season')}
-        </motion.p>
-
         <motion.h1
           initial={{ opacity: 0, y: reducedMotion ? 0 : 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: reducedMotion ? 0 : 0.7, delay: 0.1 }}
+          transition={{ duration: reducedMotion ? 0 : 0.7 }}
           // One gold block for the whole heading, not a "last word" split: that treatment assumed
           // one fixed Russian phrase, which stopped being true the moment the copy became
           // admin-editable free text (`hero.title` can be any length, any wording).
@@ -118,7 +108,7 @@ export function HeroSection({ hero }: HeroSectionProps) {
           */}
           <a
             href={hero.ctaHref}
-            className="btn-motion inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3 text-sm font-medium text-obsidian hover:bg-gold-light focus-visible:ring-2 focus-visible:ring-gold-light focus-visible:ring-offset-2 focus-visible:ring-offset-page focus-visible:outline-none"
+            className="btn-motion btn-sheen inline-flex items-center gap-2 rounded-full bg-gold px-6 py-3 text-sm font-medium text-obsidian hover:bg-gold-light focus-visible:ring-2 focus-visible:ring-gold-light focus-visible:ring-offset-2 focus-visible:ring-offset-page focus-visible:outline-none"
           >
             {hero.ctaLabel}
             <ArrowRightIcon size={16} />

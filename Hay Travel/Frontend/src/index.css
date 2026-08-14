@@ -294,8 +294,11 @@
   .parallax,
   .card-lift,
   .skeleton-shimmer,
-  /* An endless running highlight IS motion — it must switch off, not speed up. */
+  /* An endless running highlight IS motion — it must switch off, not speed up. `.btn-sheen`
+     itself carries no animation (its `::after` does), so the pseudo-element needs its own
+     selector here — `.btn-sheen { animation: none }` would not reach it. */
   .seam-loading,
+  .btn-sheen::after,
   .reveal,
   .reveal-seam,
   .reveal-item,
@@ -319,6 +322,11 @@
   .icon-press,
   .icon-press:active {
     transform: none !important;
+  }
+  /* A frozen streak (animation: none alone leaves it parked wherever the paused frame lands) would
+     read as a stray highlight, not a decoration — hidden outright instead. */
+  .btn-sheen::after {
+    display: none !important;
   }
 }
 
@@ -502,9 +510,9 @@ body {
 }
 
 /**
- * Section eyebrow (the label above H1/H2) — unified with the hero's own label treatment
- * (`tracking-[0.22em]`), but with a 28×1px hairline in place of the hero's `StarIcon`: the hero
- * keeps its icon, every other section gets this instead, as one consistent "signature" mark.
+ * Section eyebrow (the label above H1/H2) — a 28×1px hairline mark before the label
+ * (`tracking-[0.22em]`), used as the site's consistent "signature" treatment for section labels.
+ * The hero itself has no eyebrow (removed 2026-08-14).
  */
 .section-eyebrow {
   /* Weight 600 (was 400): at 11px Manrope's letterforms are too light to carry `0.22em` of
@@ -851,6 +859,42 @@ body {
   background-size: 200% 100%;
   opacity: 1;
   animation: skeleton-shimmer 1.8s ease-in-out infinite;
+}
+
+/**
+ * Button sheen (2026-08-14, timing revised same day after live review — the first cut swept back
+ * and forth continuously and read as too busy): ONE slow pass every 5s, then a real pause, not a
+ * ping-pong loop — `28%` is where the sweep finishes crossing the button; the remaining ~72% of
+ * the cycle just holds the highlight parked off to the right (invisible) until the next pass. A
+ * separate `::after` overlay, not the button's own `background-image`: the button already paints
+ * its resting/hover fill (`bg-gold-fill`/`hover:bg-gold-fill-hover` etc.) and a shared
+ * background-position animation would fight that. `border-radius: inherit` follows whatever shape
+ * the button actually is (`rounded-full` here, but this is not tied to that one value);
+ * `overflow-hidden` on the button itself clips the streak to it, so it never spills past a
+ * `rounded-full` corner.
+ */
+@keyframes btn-sheen {
+  0% {
+    background-position: -160% 0;
+  }
+  28%,
+  100% {
+    background-position: 260% 0;
+  }
+}
+.btn-sheen {
+  position: relative;
+  overflow: hidden;
+}
+.btn-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: linear-gradient(100deg, transparent 42%, rgba(255, 255, 255, 0.4) 50%, transparent 58%);
+  background-size: 220% 100%;
+  animation: btn-sheen 5s ease-in-out infinite;
+  pointer-events: none;
 }
 
 /**

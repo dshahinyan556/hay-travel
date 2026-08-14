@@ -50,6 +50,7 @@ export function LoginForm({ onSubmit, error, status, forgotPasswordHref }: Login
   return (
     <Reveal group className="mt-5">
       <form
+        noValidate
         onSubmit={(e) => {
           e.preventDefault()
           const data = new FormData(e.currentTarget)
