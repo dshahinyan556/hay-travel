@@ -6,8 +6,11 @@ interface ImageUrlFieldProps {
   label: string
   value: string
   onChange: (value: string) => void
-  /** Helper text under the input. Suppressed while `error` is set. */
+  /** Explanation surfaced through the label's `HelpButton` (via `Field`). */
   hint?: string
+  /** Non-blocking, always-visible notice (e.g. "this URL looks incomplete"). Suppressed while
+   * `error` is set. */
+  warning?: string
   required?: boolean
   error?: string
 }
@@ -30,6 +33,7 @@ export function ImageUrlField({
   value,
   onChange,
   hint = DEFAULT_HINT,
+  warning,
   required = false,
   error,
 }: ImageUrlFieldProps) {
@@ -52,7 +56,8 @@ export function ImageUrlField({
           htmlFor={id}
           required={required}
           error={error}
-          hint={error ? undefined : hint}
+          warning={error ? undefined : warning}
+          hint={hint}
         >
           <Input
             id={id}

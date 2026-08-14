@@ -1,5 +1,6 @@
 import { useId } from 'react'
 import { Input, Textarea } from '@/shared/ui'
+import { HelpButton } from '@/shared/ui/HelpButton'
 import type { LangKey, Localized } from '@/features/admin/types/localized'
 
 interface TranslationGroupProps {
@@ -17,6 +18,9 @@ interface TranslationGroupProps {
   /** Error for the EN value. Used by the settings screen, where a translatable key requires
    * BOTH languages (the backend does not fall back to RU when EN is empty). */
   errorEn?: string
+  /** Explanation surfaced through a `HelpButton` next to the legend — same pattern `Field` uses
+   * for non-translatable settings (2026-08-14). */
+  hint?: string
 }
 
 const langMeta: Record<LangKey, { name: string; flag: string }> = {
@@ -40,15 +44,25 @@ export function TranslationGroup({
   required = false,
   error,
   errorEn,
+  hint,
 }: TranslationGroupProps) {
   return (
     <fieldset className="flex flex-col gap-1.5">
-      <legend className="mb-1.5 text-sm font-semibold text-neutral-700">
+      {/* The help trigger lives INSIDE `legend` (legend accepts phrasing content, including a
+          `<button>`) rather than beside it in a wrapping `<div>` — a `<legend>` is only picked up
+          as the fieldset's accessible name while it is the fieldset's own first child; wrapping it
+          would silently break that association. */}
+      <legend className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-neutral-700">
         {label}
         {required && (
           <span aria-hidden="true" className="ml-0.5 text-rose-700">
             *
           </span>
+        )}
+        {hint && (
+          <HelpButton surface="admin" title={label}>
+            {hint}
+          </HelpButton>
         )}
       </legend>
       <div className="grid gap-3 sm:grid-cols-2">

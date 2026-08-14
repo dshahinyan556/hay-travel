@@ -79,6 +79,7 @@ export function EmailChangeForm({ currentEmail }: EmailChangeFormProps) {
       {flow.step === 'new-email' && (
         <form
           className="flex flex-col gap-3.5"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault()
             const data = new FormData(event.currentTarget)

@@ -45,7 +45,9 @@ namespace ATTours.ClientAPI.Controllers
             return mapper.Map<List<ClosureRuleInfoModel>>(rules);
         }
 
-        // Массовое закрытие/открытие: список правил создаётся одной транзакцией.
+        // Массовое закрытие/открытие: список правил создаётся одной транзакцией и делит один
+        // BatchId — так один вызов формы (одиночный toggle или «Массовые операции») остаётся
+        // одной группой на экране «Блокировки», а не россыпью визуально неотличимых строк.
         // Редактирования правил нет — изменение это удалить + создать (ADR 012).
         [HttpPost]
         [Route("CreateRules")]
@@ -53,6 +55,10 @@ namespace ATTours.ClientAPI.Controllers
         public async Task<List<ClosureRuleInfoModel>> CreateRulesAsync([FromBody] List<ClosureRuleCreateModel> models, CancellationToken cancellationToken)
         {
             var entities = mapper.Map<List<ClosureRule>>(models);
+
+            var batchId = Guid.NewGuid();
+            foreach (var entity in entities)
+                entity.BatchId = batchId;
 
             using (var creationService = new ClosureRuleCreationService(entities, cancellationToken))
                 await creationService.ExecuteEntityChangesAsync();
@@ -70,6 +76,18 @@ namespace ATTours.ClientAPI.Controllers
         {
             using var deletionService = new ClosureRuleDeletionService(cancellationToken);
             await deletionService.DeleteAsync(id);
+        }
+
+        // Массовое удаление: группа (все id одного BatchId) или произвольная выборка отмеченных
+        // строк — экран «Блокировки» отправляет сюда оба случая одинаково, разница только в том,
+        // какие id он собрал перед вызовом.
+        [HttpDelete]
+        [Route("DeleteRules")]
+        [Authorize(Roles = ApiRoles.Admin)]
+        public async Task DeleteRulesAsync([FromBody] List<int> ids, CancellationToken cancellationToken)
+        {
+            using var deletionService = new ClosureRuleDeletionService(cancellationToken);
+            await deletionService.DeleteManyAsync(ids);
         }
 
         #region ClientEndpoints

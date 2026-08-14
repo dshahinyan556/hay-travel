@@ -52,3 +52,14 @@ export function createClosureRules(
 export function deleteClosureRule(id: number): Promise<void> {
   return authFetch<void>(`api/Availability/DeleteRule?id=${id}`, { method: 'DELETE' })
 }
+
+/** DELETE many rules at once — a whole batch (one `BatchId`) or an arbitrary multi-select, the
+ * screen sends the same call either way. Unlike `deleteClosureRule`, a missing id is not an
+ * error: the list comes from an already-loaded screen, and a stale id (someone else deleted it
+ * first) should not fail the rest of the selection. */
+export function deleteClosureRules(ids: number[]): Promise<void> {
+  return authFetch<void>('api/Availability/DeleteRules', {
+    method: 'DELETE',
+    body: JSON.stringify(ids),
+  })
+}

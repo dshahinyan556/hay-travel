@@ -118,3 +118,300 @@
   --shadow-lg:0 14px 30px -8px rgba(28,40,45,.15), 0 6px 12px -6px rgba(28,40,45,.08);
   --shadow-sheet:0 -12px 34px -10px rgba(28,40,45,.18);
 }
+
+/**
+ * ── TEMPORARY PREVIEW PRESETS (2026-08-14) ───────────────────────────────────────────────────
+ * Six gold/copper hue variants for Давид to switch between live in `/admin/settings` and pick
+ * one from — not meant to stay in the catalog afterward. DELETE this whole section (and the
+ * matching entries in `ThemePaletteCatalog.cs`/`palette.ts`/`theme.ts`/`index.html`) once a
+ * shade is chosen; fold the winning values into the real `obsidian`/`basalt` blocks instead of
+ * keeping them here.
+ *
+ * Obsidian variants only override the gold tokens (+ the fixed-dark `--color-gold*` literals the
+ * hero uses) — everything else falls through to plain `:root`/`[data-theme='light']` normally,
+ * since a CSS custom property not redeclared here simply isn't contested by this rule. Basalt
+ * variants duplicate the WHOLE basalt block, because `[data-preset='basalt-x']` does not match
+ * `[data-preset='basalt']` and so would not inherit its overrides otherwise.
+ */
+
+/* ─── PREVIEW: Обсидиан — шампань ─────────────────────────────────────────────────────────── */
+:root[data-preset='obsidian-champagne'] {
+  --gold-ink:#d4b483; --gold-line:#6b5c3d; --gold-fill:#d4b483;
+  --gold-fill-hover:#e8d2ab; --gold-soft:rgba(212,180,131,.14); --gold-on:#0f0c08;
+  --color-gold:#d4b483; --color-gold-light:#e8d2ab; --color-gold-deep:#a68a5a;
+}
+:root[data-preset='obsidian-champagne'][data-theme='light'] {
+  --gold-ink:#7a5a2e; --gold-line:#ad9367; --gold-fill:#c9a565;
+  --gold-fill-hover:#b8944f; --gold-soft:#f7efe0; --gold-on:#241a12;
+}
+
+/* ─── PREVIEW: Обсидиан — старая латунь ───────────────────────────────────────────────────── */
+:root[data-preset='obsidian-brass'] {
+  --gold-ink:#c9a15c; --gold-line:#675328; --gold-fill:#c9a15c;
+  --gold-fill-hover:#ddbc85; --gold-soft:rgba(201,161,92,.14); --gold-on:#0f0c08;
+  --color-gold:#c9a15c; --color-gold-light:#ddbc85; --color-gold-deep:#9c7c3f;
+}
+:root[data-preset='obsidian-brass'][data-theme='light'] {
+  --gold-ink:#6b4f1e; --gold-line:#9c7f3c; --gold-fill:#bd9448;
+  --gold-fill-hover:#ac8438; --gold-soft:#f4ead4; --gold-on:#241a12;
+}
+
+/* ─── PREVIEW: Обсидиан — розовое золото ──────────────────────────────────────────────────── */
+:root[data-preset='obsidian-rosegold'] {
+  --gold-ink:#d9a577; --gold-line:#6d5236; --gold-fill:#d9a577;
+  --gold-fill-hover:#ecc09d; --gold-soft:rgba(217,165,119,.14); --gold-on:#0f0c08;
+  --color-gold:#d9a577; --color-gold-light:#ecc09d; --color-gold-deep:#ab7f52;
+}
+:root[data-preset='obsidian-rosegold'][data-theme='light'] {
+  --gold-ink:#825a34; --gold-line:#b48660; --gold-fill:#cc9366;
+  --gold-fill-hover:#ba8250; --gold-soft:#f8ecdf; --gold-on:#241a12;
+}
+
+/* ─── PREVIEW: Базальт — терракота — dark ─────────────────────────────────────────────────── */
+:root[data-preset='basalt-terracotta'] {
+  --surface-page:#0e1214; --surface-panel:#171c1f; --surface-panel-raised:#1e2428;
+  --surface-edge:#2b3237; --surface-edge-strong:#64737c;
+  --ink-primary:#eceff1; --ink-secondary:#b4bec4; --ink-muted:#86929a;
+
+  --accent-base:#de8f5f; --accent-strong:#efae81; --accent-hover:#efae81;
+  --accent-active:#c3743f; --accent-soft:#12211f; --accent-on:#0e1214;
+
+  --gold-ink:#cf8567; --gold-line:#6e4530; --gold-fill:#cf8567;
+  --gold-fill-hover:#e0a686; --gold-soft:rgba(207,133,103,.14); --gold-on:#0e1214;
+
+  --color-wine:#1f5f55; --color-wine-tint:#12211f;
+
+  --color-gold:#cf8567; --color-gold-light:#e0a686; --color-gold-deep:#a3654c;
+  --color-obsidian:#0e1214; --color-surface-1:#171c1f; --color-surface-2:#1e2428;
+  --color-cream:#eceff1; --color-cream-dim:#b4bec4; --color-cream-muted:#86929a;
+
+  --veil:rgba(207,133,103,.085); --veil-strong:rgba(207,133,103,.14); --seam-op:.55;
+
+  --sem-success:#58c08f; --sem-success-soft:#0f241e;
+  --sem-danger:#f0736b;  --sem-danger-soft:#2a1210;
+  --sem-warning:#e3a857; --sem-warning-soft:#2a1e0c;
+
+  --state-disabled-bg:#1e2428; --state-disabled-ink:#5c666c; --state-disabled-edge:#2b3237;
+  --focus-ring:#efae81;
+
+  --hero-ink:#fff6ee; --hero-ink-dim:#e2d6cb;
+  --hero-scrim-from:rgba(14,18,20,.94); --hero-scrim-via:rgba(14,18,20,.62);
+  --hero-scrim-to:rgba(14,18,20,.18);   --hero-fade:#0e1214;
+
+  --map-sea:#0e1214; --map-region-fill:#161c1f; --map-region-muted-fill:#090c0d;
+  --map-region-hover-fill:rgba(207,133,103,.18); --map-region-selected-fill:#1f5f55;
+  --map-region-stroke:#6e4530; --map-region-stroke-hover:#cf8567;
+  --map-region-stroke-selected:#e0a686;
+  --map-label:#b4bec4; --map-label-halo:#0e1214;
+  --map-water-fill:#1d4149; --map-water-stroke:#4e858e;
+  --map-tooltip-bg:rgba(14,18,20,.92); --map-tooltip-edge:rgba(163,101,76,.5);
+  --map-tooltip-text:#eceff1; --map-tooltip-text-muted:#b4bec4;
+}
+
+/* ─── PREVIEW: Базальт — терракота — light ────────────────────────────────────────────────── */
+:root[data-preset='basalt-terracotta'][data-theme='light'] {
+  --surface-page:#edeeec; --surface-panel:#f7f7f5; --surface-panel-raised:#ffffff;
+  --surface-edge:#dcdcd7; --surface-edge-strong:#7e868d;
+  --ink-primary:#14191c; --ink-secondary:#3e474c; --ink-muted:#5d686f;
+
+  --accent-base:#1a5b50; --accent-strong:#144a41; --accent-hover:#144a41;
+  --accent-active:#0e382f; --accent-soft:#e2eeea; --accent-on:#f7fbf9;
+
+  --gold-ink:#8a4a2f; --gold-line:#ab7050; --gold-fill:#bd7452;
+  --gold-fill-hover:#ab6845; --gold-soft:#f2e2d8; --gold-on:#14191c;
+
+  --color-wine:#1a5b50; --color-wine-tint:#e2eeea;
+
+  --veil:rgba(26,91,80,.075); --veil-strong:rgba(26,91,80,.13); --seam-op:.45;
+
+  --sem-success:#1f6b45; --sem-success-soft:#e4f0e7;
+  --sem-danger:#a3211c;  --sem-danger-soft:#fbe6e3;
+  --sem-warning:#8a5a08; --sem-warning-soft:#fbeedc;
+
+  --state-disabled-bg:#e7e8e5; --state-disabled-ink:#949b9f; --state-disabled-edge:#cfd1cd;
+  --focus-ring:#1a5b50;
+
+  --hero-ink:#fff6ee; --hero-ink-dim:#e2d6cb;
+  --hero-scrim-from:rgba(20,26,28,.92); --hero-scrim-via:rgba(20,26,28,.55);
+  --hero-scrim-to:rgba(20,26,28,.15);   --hero-fade:#edeeec;
+
+  --map-sea:#e4e6e2; --map-region-fill:#dde0da; --map-region-muted-fill:#f8f9f6;
+  --map-region-hover-fill:#e8d0bf; --map-region-selected-fill:#1a5b50;
+  --map-region-stroke:#6e7a70; --map-region-stroke-hover:#ab7050;
+  --map-region-stroke-selected:#bd7452;
+  --map-label:#232b27; --map-label-halo:#f7f7f5;
+  --map-water-fill:#b9cbce; --map-water-stroke:#6e9298;
+  --map-tooltip-bg:#ffffff; --map-tooltip-edge:#ab7050;
+  --map-tooltip-text:#14191c; --map-tooltip-text-muted:#3e474c;
+
+  --shadow-sm:0 1px 2px rgba(28,40,45,.07), 0 1px 3px rgba(28,40,45,.05);
+  --shadow-md:0 4px 10px -2px rgba(28,40,45,.10), 0 2px 4px -2px rgba(28,40,45,.06);
+  --shadow-lg:0 14px 30px -8px rgba(28,40,45,.15), 0 6px 12px -6px rgba(28,40,45,.08);
+  --shadow-sheet:0 -12px 34px -10px rgba(28,40,45,.18);
+}
+
+/* ─── PREVIEW: Базальт — тёплая медь — dark ───────────────────────────────────────────────── */
+:root[data-preset='basalt-warmcopper'] {
+  --surface-page:#0e1214; --surface-panel:#171c1f; --surface-panel-raised:#1e2428;
+  --surface-edge:#2b3237; --surface-edge-strong:#64737c;
+  --ink-primary:#eceff1; --ink-secondary:#b4bec4; --ink-muted:#86929a;
+
+  --accent-base:#de8f5f; --accent-strong:#efae81; --accent-hover:#efae81;
+  --accent-active:#c3743f; --accent-soft:#12211f; --accent-on:#0e1214;
+
+  --gold-ink:#d99a5f; --gold-line:#765530; --gold-fill:#d99a5f;
+  --gold-fill-hover:#ecb884; --gold-soft:rgba(217,154,95,.14); --gold-on:#0e1214;
+
+  --color-wine:#1f5f55; --color-wine-tint:#12211f;
+
+  --color-gold:#d99a5f; --color-gold-light:#ecb884; --color-gold-deep:#ab7a49;
+  --color-obsidian:#0e1214; --color-surface-1:#171c1f; --color-surface-2:#1e2428;
+  --color-cream:#eceff1; --color-cream-dim:#b4bec4; --color-cream-muted:#86929a;
+
+  --veil:rgba(217,154,95,.085); --veil-strong:rgba(217,154,95,.14); --seam-op:.55;
+
+  --sem-success:#58c08f; --sem-success-soft:#0f241e;
+  --sem-danger:#f0736b;  --sem-danger-soft:#2a1210;
+  --sem-warning:#e3a857; --sem-warning-soft:#2a1e0c;
+
+  --state-disabled-bg:#1e2428; --state-disabled-ink:#5c666c; --state-disabled-edge:#2b3237;
+  --focus-ring:#efae81;
+
+  --hero-ink:#fff6ee; --hero-ink-dim:#e2d6cb;
+  --hero-scrim-from:rgba(14,18,20,.94); --hero-scrim-via:rgba(14,18,20,.62);
+  --hero-scrim-to:rgba(14,18,20,.18);   --hero-fade:#0e1214;
+
+  --map-sea:#0e1214; --map-region-fill:#161c1f; --map-region-muted-fill:#090c0d;
+  --map-region-hover-fill:rgba(217,154,95,.18); --map-region-selected-fill:#1f5f55;
+  --map-region-stroke:#765530; --map-region-stroke-hover:#d99a5f;
+  --map-region-stroke-selected:#ecb884;
+  --map-label:#b4bec4; --map-label-halo:#0e1214;
+  --map-water-fill:#1d4149; --map-water-stroke:#4e858e;
+  --map-tooltip-bg:rgba(14,18,20,.92); --map-tooltip-edge:rgba(171,122,73,.5);
+  --map-tooltip-text:#eceff1; --map-tooltip-text-muted:#b4bec4;
+}
+
+/* ─── PREVIEW: Базальт — тёплая медь — light ──────────────────────────────────────────────── */
+:root[data-preset='basalt-warmcopper'][data-theme='light'] {
+  --surface-page:#edeeec; --surface-panel:#f7f7f5; --surface-panel-raised:#ffffff;
+  --surface-edge:#dcdcd7; --surface-edge-strong:#7e868d;
+  --ink-primary:#14191c; --ink-secondary:#3e474c; --ink-muted:#5d686f;
+
+  --accent-base:#1a5b50; --accent-strong:#144a41; --accent-hover:#144a41;
+  --accent-active:#0e382f; --accent-soft:#e2eeea; --accent-on:#f7fbf9;
+
+  --gold-ink:#8f5726; --gold-line:#b8873f; --gold-fill:#c68a45;
+  --gold-fill-hover:#b47a38; --gold-soft:#f6ecd9; --gold-on:#14191c;
+
+  --color-wine:#1a5b50; --color-wine-tint:#e2eeea;
+
+  --veil:rgba(26,91,80,.075); --veil-strong:rgba(26,91,80,.13); --seam-op:.45;
+
+  --sem-success:#1f6b45; --sem-success-soft:#e4f0e7;
+  --sem-danger:#a3211c;  --sem-danger-soft:#fbe6e3;
+  --sem-warning:#8a5a08; --sem-warning-soft:#fbeedc;
+
+  --state-disabled-bg:#e7e8e5; --state-disabled-ink:#949b9f; --state-disabled-edge:#cfd1cd;
+  --focus-ring:#1a5b50;
+
+  --hero-ink:#fff6ee; --hero-ink-dim:#e2d6cb;
+  --hero-scrim-from:rgba(20,26,28,.92); --hero-scrim-via:rgba(20,26,28,.55);
+  --hero-scrim-to:rgba(20,26,28,.15);   --hero-fade:#edeeec;
+
+  --map-sea:#e4e6e2; --map-region-fill:#dde0da; --map-region-muted-fill:#f8f9f6;
+  --map-region-hover-fill:#ecd7bb; --map-region-selected-fill:#1a5b50;
+  --map-region-stroke:#6e7a70; --map-region-stroke-hover:#b8873f;
+  --map-region-stroke-selected:#c68a45;
+  --map-label:#232b27; --map-label-halo:#f7f7f5;
+  --map-water-fill:#b9cbce; --map-water-stroke:#6e9298;
+  --map-tooltip-bg:#ffffff; --map-tooltip-edge:#b8873f;
+  --map-tooltip-text:#14191c; --map-tooltip-text-muted:#3e474c;
+
+  --shadow-sm:0 1px 2px rgba(28,40,45,.07), 0 1px 3px rgba(28,40,45,.05);
+  --shadow-md:0 4px 10px -2px rgba(28,40,45,.10), 0 2px 4px -2px rgba(28,40,45,.06);
+  --shadow-lg:0 14px 30px -8px rgba(28,40,45,.15), 0 6px 12px -6px rgba(28,40,45,.08);
+  --shadow-sheet:0 -12px 34px -10px rgba(28,40,45,.18);
+}
+
+/* ─── PREVIEW: Базальт — глубокая ржавчина — dark ─────────────────────────────────────────── */
+:root[data-preset='basalt-rust'] {
+  --surface-page:#0e1214; --surface-panel:#171c1f; --surface-panel-raised:#1e2428;
+  --surface-edge:#2b3237; --surface-edge-strong:#64737c;
+  --ink-primary:#eceff1; --ink-secondary:#b4bec4; --ink-muted:#86929a;
+
+  --accent-base:#de8f5f; --accent-strong:#efae81; --accent-hover:#efae81;
+  --accent-active:#c3743f; --accent-soft:#12211f; --accent-on:#0e1214;
+
+  --gold-ink:#c17a52; --gold-line:#663f2a; --gold-fill:#c17a52;
+  --gold-fill-hover:#d99872; --gold-soft:rgba(193,122,82,.14); --gold-on:#0e1214;
+
+  --color-wine:#1f5f55; --color-wine-tint:#12211f;
+
+  --color-gold:#c17a52; --color-gold-light:#d99872; --color-gold-deep:#955c3c;
+  --color-obsidian:#0e1214; --color-surface-1:#171c1f; --color-surface-2:#1e2428;
+  --color-cream:#eceff1; --color-cream-dim:#b4bec4; --color-cream-muted:#86929a;
+
+  --veil:rgba(193,122,82,.085); --veil-strong:rgba(193,122,82,.14); --seam-op:.55;
+
+  --sem-success:#58c08f; --sem-success-soft:#0f241e;
+  --sem-danger:#f0736b;  --sem-danger-soft:#2a1210;
+  --sem-warning:#e3a857; --sem-warning-soft:#2a1e0c;
+
+  --state-disabled-bg:#1e2428; --state-disabled-ink:#5c666c; --state-disabled-edge:#2b3237;
+  --focus-ring:#efae81;
+
+  --hero-ink:#fff6ee; --hero-ink-dim:#e2d6cb;
+  --hero-scrim-from:rgba(14,18,20,.94); --hero-scrim-via:rgba(14,18,20,.62);
+  --hero-scrim-to:rgba(14,18,20,.18);   --hero-fade:#0e1214;
+
+  --map-sea:#0e1214; --map-region-fill:#161c1f; --map-region-muted-fill:#090c0d;
+  --map-region-hover-fill:rgba(193,122,82,.18); --map-region-selected-fill:#1f5f55;
+  --map-region-stroke:#663f2a; --map-region-stroke-hover:#c17a52;
+  --map-region-stroke-selected:#d99872;
+  --map-label:#b4bec4; --map-label-halo:#0e1214;
+  --map-water-fill:#1d4149; --map-water-stroke:#4e858e;
+  --map-tooltip-bg:rgba(14,18,20,.92); --map-tooltip-edge:rgba(149,92,60,.5);
+  --map-tooltip-text:#eceff1; --map-tooltip-text-muted:#b4bec4;
+}
+
+/* ─── PREVIEW: Базальт — глубокая ржавчина — light ────────────────────────────────────────── */
+:root[data-preset='basalt-rust'][data-theme='light'] {
+  --surface-page:#edeeec; --surface-panel:#f7f7f5; --surface-panel-raised:#ffffff;
+  --surface-edge:#dcdcd7; --surface-edge-strong:#7e868d;
+  --ink-primary:#14191c; --ink-secondary:#3e474c; --ink-muted:#5d686f;
+
+  --accent-base:#1a5b50; --accent-strong:#144a41; --accent-hover:#144a41;
+  --accent-active:#0e382f; --accent-soft:#e2eeea; --accent-on:#f7fbf9;
+
+  --gold-ink:#7c4426; --gold-line:#a06b45; --gold-fill:#ab6740;
+  --gold-fill-hover:#995a34; --gold-soft:#efe0d3; --gold-on:#14191c;
+
+  --color-wine:#1a5b50; --color-wine-tint:#e2eeea;
+
+  --veil:rgba(26,91,80,.075); --veil-strong:rgba(26,91,80,.13); --seam-op:.45;
+
+  --sem-success:#1f6b45; --sem-success-soft:#e4f0e7;
+  --sem-danger:#a3211c;  --sem-danger-soft:#fbe6e3;
+  --sem-warning:#8a5a08; --sem-warning-soft:#fbeedc;
+
+  --state-disabled-bg:#e7e8e5; --state-disabled-ink:#949b9f; --state-disabled-edge:#cfd1cd;
+  --focus-ring:#1a5b50;
+
+  --hero-ink:#fff6ee; --hero-ink-dim:#e2d6cb;
+  --hero-scrim-from:rgba(20,26,28,.92); --hero-scrim-via:rgba(20,26,28,.55);
+  --hero-scrim-to:rgba(20,26,28,.15);   --hero-fade:#edeeec;
+
+  --map-sea:#e4e6e2; --map-region-fill:#dde0da; --map-region-muted-fill:#f8f9f6;
+  --map-region-hover-fill:#e6cdba; --map-region-selected-fill:#1a5b50;
+  --map-region-stroke:#6e7a70; --map-region-stroke-hover:#a06b45;
+  --map-region-stroke-selected:#ab6740;
+  --map-label:#232b27; --map-label-halo:#f7f7f5;
+  --map-water-fill:#b9cbce; --map-water-stroke:#6e9298;
+  --map-tooltip-bg:#ffffff; --map-tooltip-edge:#a06b45;
+  --map-tooltip-text:#14191c; --map-tooltip-text-muted:#3e474c;
+
+  --shadow-sm:0 1px 2px rgba(28,40,45,.07), 0 1px 3px rgba(28,40,45,.05);
+  --shadow-md:0 4px 10px -2px rgba(28,40,45,.10), 0 2px 4px -2px rgba(28,40,45,.06);
+  --shadow-lg:0 14px 30px -8px rgba(28,40,45,.15), 0 6px 12px -6px rgba(28,40,45,.08);
+  --shadow-sheet:0 -12px 34px -10px rgba(28,40,45,.18);
+}

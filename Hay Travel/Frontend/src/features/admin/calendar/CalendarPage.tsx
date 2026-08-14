@@ -6,6 +6,7 @@ import { getAllTours } from '@/features/admin/api/adminTours'
 import {
   createClosureRules,
   deleteClosureRule,
+  deleteClosureRules,
   getClosureRules,
 } from '@/features/admin/api/adminAvailability'
 import type { ClosureRuleCreateModel } from '@/shared/types/booking'
@@ -21,7 +22,7 @@ import { isEmptyPlan, planDayToggle } from './lib/closureToggle'
 
 /**
  * Loads only what does NOT depend on the displayed month: the tour list (for names and the bulk
- * scope picker) and every closure rule (for the «Правила» tab and for planning day toggles). The
+ * scope picker) and every closure rule (for the «Блокировки» tab and for planning day toggles). The
  * month itself is loaded by `useCalendarMonth` — see ADR 016 for why paging months is not
  * navigation and therefore not a loader's job.
  *
@@ -173,15 +174,18 @@ export function CalendarPage() {
     }
   }
 
-  async function removeRule(id: number) {
-    if (pending) return
+  // Единственный путь удаления с вкладки «Блокировки» (2026-08-14): и группа целиком, и
+  // произвольная выборка чекбоксами приходят сюда одним списком id — `DeleteRules` тот же
+  // эндпоинт что и раньше `DeleteRule`, только на весь список сразу.
+  async function removeRules(ids: number[]) {
+    if (pending || ids.length === 0) return
     setPending(true)
     setError(null)
     try {
-      await deleteClosureRule(id)
+      await deleteClosureRules(ids)
       await refreshAfterMutation()
     } catch (err) {
-      setError(calendarErrorMessage(err, 'удалить правило'))
+      setError(calendarErrorMessage(err, 'удалить блокировки'))
       await refreshAfterMutation()
     } finally {
       setPending(false)
@@ -206,18 +210,19 @@ export function CalendarPage() {
       )}
 
       {/* Pinned below the mobile hamburger bar (60px) on phones, flush to the viewport top on
-          desktop where that bar doesn't exist — same treatment as `CatalogPage`. */}
-      <div className="sticky top-[60px] z-10 -mx-4 bg-neutral-50 px-4 pt-1 sm:-mx-6 sm:px-6 md:top-0">
+          desktop where that bar doesn't exist — same treatment as `CatalogPage`. The calendar
+          toolbar («Массовые операции») joins this SAME sticky block (2026-08-14, on request) —
+          nested inside rather than given its own independent `sticky top-[…]`, so it never needs
+          a hand-measured offset for the tabs' height above it; the two just stack in normal flow
+          and move as one pinned unit. */}
+      <div className="sticky top-[60px] z-10 -mx-4 flex flex-col gap-3 bg-neutral-50 px-4 pt-1 pb-3 sm:-mx-6 sm:px-6 md:top-0">
         <Tabs
           tabs={tabs}
           activeId={tab}
           onChange={(id) => setTab(id as CalendarTabId)}
           label={calendarCopy.tabsLabel}
         />
-      </div>
-
-      {tab === 'calendar' && (
-        <div className="flex flex-col gap-4">
+        {tab === 'calendar' && (
           <CalendarToolbar
             year={view.year}
             month={view.month}
@@ -226,10 +231,13 @@ export function CalendarPage() {
             isLoading={isLoading}
             onPrev={() => shiftMonth(-1)}
             onNext={() => shiftMonth(1)}
-            onToday={() => setView({ year: now.getFullYear(), month: now.getMonth() + 1 })}
             onOpenBulk={() => setBulkOpen(true)}
           />
+        )}
+      </div>
 
+      {tab === 'calendar' && (
+        <div className="flex flex-col gap-4">
           {loadError != null ? (
             // The toolbar stays usable above this — paging to another month is a valid way out of
             // a failed one.
@@ -279,7 +287,7 @@ export function CalendarPage() {
           rules={rules}
           tours={tours}
           pending={pending}
-          onDelete={(id) => void removeRule(id)}
+          onDeleteSelected={(ids) => void removeRules(ids)}
         />
       )}
 

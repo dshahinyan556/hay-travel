@@ -139,6 +139,10 @@ export interface ClosureRuleInfoModel {
   effectiveTo: string | null
   /** Internal admin note. Not translatable, not shown to visitors. */
   reason: string | null
+  /** Every rule created by the same `CreateRules` call (one bulk operation, or a single toggle —
+   * both go through it) shares one `batchId` — the admin screen groups rows by it. `null` only
+   * for rules created before this column existed (2026-08-14). */
+  batchId: string | null
 }
 
 /** One element of the `POST api/Availability/CreateRules` list payload. */

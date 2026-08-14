@@ -3,6 +3,7 @@ import { Button, Checkbox, DatePicker, Input, Modal, Textarea } from '@/shared/u
 import { SidePanel } from '@/features/admin/ui/SidePanel'
 import { TourType } from '@/features/admin/lib/enums'
 import type { TourInfoModel } from '@/shared/types/attours'
+import { REGIONS, type RegionSlug } from '@/shared/data/armeniaRegions'
 import {
   ClosureAction,
   type ClosureRuleCreateModel,
@@ -60,6 +61,12 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
     () => [...tours].sort((a, b) => tourTitle(a.id).localeCompare(tourTitle(b.id), 'ru')),
     [tours, tourTitle],
   )
+  // Only regions that actually have a tour in them — a preset button for an empty region would
+  // always produce zero rules. Ordered like the map/catalog (`REGIONS`), not alphabetically.
+  const availableRegions = useMemo(() => {
+    const present = new Set(tours.flatMap((tour) => (tour.regions ?? []).map((region) => region.slug)))
+    return REGIONS.filter((region) => present.has(region.slug))
+  }, [tours])
   const visibleTours = useMemo(() => {
     const query = tourSearch.trim().toLowerCase()
     if (query === '') return sortedTours
@@ -92,6 +99,22 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
     patch({
       tourIds: tours.filter((tour) => type === 'all' || tour.type === type).map((tour) => tour.id),
     })
+  }
+
+  function applyRegionPreset(slug: RegionSlug) {
+    patch({
+      tourIds: tours
+        .filter((tour) => (tour.regions ?? []).some((region) => region.slug === slug))
+        .map((tour) => tour.id),
+    })
+  }
+
+  /** Clears only the tour-scope filter (search text + selection), not the whole form — the
+   * action/mode/date fields above are a separate decision and resetting them alongside would
+   * throw away work the admin already did there. */
+  function resetTourFilters() {
+    setTourSearch('')
+    patch({ tourIds: [] })
   }
 
   function submit() {
@@ -260,12 +283,42 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
                   ))}
                 </div>
 
-                <Input
-                  value={tourSearch}
-                  onChange={(event) => setTourSearch(event.target.value)}
-                  placeholder={calendarCopy.bulkTourSearch}
-                  aria-label={calendarCopy.bulkTourSearch}
-                />
+                {availableRegions.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                      {calendarCopy.bulkPresetByRegion}
+                    </span>
+                    {availableRegions.map((region) => (
+                      <button
+                        key={region.slug}
+                        type="button"
+                        onClick={() => applyRegionPreset(region.slug)}
+                        className="cursor-pointer rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                      >
+                        {region.ru}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={tourSearch}
+                    onChange={(event) => setTourSearch(event.target.value)}
+                    placeholder={calendarCopy.bulkTourSearch}
+                    aria-label={calendarCopy.bulkTourSearch}
+                    className="flex-1"
+                  />
+                  {(tourSearch !== '' || form.tourIds.length > 0) && (
+                    <button
+                      type="button"
+                      onClick={resetTourFilters}
+                      className="shrink-0 cursor-pointer rounded-lg px-2 py-1.5 text-xs font-semibold text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/20"
+                    >
+                      {calendarCopy.bulkResetFilters}
+                    </button>
+                  )}
+                </div>
 
                 <div className="max-h-56 overflow-y-auto rounded-lg border border-neutral-200 p-2">
                   {visibleTours.length === 0 ? (

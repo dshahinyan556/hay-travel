@@ -109,9 +109,10 @@
 | GET | `api/Order/{id}` | `OrderInfoModel` (Admin-only, B12 2026-08-13 — деталь одного заказа для `OrderDetailPage`; 404 `OrderNotFound` если нет) |
 | PATCH | `api/Order/Cancel` | — |
 | GET | `api/Availability/GetCalendar` | `CalendarMonthModel` (по дню: кол-во заказов по турам + статус закрытия, Admin-only) |
-| GET | `api/Availability/GetRules` | `ClosureRuleInfoModel[]` |
-| POST | `api/Availability/CreateRules` | — (массовое создание, кап `MAX_BULK_RULES` на фронте) |
-| DELETE | `api/Availability/DeleteRule` | — |
+| GET | `api/Availability/GetRules` | `ClosureRuleInfoModel[]` (включая `BatchId`, см. ниже) |
+| POST | `api/Availability/CreateRules` | — (массовое создание, кап `MAX_BULK_RULES` на фронте; все правила одного вызова получают общий `BatchId`) |
+| DELETE | `api/Availability/DeleteRule` | — (одно правило по id) |
+| DELETE | `api/Availability/DeleteRules` | — (`List<int>` в теле — группа целиком или произвольная выборка; отсутствующие id молча пропускаются, 2026-08-14) |
 | GET | `api/Availability/GetClosedDates` | список закрытых дат (публичный, для `DatePicker` на детальной странице тура) |
 
 **Гард на удаление тура**: `TourDeletionService` теперь проверяет `TourHasOrders` — тур с существующими заказами удалить нельзя (внятный код ошибки вместо сырой FK-ошибки).
@@ -122,7 +123,10 @@
 Раньше массовое закрытие дней сознательно разрешало прошедшие даты ("хозяйственный смысл"), а точечный клик по прошедшему дню в админке вообще не проверялся. Решение Давида: запретить полностью и без исключений — единственная и общая для single-day/bulk точка входа (`ClosureRuleCreateModel` → `ClosureRuleCreationService` → `ClosureRuleValidationService`) теперь отбивает `SpecificDate.Date < today` и `Weekly.EffectiveFrom < today` кодом `ClosureDateInPast=2022`. На фронте — `BulkClosurePanel`'s `DatePicker`ы теперь `disablePast` + та же проверка в `compileBulkForm`, и `DayClosureControls` полностью блокируется (не просто прячется) для прошедших дней.
 
 ### Причина закрытия дня в календаре (B12, 2026-08-13)
-`ClosureRuleResolver.IsClosed` раньше отдавал только `bool`, выбрасывая победившее правило (и его `Reason`). Добавлен `ClosureRuleResolver.Resolve(...)`, возвращающий само правило; `CalendarDayModel` получил поле `ClosureReason` (только для глобального закрытия — tour-scope причина по-прежнему видна лишь во вкладке «Правила»). Плюс: одиночное закрытие дня (`DayClosureControls`) теперь тоже собирает `Reason` — раньше поле было только у массовой операции.
+`ClosureRuleResolver.IsClosed` раньше отдавал только `bool`, выбрасывая победившее правило (и его `Reason`). Добавлен `ClosureRuleResolver.Resolve(...)`, возвращающий само правило; `CalendarDayModel` получил поле `ClosureReason` (только для глобального закрытия — tour-scope причина по-прежнему видна лишь во вкладке «Блокировки»). Плюс: одиночное закрытие дня (`DayClosureControls`) теперь тоже собирает `Reason` — раньше поле было только у массовой операции.
+
+### Группировка правил закрытия — `BatchId` (2026-08-14)
+`ClosureRule.BatchId` (`Guid?`, миграция `AddClosureRuleBatchId`) — все правила, созданные ОДНИМ вызовом `CreateRules` (будь то массовая операция или одиночный toggle из `DayClosureControls`, оба идут через один и тот же эндпоинт), получают общий `BatchId`, который проставляет контроллер (`Guid.NewGuid()` на весь список), а не клиент. `null` — только у правил, созданных до этой миграции. Ничего не резолвится/фильтруется по `BatchId` на бэкенде — он существует исключительно для того, чтобы фронт (`ClosureRulesTable`, вкладка «Блокировки») мог группировать строки одной операции визуально и удалять их вместе через новый `DeleteRules`. Переименование в UI: «Правило» → «Блокировка» (только копия экрана, сущность в коде осталась `ClosureRule`).
 
 **Админка**: раздел «Заказы» (`/admin/orders` — список + `/admin/orders/:id` деталь) + «Календарь» (`/admin/calendar`) — см. `admin-panel.md`.
 
@@ -136,4 +140,4 @@
 Новых сущностей/репозиториев/миграции не потребовалось — всё укладывается в уже существующий каталог-в-коде `SiteSettingCatalog` (ADR 002).
 
 ## Миграции
-Актуальные (в `ATTours.DataLayer/Migrations`): `InitialCreate`, `AddRoutePoint`, `AddOrganizationalDetailAndRestriction`, `ChangeTourDayChildrenToCascade`, `AddTourIsArchived`, `AddSiteSettings`, `AddRegionAndTourRegion`, `SeedArmenianRegions`, `MergeRestrictionAndOrganizationalDetailIntoTourNote`, `AddReferenceCatalogs`, `AddTourFeatured`, `SeedRegionBlurbs`, `AddExchangeRate`, `AddOrdersAndClosureRules`, `AddTourRequiresPrepayment` (2026-08-13 — `Tour.RequiresPrepayment`, `bit NOT NULL DEFAULT 1`; см. `product-model.md`). Обе миграции 2026-08-13 подтверждены применёнными (backend перезапущен, EF-лог показал `Applying migration`).
+Актуальные (в `ATTours.DataLayer/Migrations`): `InitialCreate`, `AddRoutePoint`, `AddOrganizationalDetailAndRestriction`, `ChangeTourDayChildrenToCascade`, `AddTourIsArchived`, `AddSiteSettings`, `AddRegionAndTourRegion`, `SeedArmenianRegions`, `MergeRestrictionAndOrganizationalDetailIntoTourNote`, `AddReferenceCatalogs`, `AddTourFeatured`, `SeedRegionBlurbs`, `AddExchangeRate`, `AddOrdersAndClosureRules`, `AddTourRequiresPrepayment` (2026-08-13 — `Tour.RequiresPrepayment`, `bit NOT NULL DEFAULT 1`; см. `product-model.md`), `AddClosureRuleBatchId` (2026-08-14 — `ClosureRule.BatchId`, `uniqueidentifier NULL`; см. выше). Миграции применяются автоматически при старте backend (с retry, с 2026-08-10) — отдельного ручного шага `dotnet ef database update` в проде не требуется.

@@ -327,7 +327,9 @@ export function BookingCard({ tour, largeGroupInvitation, closedDates }: Booking
       <button
         type="submit"
         disabled={pending || !isAuthKnown}
-        className="mt-5 w-full rounded-full bg-gold-fill px-5 py-3 text-sm font-medium text-gold-on transition-colors hover:bg-gold-fill-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-panel focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+        // `btn-sheen` only while enabled — a shimmering DISABLED button reads as "still live",
+        // which contradicts the dimmed/`cursor-not-allowed` state right next to it.
+        className={`mt-5 w-full rounded-full bg-gold-fill px-5 py-3 text-sm font-medium text-gold-on transition-colors hover:bg-gold-fill-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-panel focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 ${pending || !isAuthKnown ? '' : 'btn-sheen'}`}
       >
         {pending
           ? t('booking.submitting')

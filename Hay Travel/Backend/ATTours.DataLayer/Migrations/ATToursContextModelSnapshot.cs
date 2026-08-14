@@ -88,6 +88,9 @@ namespace ATTours.DataLayer.Migrations
                     b.Property<int>("Action")
                         .HasColumnType("int");
 
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateOnly?>("Date")
                         .HasColumnType("date");
 
