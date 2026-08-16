@@ -16,7 +16,14 @@
 
 import { arrayMove } from '@dnd-kit/sortable'
 import { TourType } from '@/features/admin/lib/enums'
-import { emptyDay, emptyExpense, emptyLocalizedItem, emptyGalleryItem } from '@/features/admin/lib/tourMapper'
+import {
+  emptyDay,
+  emptyExpense,
+  emptyLocalizedItem,
+  emptyGalleryItem,
+  emptyRoutePoint,
+} from '@/features/admin/lib/tourMapper'
+import type { DaySourceContent } from '@/features/admin/lib/tourMapper'
 import type {
   Localized,
   LocalizedListItem,
@@ -60,6 +67,17 @@ export type TourFormAction =
   | { kind: 'removeRoutePoint'; dayKey: string; key: string }
   | { kind: 'moveRoutePoint'; dayKey: string; fromIndex: number; toIndex: number }
   | { kind: 'setRoutePointText'; dayKey: string; key: string; lang: LangKey; value: string }
+  | {
+      kind: 'setRoutePointPlace'
+      dayKey: string
+      key: string
+      placeId: number | null
+      /** Picking a catalog Place also fills RU/EN — omitted when the admin clears the link. */
+      text?: Localized
+    }
+  // "заполнить день из другого продукта" (F13 gap closure, part 2) — replaces the day's text +
+  // route points; price and gallery are untouched (see `DaySourceContent`'s doc comment).
+  | { kind: 'fillDayFromSource'; dayKey: string; content: DaySourceContent }
   // gallery (of a day)
   | { kind: 'addGallery'; dayKey: string }
   | { kind: 'removeGallery'; dayKey: string; key: string }
@@ -125,13 +143,15 @@ const reorder = <T>(list: T[], fromIndex: number, toIndex: number): T[] => {
 /** Set one language of a `Localized` pair, leaving the other language untouched. */
 const setLoc = (loc: Localized, lang: LangKey, value: string): Localized => ({ ...loc, [lang]: value })
 
-/** Update the text of one item in a `LocalizedListItem[]`. */
-const setItemText = (
-  list: LocalizedListItem[],
+/** Update the text of one item in a `LocalizedListItem[]`. Generic over `T` (rather than fixed
+ * to `LocalizedListItem`) so it preserves extra fields on the concrete item type — route points
+ * carry `placeId` alongside `key`/`text`, which a widened `LocalizedListItem[]` return would drop. */
+const setItemText = <T extends LocalizedListItem>(
+  list: T[],
   key: string,
   lang: LangKey,
   value: string,
-): LocalizedListItem[] => updateByKey(list, key, (item) => ({ ...item, text: setLoc(item.text, lang, value) }))
+): T[] => updateByKey(list, key, (item) => ({ ...item, text: setLoc(item.text, lang, value) }))
 
 /** Apply a transform to a single day, addressed by key. */
 const updateDay = (
@@ -212,7 +232,7 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
     case 'addRoutePoint':
       return updateDay(state, action.dayKey, (day) => ({
         ...day,
-        routePoints: [...day.routePoints, emptyLocalizedItem()],
+        routePoints: [...day.routePoints, emptyRoutePoint()],
       }))
 
     case 'removeRoutePoint':
@@ -232,6 +252,44 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
         ...day,
         routePoints: setItemText(day.routePoints, action.key, action.lang, action.value),
       }))
+
+    case 'setRoutePointPlace':
+      return updateDay(state, action.dayKey, (day) => ({
+        ...day,
+        routePoints: updateByKey(day.routePoints, action.key, (rp) => ({
+          ...rp,
+          placeId: action.placeId,
+          text: action.text ?? rp.text,
+        })),
+      }))
+
+    case 'fillDayFromSource': {
+      const routePoints = action.content.routePoints.map((rp) => ({
+        key: crypto.randomUUID(),
+        text: rp.text,
+        placeId: rp.placeId,
+      }))
+      const withRoutePoints = updateDay(state, action.dayKey, (day) => ({ ...day, routePoints }))
+      // An excursion's single day displays the TOUR-level text (see `dayTexts` in tourMapper —
+      // day-level text is ignored at submit time), so that's what a fill must write for the
+      // change to be visible. A multi-day tour's day keeps its own text as usual.
+      if (withRoutePoints.type === TourType.Excursion) {
+        return {
+          ...withRoutePoints,
+          title: action.content.title,
+          shortDescription: action.content.shortDescription,
+          description: action.content.description,
+          duration: action.content.duration,
+        }
+      }
+      return updateDay(withRoutePoints, action.dayKey, (day) => ({
+        ...day,
+        title: action.content.title,
+        shortDescription: action.content.shortDescription,
+        description: action.content.description,
+        duration: action.content.duration,
+      }))
+    }
 
     /* ---- gallery ---- */
     case 'addGallery':
