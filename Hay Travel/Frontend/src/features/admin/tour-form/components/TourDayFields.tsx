@@ -1,9 +1,13 @@
 import { Field, Input } from '@/shared/ui'
-import type { Localized, TourDayFormState } from '@/features/admin/types/form'
+import type { Localized, PlaceOption, RoutePointFormState, TourDayFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
+import type { DaySource } from '@/features/admin/lib/tourMapper'
+import { hasFillableDayContent } from '@/features/admin/lib/tourMapper'
 import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
 import { ImageListEditor } from '@/features/admin/ui/ImageListEditor'
 import { LocalizedListEditor } from './LocalizedListEditor'
+import { RoutePointPlaceSelect } from './RoutePointPlaceSelect'
+import { DayFillTrigger } from './DayFillTrigger'
 
 interface TourDayFieldsProps {
   day: TourDayFormState
@@ -18,6 +22,10 @@ interface TourDayFieldsProps {
   priceLabel?: string
   /** Existing route-point catalog entries offered as autocomplete. */
   routePointSuggestions: Localized[]
+  /** Place catalog entries a route point can be hard-linked to (F13 gap closure). */
+  placeOptions: PlaceOption[]
+  /** Other products' days offered as a "заполнить из другого продукта" source (F13, part 2). */
+  daySources: DaySource[]
 }
 
 /**
@@ -34,7 +42,12 @@ export function TourDayFields({
   actions,
   priceLabel = 'Цена дня, ֏',
   routePointSuggestions,
+  placeOptions,
+  daySources,
 }: TourDayFieldsProps) {
+  const hasUnlinkedPoint = day.routePoints.some(
+    (rp) => rp.placeId == null && (rp.text.ru.trim() || rp.text.en.trim()),
+  )
   return (
     <div className="flex flex-col gap-4">
       <div className="max-w-56">
@@ -75,6 +88,14 @@ export function TourDayFields({
         onChange={(lang, value) => actions.setDayLocalized(day.key, 'duration', lang, value)}
       />
 
+      <div>
+        <DayFillTrigger
+          sources={daySources}
+          hasContent={hasFillableDayContent(day)}
+          onFill={(content) => actions.fillDayFromSource(day.key, content)}
+        />
+      </div>
+
       <LocalizedListEditor
         title="Точки маршрута"
         hint="Порядок точек соответствует маршруту дня."
@@ -89,7 +110,20 @@ export function TourDayFields({
         onRemove={(key) => actions.removeRoutePoint(day.key, key)}
         onReorder={(fromIndex, toIndex) => actions.moveRoutePoint(day.key, fromIndex, toIndex)}
         onChangeText={(key, lang, value) => actions.setRoutePointText(day.key, key, lang, value)}
+        renderExtra={(item) => (
+          <RoutePointPlaceSelect
+            dayKey={day.key}
+            item={item as RoutePointFormState}
+            placeOptions={placeOptions}
+            actions={actions}
+          />
+        )}
       />
+      {hasUnlinkedPoint && (
+        <p className="text-xs text-neutral-400">
+          Точки без привязки к каталогу — свободный текст, их фото не попадут в галерею дня автоматически.
+        </p>
+      )}
 
       <div className="flex flex-col gap-2">
         <h4 className="text-sm font-semibold text-neutral-800">Галерея дня</h4>

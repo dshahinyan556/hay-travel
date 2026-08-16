@@ -32,8 +32,20 @@ export interface LocalizedListItem {
   text: Localized
 }
 
-/** One route point of a day. A day can have many, ordered by array index. */
-export type RoutePointFormState = LocalizedListItem
+/** One route point of a day. A day can have many, ordered by array index. `placeId` is a hard
+ * link to the Place catalog (F13 gap closure, 2026-08) — set when the admin picks a catalog
+ * entry, `null` for a free-text point. The text stays editable after picking; the link persists
+ * independently of later text edits. A route point with `placeId` set makes the backend copy
+ * that Place's photos into the day's gallery automatically on save. */
+export interface RoutePointFormState extends LocalizedListItem {
+  placeId: number | null
+}
+
+/** One Place catalog entry offered as a hard link for a route point. */
+export interface PlaceOption {
+  id: number
+  name: Localized
+}
 
 /** One additional expense of the tour. */
 export interface ExpenseFormState {
@@ -63,6 +75,8 @@ export interface TourDayFormState {
  * reference data, not part of the form's own state (nothing here is submitted). */
 export interface CatalogSuggestions {
   routePoints: Localized[]
+  /** Place catalog entries a route point can be hard-linked to (F13 gap closure). */
+  placeOptions: PlaceOption[]
   orgDetails: Localized[]
   restrictions: Localized[]
   included: Localized[]

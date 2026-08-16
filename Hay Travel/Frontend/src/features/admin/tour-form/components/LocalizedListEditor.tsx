@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { DragHandle, SortableList, SuggestInput } from '@/shared/ui'
 import type { Localized, LocalizedListItem } from '@/features/admin/types/form'
 import type { LangKey } from '@/features/admin/tour-form/reducer/tourFormReducer'
@@ -30,6 +31,9 @@ interface LocalizedListEditorProps {
   /** Drag-and-drop reorder: move the item at `fromIndex` to `toIndex`. */
   onReorder: (fromIndex: number, toIndex: number) => void
   onChangeText: (key: string, lang: LangKey, value: string) => void
+  /** Extra content rendered below the RU|EN inputs of each row — e.g. route points' Place-link
+   * picker. Omit for lists that only ever hold free text. */
+  renderExtra?: (item: LocalizedListItem, index: number) => ReactNode
 }
 
 /** Stable identity for the drag list — rows are addressed by their form key, never by index. */
@@ -56,6 +60,7 @@ export function LocalizedListEditor({
   onRemove,
   onReorder,
   onChangeText,
+  renderExtra,
 }: LocalizedListEditorProps) {
   const ruSuggestions = suggestions?.map((s) => s.ru).filter(Boolean) ?? []
   const enSuggestions = suggestions?.map((s) => s.en).filter(Boolean) ?? []
@@ -109,25 +114,28 @@ export function LocalizedListEditor({
                 <span className="w-4 shrink-0 pt-2 text-center text-xs tabular-nums text-neutral-400">
                   {index + 1}
                 </span>
-                <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
-                  <SuggestInput
-                    value={item.text.ru}
-                    onChange={(value) => onChangeText(item.key, 'ru', value)}
-                    onPick={(label) => pickSuggestion(item.key, label, 'ru')}
-                    suggestions={ruSuggestions}
-                    aria-label={`${title} ${index + 1} — Русский`}
-                    placeholder="Русский"
-                    className="text-sm"
-                  />
-                  <SuggestInput
-                    value={item.text.en}
-                    onChange={(value) => onChangeText(item.key, 'en', value)}
-                    onPick={(label) => pickSuggestion(item.key, label, 'en')}
-                    suggestions={enSuggestions}
-                    aria-label={`${title} ${index + 1} — English`}
-                    placeholder="English"
-                    className="text-sm"
-                  />
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <SuggestInput
+                      value={item.text.ru}
+                      onChange={(value) => onChangeText(item.key, 'ru', value)}
+                      onPick={(label) => pickSuggestion(item.key, label, 'ru')}
+                      suggestions={ruSuggestions}
+                      aria-label={`${title} ${index + 1} — Русский`}
+                      placeholder="Русский"
+                      className="text-sm"
+                    />
+                    <SuggestInput
+                      value={item.text.en}
+                      onChange={(value) => onChangeText(item.key, 'en', value)}
+                      onPick={(label) => pickSuggestion(item.key, label, 'en')}
+                      suggestions={enSuggestions}
+                      aria-label={`${title} ${index + 1} — English`}
+                      placeholder="English"
+                      className="text-sm"
+                    />
+                  </div>
+                  {renderExtra?.(item, index)}
                 </div>
                 <div className="pt-0.5">
                   <RemoveButton onClick={() => onRemove(item.key)} label={`Удалить ${itemNoun}`} />

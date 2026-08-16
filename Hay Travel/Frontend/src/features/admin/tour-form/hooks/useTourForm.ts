@@ -19,9 +19,10 @@ import { useMemo, useReducer, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { createTour, setTourActive, updateTour } from '@/features/admin/api/adminTours'
 import { formToCreateModel, formToUpdateModel } from '@/features/admin/lib/tourMapper'
+import type { DaySourceContent } from '@/features/admin/lib/tourMapper'
 import { ApiError } from '@/shared/lib/http'
 import type { TourType } from '@/features/admin/lib/enums'
-import type { TourFormState } from '@/features/admin/types/form'
+import type { Localized, TourFormState } from '@/features/admin/types/form'
 import {
   normalizeInitialState,
   tourFormReducer,
@@ -57,6 +58,8 @@ export interface TourFormActions {
   removeRoutePoint: (dayKey: string, key: string) => void
   moveRoutePoint: (dayKey: string, fromIndex: number, toIndex: number) => void
   setRoutePointText: (dayKey: string, key: string, lang: LangKey, value: string) => void
+  setRoutePointPlace: (dayKey: string, key: string, placeId: number | null, text?: Localized) => void
+  fillDayFromSource: (dayKey: string, content: DaySourceContent) => void
   // gallery
   addGallery: (dayKey: string) => void
   removeGallery: (dayKey: string, key: string) => void
@@ -161,6 +164,9 @@ export function useTourForm(
         dispatch({ kind: 'moveRoutePoint', dayKey, fromIndex, toIndex }),
       setRoutePointText: (dayKey, key, lang, value) =>
         dispatch({ kind: 'setRoutePointText', dayKey, key, lang, value }),
+      setRoutePointPlace: (dayKey, key, placeId, text) =>
+        dispatch({ kind: 'setRoutePointPlace', dayKey, key, placeId, text }),
+      fillDayFromSource: (dayKey, content) => dispatch({ kind: 'fillDayFromSource', dayKey, content }),
 
       addGallery: (dayKey) => dispatch({ kind: 'addGallery', dayKey }),
       removeGallery: (dayKey, key) => dispatch({ kind: 'removeGallery', dayKey, key }),

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { DragHandle } from '@/shared/ui'
 import type { SortableRowRenderProps } from '@/shared/ui'
-import type { Localized, TourDayFormState } from '@/features/admin/types/form'
+import type { Localized, PlaceOption, TourDayFormState } from '@/features/admin/types/form'
+import type { DaySource } from '@/features/admin/lib/tourMapper'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
 import { RemoveButton } from '@/features/admin/ui/RepeaterControls'
 import { TourDayFields } from './TourDayFields'
@@ -22,6 +23,10 @@ interface TourDayCardProps {
   actions: TourFormActions
   /** Existing route-point catalog entries offered as autocomplete. */
   routePointSuggestions: Localized[]
+  /** Place catalog entries a route point can be hard-linked to (F13 gap closure). */
+  placeOptions: PlaceOption[]
+  /** Other products' days offered as a "заполнить из другого продукта" source (F13, part 2). */
+  daySources: DaySource[]
 }
 
 const priceFormatter = new Intl.NumberFormat('ru-RU')
@@ -61,6 +66,8 @@ export function TourDayCard({
   routePointError,
   actions,
   routePointSuggestions,
+  placeOptions,
+  daySources,
 }: TourDayCardProps) {
   const [open, setOpen] = useState(index === 0)
   const bodyId = `day-body-${day.key}`
@@ -139,6 +146,8 @@ export function TourDayCard({
             routePointError={routePointError}
             actions={actions}
             routePointSuggestions={routePointSuggestions}
+            placeOptions={placeOptions}
+            daySources={daySources}
           />
         </div>
       )}

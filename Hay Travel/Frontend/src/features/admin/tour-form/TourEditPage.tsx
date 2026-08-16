@@ -4,14 +4,17 @@ import type { LoaderFunctionArgs } from 'react-router'
 import { UnsavedChangesModal } from '@/shared/ui'
 import { useUnsavedChangesGuard } from '@/shared/hooks'
 import { TourNoteType, TourType, tourTypeLabels } from '@/features/admin/lib/enums'
-import { initUpdate } from '@/features/admin/api/adminTours'
+import { getAllTours, initUpdate } from '@/features/admin/api/adminTours'
 import { getExpenseTemplates, getPlaces, getRegions, getTourNoteTemplates } from '@/features/admin/api/adminCatalog'
 import {
   expenseTemplatesToSuggestions,
   infoToForm,
   noteTemplatesToSuggestions,
+  placesToOptions,
   placesToSuggestions,
+  toursToDaySources,
 } from '@/features/admin/lib/tourMapper'
+import type { DaySource } from '@/features/admin/lib/tourMapper'
 import type { CatalogSuggestions } from '@/features/admin/types/form'
 import type { RegionInfoModel, TourInfoModel } from '@/shared/types/attours'
 import { useTourForm } from './hooks/useTourForm'
@@ -27,39 +30,53 @@ export async function tourEditLoader({ params }: LoaderFunctionArgs) {
   if (!Number.isInteger(id) || id <= 0) {
     throw new Response('Некорректный идентификатор тура', { status: 400 })
   }
-  const [dto, places, expenseTemplates, noteTemplates, regions] = await Promise.all([
+  const [dto, places, expenseTemplates, noteTemplates, regions, allTours] = await Promise.all([
     initUpdate(id),
     getPlaces(),
     getExpenseTemplates(),
     getTourNoteTemplates(),
     getRegions(),
+    getAllTours(),
   ])
   const catalogSuggestions: CatalogSuggestions = {
     routePoints: placesToSuggestions(places),
+    placeOptions: placesToOptions(places),
     orgDetails: noteTemplatesToSuggestions(noteTemplates, TourNoteType.OrganizationalDetail),
     restrictions: noteTemplatesToSuggestions(noteTemplates, TourNoteType.Restriction),
     included: noteTemplatesToSuggestions(noteTemplates, TourNoteType.Included),
     notIncluded: noteTemplatesToSuggestions(noteTemplates, TourNoteType.NotIncluded),
     expenses: expenseTemplatesToSuggestions(expenseTemplates),
   }
-  return { dto, catalogSuggestions, regions }
+  // Excludes the tour being edited — filling one of its own days from itself is meaningless.
+  const daySources = toursToDaySources(allTours, dto.id)
+  return { dto, catalogSuggestions, regions, daySources }
 }
 
 export function TourEditPage() {
-  const { dto, catalogSuggestions, regions } = useLoaderData<typeof tourEditLoader>()
+  const { dto, catalogSuggestions, regions, daySources } = useLoaderData<typeof tourEditLoader>()
   // Keyed by id so navigating between two edit URLs remounts the editor with fresh state
   // instead of carrying the previous tour's form over.
-  return <TourEditView key={dto.id} dto={dto} catalogSuggestions={catalogSuggestions} regions={regions} />
+  return (
+    <TourEditView
+      key={dto.id}
+      dto={dto}
+      catalogSuggestions={catalogSuggestions}
+      regions={regions}
+      daySources={daySources}
+    />
+  )
 }
 
 function TourEditView({
   dto,
   catalogSuggestions,
   regions,
+  daySources,
 }: {
   dto: TourInfoModel
   catalogSuggestions: CatalogSuggestions
   regions: RegionInfoModel[]
+  daySources: DaySource[]
 }) {
   const initialState = useMemo(() => infoToForm(dto), [dto])
   const { state, actions, validation, hasAttemptedSubmit, submit, isSubmitting, error, isDirty } =
@@ -96,6 +113,7 @@ function TourEditView({
         typeLocked
         catalogSuggestions={catalogSuggestions}
         regions={regions}
+        daySources={daySources}
         onSubmit={submit}
       />
 

@@ -4,14 +4,17 @@ import type { LoaderFunctionArgs } from 'react-router'
 import { UnsavedChangesModal } from '@/shared/ui'
 import { useUnsavedChangesGuard } from '@/shared/hooks'
 import { TourNoteType, TourType, tourTypeLabels } from '@/features/admin/lib/enums'
-import { initTour } from '@/features/admin/api/adminTours'
+import { getAllTours, initTour } from '@/features/admin/api/adminTours'
 import { getExpenseTemplates, getPlaces, getRegions, getTourNoteTemplates } from '@/features/admin/api/adminCatalog'
 import {
   createModelToForm,
   expenseTemplatesToSuggestions,
   noteTemplatesToSuggestions,
+  placesToOptions,
   placesToSuggestions,
+  toursToDaySources,
 } from '@/features/admin/lib/tourMapper'
+import type { DaySource } from '@/features/admin/lib/tourMapper'
 import type { CatalogSuggestions } from '@/features/admin/types/form'
 import type { RegionInfoModel, TourCreateModel } from '@/shared/types/attours'
 import { useTourForm } from './hooks/useTourForm'
@@ -26,39 +29,53 @@ import { TourForm } from './components/TourForm'
 export async function tourCreateLoader({ request }: LoaderFunctionArgs) {
   const typeParam = Number(new URL(request.url).searchParams.get('type'))
   const type: TourType = typeParam === TourType.Excursion ? TourType.Excursion : TourType.Tour
-  const [dto, places, expenseTemplates, noteTemplates, regions] = await Promise.all([
+  const [dto, places, expenseTemplates, noteTemplates, regions, allTours] = await Promise.all([
     initTour(type),
     getPlaces(),
     getExpenseTemplates(),
     getTourNoteTemplates(),
     getRegions(),
+    getAllTours(),
   ])
   const catalogSuggestions: CatalogSuggestions = {
     routePoints: placesToSuggestions(places),
+    placeOptions: placesToOptions(places),
     orgDetails: noteTemplatesToSuggestions(noteTemplates, TourNoteType.OrganizationalDetail),
     restrictions: noteTemplatesToSuggestions(noteTemplates, TourNoteType.Restriction),
     included: noteTemplatesToSuggestions(noteTemplates, TourNoteType.Included),
     notIncluded: noteTemplatesToSuggestions(noteTemplates, TourNoteType.NotIncluded),
     expenses: expenseTemplatesToSuggestions(expenseTemplates),
   }
-  return { dto, catalogSuggestions, regions }
+  // No tour exists yet to exclude — a fresh create form offers every existing product as a source.
+  const daySources = toursToDaySources(allTours)
+  return { dto, catalogSuggestions, regions, daySources }
 }
 
 export function TourCreatePage() {
-  const { dto, catalogSuggestions, regions } = useLoaderData<typeof tourCreateLoader>()
+  const { dto, catalogSuggestions, regions, daySources } = useLoaderData<typeof tourCreateLoader>()
   // Keyed by type so switching the URL `?type=` (e.g. from the sidebar) remounts the editor
   // with a fresh initial state instead of keeping the previous type's form.
-  return <TourCreateView key={dto.type} dto={dto} catalogSuggestions={catalogSuggestions} regions={regions} />
+  return (
+    <TourCreateView
+      key={dto.type}
+      dto={dto}
+      catalogSuggestions={catalogSuggestions}
+      regions={regions}
+      daySources={daySources}
+    />
+  )
 }
 
 function TourCreateView({
   dto,
   catalogSuggestions,
   regions,
+  daySources,
 }: {
   dto: TourCreateModel
   catalogSuggestions: CatalogSuggestions
   regions: RegionInfoModel[]
+  daySources: DaySource[]
 }) {
   const initialState = useMemo(() => createModelToForm(dto), [dto])
   const { state, actions, validation, hasAttemptedSubmit, submit, isSubmitting, error, isDirty } =
@@ -89,6 +106,7 @@ function TourCreateView({
         submitError={error}
         catalogSuggestions={catalogSuggestions}
         regions={regions}
+        daySources={daySources}
         onSubmit={submit}
       />
 
