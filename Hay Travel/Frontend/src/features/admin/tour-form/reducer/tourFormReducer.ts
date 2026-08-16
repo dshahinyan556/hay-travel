@@ -74,10 +74,16 @@ export type TourFormAction =
       placeId: number | null
       /** Picking a catalog Place also fills RU/EN — omitted when the admin clears the link. */
       text?: Localized
+      /** The picked Place's own gallery images (`PlaceOption.images`) — swapped live into the
+       * day's gallery in place of whatever this route point had previously added, if anything.
+       * Omitted when the admin clears the link or the place has no images. */
+      images?: string[]
     }
   // "заполнить день из другого продукта" (F13 gap closure, part 2) — replaces the day's text +
-  // route points; price and gallery are untouched (see `DaySourceContent`'s doc comment).
-  | { kind: 'fillDayFromSource'; dayKey: string; content: DaySourceContent }
+  // route points; price is untouched. The gallery IS touched now: any route point in the fill
+  // that carries a `placeId` gets that place's images live, same as picking it by hand
+  // (`placeImages` is a placeId -> image-urls lookup built by the caller from `placeOptions`).
+  | { kind: 'fillDayFromSource'; dayKey: string; content: DaySourceContent; placeImages: Record<number, string[]> }
   // gallery (of a day)
   | { kind: 'addGallery'; dayKey: string }
   | { kind: 'removeGallery'; dayKey: string; key: string }
@@ -159,6 +165,23 @@ const updateDay = (
   dayKey: string,
   fn: (day: TourDayFormState) => TourDayFormState,
 ): TourFormState => ({ ...state, days: updateByKey(state.days, dayKey, fn) })
+
+/** Removes the gallery images tagged as auto-added for one route point (see
+ * `TourDayFormState.autofilledImageKeys`'s doc comment) and reports where they used to start, so
+ * their replacement can be inserted at the same spot. `keys` undefined means "unknown origin" —
+ * nothing is removed, and the caller's `insertAt` falls back to the end of the list. */
+const removeLinkedImages = <T extends Keyed>(
+  gallery: T[],
+  keys: string[] | undefined,
+): { gallery: T[]; insertAt: number } => {
+  if (!keys || keys.length === 0) return { gallery, insertAt: gallery.length }
+  const keySet = new Set(keys)
+  const firstIndex = gallery.findIndex((g) => keySet.has(g.key))
+  return {
+    gallery: gallery.filter((g) => !keySet.has(g.key)),
+    insertAt: firstIndex < 0 ? gallery.length : firstIndex,
+  }
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Day-count domain rule                                                      */
@@ -254,14 +277,24 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
       }))
 
     case 'setRoutePointPlace':
-      return updateDay(state, action.dayKey, (day) => ({
-        ...day,
-        routePoints: updateByKey(day.routePoints, action.key, (rp) => ({
-          ...rp,
-          placeId: action.placeId,
-          text: action.text ?? rp.text,
-        })),
-      }))
+      return updateDay(state, action.dayKey, (day) => {
+        const { [action.key]: previousKeys, ...otherLinks } = day.autofilledImageKeys
+        const { gallery, insertAt } = removeLinkedImages(day.gallery, previousKeys)
+        const newItems = (action.images ?? []).map((url) => ({ key: crypto.randomUUID(), url }))
+        return {
+          ...day,
+          routePoints: updateByKey(day.routePoints, action.key, (rp) => ({
+            ...rp,
+            placeId: action.placeId,
+            text: action.text ?? rp.text,
+          })),
+          gallery: [...gallery.slice(0, insertAt), ...newItems, ...gallery.slice(insertAt)],
+          autofilledImageKeys:
+            newItems.length > 0
+              ? { ...otherLinks, [action.key]: newItems.map((item) => item.key) }
+              : otherLinks,
+        }
+      })
 
     case 'fillDayFromSource': {
       const routePoints = action.content.routePoints.map((rp) => ({
@@ -269,7 +302,23 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
         text: rp.text,
         placeId: rp.placeId,
       }))
-      const withRoutePoints = updateDay(state, action.dayKey, (day) => ({ ...day, routePoints }))
+      const withRoutePoints = updateDay(state, action.dayKey, (day) => {
+        // The whole route-point list is being replaced, so every gallery image we know we added
+        // for the OLD list is replaced too — a wholesale version of the single-point swap above.
+        const knownAutofilledKeys = new Set(Object.values(day.autofilledImageKeys).flat())
+        const gallery = day.gallery.filter((g) => !knownAutofilledKeys.has(g.key))
+        const autofilledImageKeys: Record<string, string[]> = {}
+        const addedImages: typeof day.gallery = []
+        for (const rp of routePoints) {
+          if (rp.placeId == null) continue
+          const images = action.placeImages[rp.placeId] ?? []
+          if (images.length === 0) continue
+          const items = images.map((url) => ({ key: crypto.randomUUID(), url }))
+          autofilledImageKeys[rp.key] = items.map((item) => item.key)
+          addedImages.push(...items)
+        }
+        return { ...day, routePoints, gallery: [...gallery, ...addedImages], autofilledImageKeys }
+      })
       // An excursion's single day displays the TOUR-level text (see `dayTexts` in tourMapper —
       // day-level text is ignored at submit time), so that's what a fill must write for the
       // change to be visible. A multi-day tour's day keeps its own text as usual.

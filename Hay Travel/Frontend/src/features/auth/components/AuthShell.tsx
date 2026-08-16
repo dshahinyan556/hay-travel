@@ -96,7 +96,9 @@ export function AuthSubmitButton({
       // `.btn-motion` REPLACES `transition-colors` here rather than joining it: it is unlayered
       // CSS and declares the colour half itself, so it would win over the utility anyway and the
       // two `transition` declarations would fight (see the warning in index.css ~line 680).
-      className={`btn-motion inline-flex w-full items-center justify-center gap-2.5 rounded-full px-5 py-3 text-sm font-medium focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-panel focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 ${
+      // `.btn-sheen` here is unconditional — unlike the `BookingCard` submit, which drops it
+      // while disabled/pending, David wants this one animating always (Spec: 2026-08-16 request).
+      className={`btn-motion btn-sheen inline-flex w-full items-center justify-center gap-2.5 rounded-full px-5 py-3 text-sm font-medium focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-panel focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 ${
         isSuccess
           ? 'bg-success text-gold-on'
           : 'bg-gold-fill text-gold-on hover:bg-gold-fill-hover'

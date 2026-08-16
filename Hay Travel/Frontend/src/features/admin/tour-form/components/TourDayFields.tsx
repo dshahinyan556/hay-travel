@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Field, Input } from '@/shared/ui'
 import type { Localized, PlaceOption, RoutePointFormState, TourDayFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
@@ -48,8 +49,22 @@ export function TourDayFields({
   const hasUnlinkedPoint = day.routePoints.some(
     (rp) => rp.placeId == null && (rp.text.ru.trim() || rp.text.en.trim()),
   )
+  // placeId -> image urls, for the fill's own gallery autofill (same live swap a manual pick in
+  // `RoutePointPlaceSelect` triggers) — built once per `placeOptions` change, not per fill.
+  const placeImagesById = useMemo(
+    () => Object.fromEntries(placeOptions.map((p) => [p.id, p.images])),
+    [placeOptions],
+  )
   return (
     <div className="flex flex-col gap-4">
+      <div>
+        <DayFillTrigger
+          sources={daySources}
+          hasContent={hasFillableDayContent(day)}
+          onFill={(content) => actions.fillDayFromSource(day.key, content, placeImagesById)}
+        />
+      </div>
+
       <div className="max-w-56">
         <Field label={priceLabel} htmlFor={`day-price-${day.key}`} error={priceError}>
           <Input
@@ -87,14 +102,6 @@ export function TourDayFields({
         value={day.duration}
         onChange={(lang, value) => actions.setDayLocalized(day.key, 'duration', lang, value)}
       />
-
-      <div>
-        <DayFillTrigger
-          sources={daySources}
-          hasContent={hasFillableDayContent(day)}
-          onFill={(content) => actions.fillDayFromSource(day.key, content)}
-        />
-      </div>
 
       <LocalizedListEditor
         title="Точки маршрута"

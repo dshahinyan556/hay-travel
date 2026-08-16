@@ -111,24 +111,26 @@ function mapTags(tourTags: readonly TourTagInfoModel[], catalog: readonly TagInf
   })
 }
 
-/** In-flight dedupe for `getTagCatalog` (2026-08-16) — cleared as soon as the request settles, so
- * it only collapses calls fired in the same burst (e.g. `HomePage` loading `getFeaturedTours` and
- * `getToursByRegion` side by side, each wanting the catalog) and never serves stale data to a
- * later page load. */
-let tagCatalogInFlight: { languageCode: number; promise: Promise<TagInfoModel[]> } | null = null
+/** Per-language session cache (2026-08-16, same pattern as `getContentText` in
+ * `shared/api/siteSettings.ts`) — `HomePage`'s loader alone fires this from both
+ * `getFeaturedTours` and `getToursByRegion`/`getTours` side by side, and a plain page-to-page
+ * navigation calls it again. Kept for the SPA session per language (evicted only on failure, so a
+ * transient network error doesn't wedge every tag out for the rest of the session) — the catalog
+ * changes only when an admin edits it in Справочники, a switched-tab reload is an acceptable way
+ * to pick that up. */
+const tagCatalogCache = new Map<number, Promise<TagInfoModel[]>>()
 
 /** The tag catalog (name/color/type/percent per tag), one request per page — every tour on that
  * page resolves its `TourTagInfoModel[]` against this same list rather than each carrying its
  * own copy. */
 export function getTagCatalog(): Promise<TagInfoModel[]> {
   const languageCode = currentLanguageCode()
-  if (tagCatalogInFlight?.languageCode === languageCode) return tagCatalogInFlight.promise
+  const cached = tagCatalogCache.get(languageCode)
+  if (cached) return cached
 
   const promise = apiFetch<TagInfoModel[]>(`api/Tag/GetForClient?languageCode=${languageCode}`)
-  tagCatalogInFlight = { languageCode, promise }
-  promise.finally(() => {
-    if (tagCatalogInFlight?.promise === promise) tagCatalogInFlight = null
-  })
+  tagCatalogCache.set(languageCode, promise)
+  promise.catch(() => tagCatalogCache.delete(languageCode))
   return promise
 }
 

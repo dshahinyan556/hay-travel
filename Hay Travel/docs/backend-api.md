@@ -37,6 +37,36 @@
 - **TotalPrice** — compute-on-write: Σ(TourDay.Price) при create/update.
 - **Валидация** (`TourValidationService`, на create и update): экскурсия = ровно 1 день, тур ≥ 2; цена дня ≥ 0; ≥1 точка маршрута в каждом дне. Смена типа запрещена (`TourUpdateService`).
 
+## AsSplitQuery на графе чтения тура (2026-08-16)
+
+`GetTourInfo` (публичная детальная тура) уходил за 10+ секунд на туре с большой галереей —
+причина не в размере фото, а в форме запроса. `IncludeTourGraphForClient` тянет ~8
+sibling-коллекций с одного корня одним `Include`-чейном (`TourDetails→TourDay→
+{Translations, GalleryImages, RoutePoints→...}` плюс `Translations`/`AdditionalExpenses`/
+`Notes`/`TourRegions`/`TourTags` на `Tour`) — EF Core по умолчанию собирает это в ОДИН JOIN,
+где строки перемножаются по каждой комбинации коллекций (cartesian explosion): с парой фото
+незаметно, с десятками — катастрофично. Исправлено `.AsSplitQuery()` в
+`TourClientInfo.GetClientDetailAsync` (EF Core бьёт граф на отдельные SQL-запросы по коллекции
+вместо одного JOIN) — 10-12 сек → ~0.2-0.4 сек.
+
+`AsSplitQuery()` добавлен как метод самой репозиторной абстракции
+(`IEntityQueryableRepository<T>.AsSplitQuery()`, `EntityQueryableRepository.cs`) — доступен
+любому месту, строящему `Include`-граф с несколькими sibling-коллекциями, не только этому.
+
+**Дополнено тем же днём** (Давид подтвердил: вход в админку, открытие тура на редактирование и
+сохранение тоже тормозили — та же причина на других вызывающих местах):
+- `TourInfo.GetEntityQueryableRepository()` (админский `InitUpdate` — открытие одного тура) и
+  `TourUpdateService` (загрузка tracked-копии перед сохранением) получили `.AsSplitQuery()`
+  так же, как клиентский путь выше.
+- `TourInfo.GetAllAsync()` (админский СПИСОК — дашборд, страница продуктов) пошёл дальше
+  `AsSplitQuery` и получил отдельный облегчённый граф — `IncludeTourAdminListGraph`
+  (`TourGraphQueryExtensions.cs`), по аналогии с клиентским `IncludeTourCardGraph` (D-11).
+  Список ничего не показывает из содержимого дня (только `tourDays.length`), поэтому граф
+  включает `TourDetails.TourDay` голой ссылкой (без неё маппер отдал бы `null` на каждом дне),
+  но БЕЗ `TourDay.Translations`/`GalleryImages`/`RoutePoints` — именно эта вложенность и была
+  источником cartesian explosion, здесь ещё и помноженной на количество туров в каталоге.
+  `TourInfo.InitUpdate` (открытие ОДНОГО тура) остался на полном графе — форма редактирует всё.
+
 ## Сервисы (карта)
 `TourInitializationService` (init) · `TourCreationService` (create) · `TourInfo` (read/GetAll/InitUpdate) · `TourUpdateService` (update-reconcile) · `TourActivationService` (SetActive) · `TourArchivalService` (SetArchived) · `TourFeaturedService` (SetFeatured/ReorderFeatured) · `TourDeletionService` (hard delete) · `TourValidationService` (валидация).
 

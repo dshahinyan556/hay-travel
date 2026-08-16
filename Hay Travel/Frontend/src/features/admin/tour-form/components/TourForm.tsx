@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Card, Tabs } from '@/shared/ui'
 import type { TabItem } from '@/shared/ui'
 import { TourType } from '@/features/admin/lib/enums'
@@ -68,6 +68,12 @@ export function TourForm({
 }: TourFormProps) {
   const isExcursion = state.type === TourType.Excursion
   const singleDay = state.days[0]
+  // placeId -> image urls, for the excursion's own "заполнить из другого продукта" gallery
+  // autofill — same lookup `TourDayFields` builds for the multi-day accordion.
+  const placeImagesById = useMemo(
+    () => Object.fromEntries(catalogSuggestions.placeOptions.map((p) => [p.id, p.images])),
+    [catalogSuggestions.placeOptions],
+  )
 
   const tabs: TabItem[] = [
     ...(isExcursion ? [] : [{ id: 'days', label: 'Дни', badge: state.days.length } as TabItem]),
@@ -126,7 +132,7 @@ export function TourForm({
                   duration: state.duration,
                   routePoints: singleDay.routePoints,
                 })}
-                onFill={(content) => actions.fillDayFromSource(singleDay.key, content)}
+                onFill={(content) => actions.fillDayFromSource(singleDay.key, content, placeImagesById)}
               />
             </div>
 

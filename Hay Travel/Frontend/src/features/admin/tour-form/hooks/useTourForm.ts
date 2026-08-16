@@ -58,8 +58,18 @@ export interface TourFormActions {
   removeRoutePoint: (dayKey: string, key: string) => void
   moveRoutePoint: (dayKey: string, fromIndex: number, toIndex: number) => void
   setRoutePointText: (dayKey: string, key: string, lang: LangKey, value: string) => void
-  setRoutePointPlace: (dayKey: string, key: string, placeId: number | null, text?: Localized) => void
-  fillDayFromSource: (dayKey: string, content: DaySourceContent) => void
+  setRoutePointPlace: (
+    dayKey: string,
+    key: string,
+    placeId: number | null,
+    text?: Localized,
+    images?: string[],
+  ) => void
+  fillDayFromSource: (
+    dayKey: string,
+    content: DaySourceContent,
+    placeImages: Record<number, string[]>,
+  ) => void
   // gallery
   addGallery: (dayKey: string) => void
   removeGallery: (dayKey: string, key: string) => void
@@ -166,9 +176,10 @@ export function useTourForm(
         dispatch({ kind: 'moveRoutePoint', dayKey, fromIndex, toIndex }),
       setRoutePointText: (dayKey, key, lang, value) =>
         dispatch({ kind: 'setRoutePointText', dayKey, key, lang, value }),
-      setRoutePointPlace: (dayKey, key, placeId, text) =>
-        dispatch({ kind: 'setRoutePointPlace', dayKey, key, placeId, text }),
-      fillDayFromSource: (dayKey, content) => dispatch({ kind: 'fillDayFromSource', dayKey, content }),
+      setRoutePointPlace: (dayKey, key, placeId, text, images) =>
+        dispatch({ kind: 'setRoutePointPlace', dayKey, key, placeId, text, images }),
+      fillDayFromSource: (dayKey, content, placeImages) =>
+        dispatch({ kind: 'fillDayFromSource', dayKey, content, placeImages }),
 
       addGallery: (dayKey) => dispatch({ kind: 'addGallery', dayKey }),
       removeGallery: (dayKey, key) => dispatch({ kind: 'removeGallery', dayKey, key }),
