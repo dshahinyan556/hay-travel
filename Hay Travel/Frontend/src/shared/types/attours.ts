@@ -29,6 +29,8 @@ export interface GalleryImageCreateModel {
 
 export interface RoutePointCreateModel {
   sortOrder: number
+  /** Ссылка на каталог Place — null = свободная запись без каталога (F13 gap closure). */
+  placeId: number | null
   /** Route points have a single textual field, so `translations[].type` is always 0. */
   translations: TranslatableCreateModel[]
 }
@@ -91,6 +93,8 @@ export interface GalleryImageInfoModel {
 export interface RoutePointInfoModel {
   id: number
   sortOrder: number
+  /** Ссылка на каталог Place — null = свободная запись без каталога (F13 gap closure). */
+  placeId: number | null
   translations: TranslatableInfoModel[]
 }
 

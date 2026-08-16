@@ -31,6 +31,8 @@ import type {
   GalleryItemFormState,
   Localized,
   LocalizedListItem,
+  PlaceOption,
+  RoutePointFormState,
   TourDayFormState,
   TourFormState,
 } from '@/features/admin/types/form'
@@ -51,7 +53,12 @@ export const emptyLocalizedItem = (): LocalizedListItem => ({
   text: emptyLocalized(),
 })
 
-export const emptyRoutePoint = emptyLocalizedItem
+export const emptyRoutePoint = (): RoutePointFormState => ({
+  key: newKey(),
+  text: emptyLocalized(),
+  placeId: null,
+})
+
 export const emptyOrganizationalDetail = emptyLocalizedItem
 export const emptyRestriction = emptyLocalizedItem
 export const emptyIncluded = emptyLocalizedItem
@@ -111,6 +118,12 @@ const CATALOG_NAME_TYPE = 0
 
 export function placesToSuggestions(places: PlaceInfoModel[]): Localized[] {
   return places.map((p) => readLocalized(p.translations, CATALOG_NAME_TYPE))
+}
+
+/** Place catalog entries offered as a hard link for a route point (F13 gap closure) — distinct
+ * from `placesToSuggestions`, which only offers the bilingual name for free-text autocomplete. */
+export function placesToOptions(places: PlaceInfoModel[]): PlaceOption[] {
+  return places.map((p) => ({ id: p.id, name: readLocalized(p.translations, CATALOG_NAME_TYPE) }))
 }
 
 export function expenseTemplatesToSuggestions(templates: ExpenseTemplateInfoModel[]): Localized[] {
@@ -243,6 +256,7 @@ function createDayToForm(day: TourDayCreateModel): TourDayFormState {
     routePoints: (day.routePoints ?? []).map((rp) => ({
       key: newKey(),
       text: readLocalized(rp.translations ?? [], ExpenseTranslationType.Description),
+      placeId: rp.placeId ?? null,
     })),
     gallery: (day.galleryImages ?? []).map((g) => ({ key: newKey(), url: g.url })),
   }
@@ -262,6 +276,7 @@ function infoDayToForm(day: TourDayInfoModel): TourDayFormState {
       key: newKey(),
       serverId: rp.id,
       text: readLocalized(rp.translations ?? [], ExpenseTranslationType.Description),
+      placeId: rp.placeId ?? null,
     })),
     gallery: byOrder(day.galleryImages ?? []).map((g) => ({
       key: newKey(),
@@ -319,6 +334,7 @@ export function formToCreateModel(form: TourFormState): TourCreateModel {
         galleryImages: day.gallery.map((g, i) => ({ url: g.url, sortOrder: i })),
         routePoints: day.routePoints.map((rp, i) => ({
           sortOrder: i,
+          placeId: rp.placeId,
           translations: writeLocalized(ExpenseTranslationType.Description, rp.text),
         })),
       }
@@ -410,6 +426,7 @@ export function formToUpdateModel(form: TourFormState, tourId: number): TourInfo
       routePoints: day.routePoints.map((rp, i) => ({
         id: rp.serverId ?? NEW,
         sortOrder: i,
+        placeId: rp.placeId,
         translations: asInfoTranslations(writeLocalized(ExpenseTranslationType.Description, rp.text)),
       })),
       }
@@ -458,4 +475,76 @@ export function formToUpdateModel(form: TourFormState, tourId: number): TourInfo
 function parseDecimal(value: string): number {
   const n = Number(value.replace(',', '.'))
   return Number.isFinite(n) ? n : 0
+}
+
+/* -------------------------------------------------------------------------- */
+/*  "Заполнить день из другого продукта" (F13 gap closure, part 2)             */
+/* -------------------------------------------------------------------------- */
+
+/** What a day-fill actually copies: text + route points (with their Place link). Deliberately
+ * excludes price and gallery — price stays the target day's own, and gallery photos arrive on
+ * save through the normal Place auto-copy for any route point that carries a `placeId`
+ * (`RoutePointGalleryImageCopier` on the backend); copying gallery URLs here would double them
+ * up with that mechanism. */
+export interface DaySourceContent {
+  title: Localized
+  shortDescription: Localized
+  description: Localized
+  duration: Localized
+  routePoints: { text: Localized; placeId: number | null }[]
+}
+
+/** One pickable source in the "заполнить день из другого продукта" list — an excursion (its one
+ * day IS the product) or one day of a multi-day tour. */
+export interface DaySource {
+  id: string
+  tourTitle: Localized
+  /** e.g. "День 2" — empty for an excursion, whose single day needs no sub-label. */
+  dayLabel: string
+  content: DaySourceContent
+}
+
+/** Flattens every non-archived product's day(s) into pickable sources. `excludeTourId` drops the
+ * tour currently being edited — filling a day from itself is meaningless. */
+export function toursToDaySources(tours: TourInfoModel[], excludeTourId?: number): DaySource[] {
+  return tours
+    .filter((t) => t.id !== excludeTourId)
+    .flatMap((t) => {
+      const tourTitle = readLocalized(t.translations, TourTranslationType.Title)
+      const days = t.tourDays ?? []
+      return days.map((day, i) => ({
+        id: `${t.id}-${day.id}`,
+        tourTitle,
+        dayLabel: days.length > 1 ? `День ${i + 1}` : '',
+        content: {
+          title: readLocalized(day.translations ?? [], TourDayTranslationType.Title),
+          shortDescription: readLocalized(day.translations ?? [], TourDayTranslationType.ShortDescription),
+          description: readLocalized(day.translations ?? [], TourDayTranslationType.Description),
+          duration: readLocalized(day.translations ?? [], TourDayTranslationType.Duration),
+          routePoints: sortBySortOrder(day.routePoints ?? []).map((rp) => ({
+            text: readLocalized(rp.translations ?? [], ExpenseTranslationType.Description),
+            placeId: rp.placeId ?? null,
+          })),
+        },
+      }))
+    })
+}
+
+/** Whether a day (or, for an excursion, the tour-level fields standing in for its single day)
+ * has anything a fill would overwrite — gates the "replace content?" confirm step. */
+export function hasFillableDayContent(fields: {
+  title: Localized
+  shortDescription: Localized
+  description: Localized
+  duration: Localized
+  routePoints: unknown[]
+}): boolean {
+  const filled = (loc: Localized) => Boolean(loc.ru.trim() || loc.en.trim())
+  return (
+    fields.routePoints.length > 0 ||
+    filled(fields.title) ||
+    filled(fields.shortDescription) ||
+    filled(fields.description) ||
+    filled(fields.duration)
+  )
 }
