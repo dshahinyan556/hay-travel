@@ -1,6 +1,7 @@
 import { SortableList } from '@/shared/ui'
 import { TourType } from '@/features/admin/lib/enums'
-import type { Localized, TourDayFormState } from '@/features/admin/types/form'
+import type { Localized, PlaceOption, TourDayFormState } from '@/features/admin/types/form'
+import type { DaySource } from '@/features/admin/lib/tourMapper'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
 import { minDaysFor } from '@/features/admin/tour-form/reducer/tourFormReducer'
 import { AddButton } from '@/features/admin/ui/RepeaterControls'
@@ -20,6 +21,10 @@ interface TourDaysEditorProps {
   actions: TourFormActions
   /** Existing route-point catalog entries offered as autocomplete. */
   routePointSuggestions: Localized[]
+  /** Place catalog entries a route point can be hard-linked to (F13 gap closure). */
+  placeOptions: PlaceOption[]
+  /** Other products' days offered as a "заполнить из другого продукта" source (F13, part 2). */
+  daySources: DaySource[]
 }
 
 /** Stable identity for the drag list — days are addressed by their form key, never by index. */
@@ -43,6 +48,8 @@ export function TourDaysEditor({
   daysError,
   actions,
   routePointSuggestions,
+  placeOptions,
+  daySources,
 }: TourDaysEditorProps) {
   const canRemove = days.length > minDaysFor(type)
 
@@ -67,6 +74,8 @@ export function TourDaysEditor({
               routePointError={dayRoutePointErrors[day.key]}
               actions={actions}
               routePointSuggestions={routePointSuggestions}
+              placeOptions={placeOptions}
+              daySources={daySources}
             />
           )}
         </SortableList>

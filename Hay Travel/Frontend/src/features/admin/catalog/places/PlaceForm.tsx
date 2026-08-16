@@ -163,7 +163,8 @@ export function PlaceForm({ place, regions, isSubmitting, error, onSubmit, onCan
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium text-neutral-700">Фотографии</span>
         <p className="text-xs text-neutral-500">
-          Добавляются в галерею дня автоматически при выборе этой точки в новом маршруте.
+          Добавляются в галерею дня автоматически, когда эта точка выбрана из справочника в
+          маршруте (не для точек, введённых свободным текстом).
         </p>
         <ImageListEditor
           items={values.images}

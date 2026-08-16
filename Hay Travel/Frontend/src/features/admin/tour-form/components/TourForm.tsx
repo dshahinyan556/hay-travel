@@ -7,9 +7,14 @@ import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourFo
 import type { TourFormValidation } from '@/features/admin/tour-form/lib/validation'
 import type { RegionInfoModel, TagInfoModel } from '@/shared/types/attours'
 import { ImageListEditor } from '@/features/admin/ui/ImageListEditor'
+import type { RoutePointFormState } from '@/features/admin/types/form'
+import type { DaySource } from '@/features/admin/lib/tourMapper'
+import { hasFillableDayContent } from '@/features/admin/lib/tourMapper'
 import { TourFormHeader } from './TourFormHeader'
 import { TourDaysEditor } from './TourDaysEditor'
 import { LocalizedListEditor } from './LocalizedListEditor'
+import { RoutePointPlaceSelect } from './RoutePointPlaceSelect'
+import { DayFillTrigger } from './DayFillTrigger'
 import { AdditionalExpensesEditor } from './AdditionalExpensesEditor'
 import { FormActions } from './FormActions'
 
@@ -28,6 +33,8 @@ interface TourFormProps {
   regions: RegionInfoModel[]
   /** The tag catalog, for the tag picker. */
   tags: TagInfoModel[]
+  /** Other products' days offered as a "заполнить из другого продукта" source (F13, part 2). */
+  daySources: DaySource[]
   onSubmit: () => void
 }
 
@@ -56,6 +63,7 @@ export function TourForm({
   catalogSuggestions,
   regions,
   tags,
+  daySources,
   onSubmit,
 }: TourFormProps) {
   const isExcursion = state.type === TourType.Excursion
@@ -108,6 +116,20 @@ export function TourForm({
       {isExcursion && singleDay && (
         <Card padding="lg">
           <div className="flex flex-col gap-5">
+            <div>
+              <DayFillTrigger
+                sources={daySources}
+                hasContent={hasFillableDayContent({
+                  title: state.title,
+                  shortDescription: state.shortDescription,
+                  description: state.description,
+                  duration: state.duration,
+                  routePoints: singleDay.routePoints,
+                })}
+                onFill={(content) => actions.fillDayFromSource(singleDay.key, content)}
+              />
+            </div>
+
             <LocalizedListEditor
               title="Точки маршрута"
               hint="Порядок точек соответствует маршруту экскурсии."
@@ -126,7 +148,23 @@ export function TourForm({
               onChangeText={(key, lang, value) =>
                 actions.setRoutePointText(singleDay.key, key, lang, value)
               }
+              renderExtra={(item) => (
+                <RoutePointPlaceSelect
+                  dayKey={singleDay.key}
+                  item={item as RoutePointFormState}
+                  placeOptions={catalogSuggestions.placeOptions}
+                  actions={actions}
+                />
+              )}
             />
+            {singleDay.routePoints.some(
+              (rp) => rp.placeId == null && (rp.text.ru.trim() || rp.text.en.trim()),
+            ) && (
+              <p className="text-xs text-neutral-400">
+                Точки без привязки к каталогу — свободный текст, их фото не попадут в галерею
+                автоматически.
+              </p>
+            )}
 
             <div className="flex flex-col gap-2">
               <h4 className="text-sm font-semibold text-neutral-800">Галерея</h4>
@@ -158,6 +196,8 @@ export function TourForm({
               daysError={validation.days}
               actions={actions}
               routePointSuggestions={catalogSuggestions.routePoints}
+              placeOptions={catalogSuggestions.placeOptions}
+              daySources={daySources}
             />
           )}
 
