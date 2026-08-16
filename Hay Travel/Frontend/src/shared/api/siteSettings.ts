@@ -125,31 +125,48 @@ export interface ContentText {
   largeGroupInvitation: string
 }
 
+/** In-flight dedupe (2026-08-16) — `Footer` (every page's layout) and the page body
+ * (`HomePage`/`ToursPage`/`TourDetailPage`) each call `getContentText` independently, so a plain
+ * navigation fired it twice. Cleared as soon as the request settles, so this only collapses calls
+ * fired in the same burst and never serves stale data to a later page load. */
+let contentTextInFlight: { languageCode: number; promise: Promise<ContentText> } | null = null
+
 /** Footer tagline, catalog (/trips) heading + subtitle, and the home "избранное" section
  * heading — admin-editable since 2026-08-02 (`Настройки → Тексты сайта`), previously hardcoded
  * in `shared/i18n/dictionary.ts`. Never throws; the backend catalog default covers the blank
  * case, so callers use the value directly with no local fallback string. */
-export async function getContentText(): Promise<ContentText> {
-  try {
-    const res = await apiFetch<SiteSettingsPublicModel>(
-      `api/SiteSettings/GetPublic?languageCode=${LANGUAGE_CODE_BY_LOCALE[getStoredLocale()]}&group=${SITE_SETTING_GROUP_CONTENT}`,
-    )
-    return {
-      footerTagline: res.values['content.footerTagline'] ?? '',
-      catalogTitle: res.values['content.catalogTitle'] ?? '',
-      catalogSubtitle: res.values['content.catalogSubtitle'] ?? '',
-      featuredHeading: res.values['content.featuredHeading'] ?? '',
-      largeGroupInvitation: res.values['content.largeGroupInvitation'] ?? '',
+export function getContentText(): Promise<ContentText> {
+  const languageCode = LANGUAGE_CODE_BY_LOCALE[getStoredLocale()]
+  if (contentTextInFlight?.languageCode === languageCode) return contentTextInFlight.promise
+
+  const promise = (async (): Promise<ContentText> => {
+    try {
+      const res = await apiFetch<SiteSettingsPublicModel>(
+        `api/SiteSettings/GetPublic?languageCode=${languageCode}&group=${SITE_SETTING_GROUP_CONTENT}`,
+      )
+      return {
+        footerTagline: res.values['content.footerTagline'] ?? '',
+        catalogTitle: res.values['content.catalogTitle'] ?? '',
+        catalogSubtitle: res.values['content.catalogSubtitle'] ?? '',
+        featuredHeading: res.values['content.featuredHeading'] ?? '',
+        largeGroupInvitation: res.values['content.largeGroupInvitation'] ?? '',
+      }
+    } catch {
+      return {
+        footerTagline: '',
+        catalogTitle: '',
+        catalogSubtitle: '',
+        featuredHeading: '',
+        largeGroupInvitation: '',
+      }
     }
-  } catch {
-    return {
-      footerTagline: '',
-      catalogTitle: '',
-      catalogSubtitle: '',
-      featuredHeading: '',
-      largeGroupInvitation: '',
-    }
-  }
+  })()
+
+  contentTextInFlight = { languageCode, promise }
+  promise.finally(() => {
+    if (contentTextInFlight?.promise === promise) contentTextInFlight = null
+  })
+  return promise
 }
 
 /**

@@ -36,6 +36,18 @@ export interface TourExpense {
   amount: number | null
 }
 
+/** A merch tag on the card ("Скидка 15%", "Хит сезона", …), admin-managed
+ * (`features/admin/catalog/tags`). `label` is already resolved (name + "N%" for a discount tag,
+ * composed once in `shared/api/tours.ts` — components never re-derive it). `color` is one of the
+ * site's 5 palette tokens (`shared/ui/ProductTag`'s `TagColor` numbering), never a free hex. */
+export interface TourTag {
+  id: number
+  isDiscount: boolean
+  discountPercent: number | null
+  color: number
+  label: string
+}
+
 export interface Tour {
   id: string
   title: string
@@ -51,6 +63,9 @@ export interface Tour {
   priceFrom: number
   coverImage: string
   shortDescription: string
+  /** Up to 3, discount tag (if any) always first — `shared/api/tours.ts`'s `mapTags`. Empty when
+   * the product has none. */
+  tags: readonly TourTag[]
 }
 
 export interface TourDetail extends Tour {

@@ -88,6 +88,13 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                     (target, src) => { target.RegionId = src.RegionId; target.SortOrder = src.SortOrder; });
             }
 
+            // Тот же null/[] контракт, что у Regions выше.
+            if (incoming.TourTags is not null)
+            {
+                ReconcileCollection(existing.TourTags, incoming.TourTags,
+                    (target, src) => { target.TagId = src.TagId; });
+            }
+
             await ReconcileTourDays(existing, incoming);
 
             // Compute-on-write: пересчёт после всех day-диффов.

@@ -82,7 +82,10 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const method = (init?.method ?? 'GET').toUpperCase()
 
   const headers = new Headers(init?.headers)
-  if (init?.body != null && METHODS_WITH_BODY.has(method) && !headers.has('Content-Type')) {
+  // FormData (file uploads) must NOT get an explicit Content-Type: the browser derives its own
+  // "multipart/form-data; boundary=…" from the FormData body, and setting anything ourselves
+  // (even the right MIME type without a boundary) breaks server-side multipart parsing.
+  if (init?.body != null && METHODS_WITH_BODY.has(method) && !headers.has('Content-Type') && !(init.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json')
   }
   // No-op against a real backend; only matters when tunneled through ngrok's free tier, which

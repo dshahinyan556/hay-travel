@@ -39,6 +39,8 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                     opt => opt.MapFrom(src => src.Notes.OrderBy(n => n.Type).ThenBy(n => n.SortOrder)))
                 .ForMember(dest => dest.Regions,
                     opt => opt.MapFrom(src => src.TourRegions.OrderBy(tr => tr.SortOrder)))
+                .ForMember(dest => dest.Tags,
+                    opt => opt.MapFrom(src => src.TourTags))
                 // TourDays собираем из TourDetails, сохраняя порядок по SortOrder
                 .ForMember(dest => dest.TourDays, opt => opt.MapFrom(src =>
                     src.TourDetails
@@ -57,6 +59,7 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.AdditionalExpenses, opt => opt.MapFrom(src => src.AdditionalExpenses))
                 .ForMember(dest => dest.Notes, opt => opt.MapFrom(src => src.Notes))
                 .ForMember(dest => dest.TourRegions, opt => opt.MapFrom(src => src.Regions))
+                .ForMember(dest => dest.TourTags, opt => opt.MapFrom(src => src.Tags))
                 .AfterMap((src, dest, context) => BuildTourDetails(src.TourDays, dest, context.Mapper));
 
             // TourInfoModel -> Tour (для обновления)
@@ -77,6 +80,7 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.AdditionalExpenses, opt => opt.MapFrom(src => src.AdditionalExpenses))
                 .ForMember(dest => dest.Notes, opt => opt.MapFrom(src => src.Notes))
                 .ForMember(dest => dest.TourRegions, opt => opt.MapFrom(src => src.Regions))
+                .ForMember(dest => dest.TourTags, opt => opt.MapFrom(src => src.Tags))
                 .AfterMap((src, dest, context) => BuildTourDetails(src.TourDays, dest, context.Mapper));
 
             // Tour -> TourCardModel (публичный список карточек, пункт 3.5 / D-11).
@@ -92,7 +96,9 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.DurationDays, opt => opt.MapFrom(src => src.TourDetails.Count))
                 .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations))
                 .ForMember(dest => dest.Regions,
-                    opt => opt.MapFrom(src => src.TourRegions.OrderBy(tr => tr.SortOrder)));
+                    opt => opt.MapFrom(src => src.TourRegions.OrderBy(tr => tr.SortOrder)))
+                .ForMember(dest => dest.Tags,
+                    opt => opt.MapFrom(src => src.TourTags));
 
             // ============= МАППИНГИ ДЛЯ TOURDAY =============
 
@@ -308,6 +314,61 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Region, opt => opt.Ignore())
                 .ForMember(dest => dest.RegionId, opt => opt.MapFrom(src => src.RegionId))
                 .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder));
+
+            // ============= Mappings for TAG =============
+            // Каталог мерч-тегов продукта (скидка/хит сезона/…). DiscountPercent наследуется
+            // как есть, без резолва — расчёт цены со скидкой не задача маппера.
+
+            // Tag -> TagInfoModel
+            CreateMap<Tag, TagInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.Type))
+                .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color))
+                .ForMember(dest => dest.DiscountPercent, opt => opt.MapFrom(src => src.DiscountPercent))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+
+            // TagCreateModel -> Tag
+            CreateMap<TagCreateModel, Tag>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.TourTags, opt => opt.Ignore())
+                .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.Type))
+                .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color))
+                .ForMember(dest => dest.DiscountPercent, opt => opt.MapFrom(src => src.DiscountPercent))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+
+            // TagInfoModel -> Tag (для обновления)
+            CreateMap<TagInfoModel, Tag>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.TourTags, opt => opt.Ignore())
+                .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.Type))
+                .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color))
+                .ForMember(dest => dest.DiscountPercent, opt => opt.MapFrom(src => src.DiscountPercent))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+
+            // ============= Mappings for TOURTAG =============
+            // Плоская проекция в граф тура (как TourRegion) — без вложенного Tag, каталог
+            // (имя/цвет/тип/процент) фронт резолвит через TagController.
+
+            CreateMap<TourTag, TourTagInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.TagId, opt => opt.MapFrom(src => src.TagId));
+
+            CreateMap<TourTagCreateModel, TourTag>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.TourId, opt => opt.Ignore())
+                .ForMember(dest => dest.Tour, opt => opt.Ignore())
+                .ForMember(dest => dest.Tag, opt => opt.Ignore())
+                .ForMember(dest => dest.TagId, opt => opt.MapFrom(src => src.TagId));
+
+            CreateMap<TourTagInfoModel, TourTag>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.TourId, opt => opt.Ignore())
+                .ForMember(dest => dest.Tour, opt => opt.Ignore())
+                .ForMember(dest => dest.Tag, opt => opt.Ignore())
+                .ForMember(dest => dest.TagId, opt => opt.MapFrom(src => src.TagId));
 
             // ============= Mappings for PLACE =============
             // Каталог точек (3.4). RegionSlug денормализуется из связанного Region (переводы
@@ -601,6 +662,13 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
                 .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
 
+            CreateMap<TranslatableCreateModel, TagTranslation>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.TagId, opt => opt.Ignore())
+                .ForMember(dest => dest.Tag, opt => opt.Ignore())
+                .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
+                .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
+
             // ---- InfoModel -> Entity (обновление) ----
             // Id сохраняется, чтобы слой обновления сверял переводы по Id
 
@@ -666,6 +734,13 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
                 .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
 
+            CreateMap<TranslatableInfoModel, TagTranslation>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.TagId, opt => opt.Ignore())
+                .ForMember(dest => dest.Tag, opt => opt.Ignore())
+                .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
+                .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
+
             // ---- Entity -> InfoModel (чтение) ----
 
             CreateMap<AdditionalExpenseTranslation, TranslatableInfoModel>()
@@ -715,6 +790,12 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
 
             CreateMap<TourNoteTemplateTranslation, TranslatableInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.Type, opt => opt.MapFrom(src => 0))
+                .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
+                .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
+
+            CreateMap<TagTranslation, TranslatableInfoModel>()
                 .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
                 .ForMember(dest => dest.Type, opt => opt.MapFrom(src => 0))
                 .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))

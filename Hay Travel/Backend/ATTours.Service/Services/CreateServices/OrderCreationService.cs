@@ -61,14 +61,26 @@ namespace ATTours.BusinessServices.Services.CreateServices
                 // Владелец заказа — только из токена (IDOR-защита по конструкции).
                 entity.UserId = userId;
 
-                // Снапшот цены на момент заказа: последующая правка цены тура не должна
-                // менять уже оформленную бронь. Тур может не существовать — это отобьёт
-                // валидация (TourNotFound), здесь просто берём 0 и не падаем NRE.
-                var tourPrice = await Context.Set<Tour>()
-                                             .Where(tour => tour.Id == entity.TourId)
-                                             .Select(tour => tour.TotalPrice)
-                                             .FirstOrDefaultAsync(CancellationToken);
-                var snapshot = tourPrice ?? 0m;
+                // Снапшот цены и Discount-тега на момент заказа: последующая правка цены тура
+                // или тега не должна менять уже оформленную бронь. Тур может не существовать —
+                // это отобьёт валидация (TourNotFound), здесь просто берём 0/null и не падаем NRE.
+                // Discount-тег максимум один на тур (TourValidationService), поэтому
+                // FirstOrDefault однозначен.
+                var tourData = await Context.Set<Tour>()
+                                            .Where(tour => tour.Id == entity.TourId)
+                                            .Select(tour => new
+                                            {
+                                                tour.TotalPrice,
+                                                DiscountPercent = tour.TourTags
+                                                    .Where(tt => tt.Tag.Type == TagType.Discount)
+                                                    .Select(tt => (decimal?)tt.Tag.DiscountPercent)
+                                                    .FirstOrDefault()
+                                            })
+                                            .FirstOrDefaultAsync(CancellationToken);
+
+                var snapshot = tourData?.TotalPrice ?? 0m;
+                var discountPercent = tourData?.DiscountPercent;
+                var discountedPrice = ApplyDiscount(snapshot, discountPercent);
 
                 entity.CreatedAtUtc = DateTime.UtcNow;
 
@@ -80,28 +92,39 @@ namespace ATTours.BusinessServices.Services.CreateServices
                 entity.Payment = new OrderPayment
                 {
                     TourPriceSnapshot = snapshot,
-                    TotalAmount = ResolveTotalAmount(snapshot, entity.GuestCount),
-                    PrepaidAmount = ResolvePrepayment(snapshot, entity.GuestCount),
+                    DiscountPercent = discountPercent,
+                    TotalAmount = ResolveTotalAmount(discountedPrice, entity.GuestCount),
+                    PrepaidAmount = ResolvePrepayment(discountedPrice, entity.GuestCount),
                     Currency = BaseCurrency
                 };
             }
         }
 
-        // 1–4 гостей: цена фиксирована за бронь целиком (НЕ умножается на число гостей).
-        // 5–6: та же цена ×1.2. 7+: «цена по запросу» — сайт не показывает сумму и не берёт
-        // с посетителя обязательство по конкретной цифре, поэтому и здесь автоматической
-        // суммы нет (0 — админ согласовывает цену отдельно, вне заказа).
-        private static decimal ResolveTotalAmount(decimal tourPriceSnapshot, int guestCount)
+        // Округление до целого драма — как ResolveTotalAmount ниже, дробных лум на бэке нет.
+        private static decimal ApplyDiscount(decimal tourPriceSnapshot, decimal? discountPercent)
+        {
+            if (discountPercent is null or <= 0)
+                return tourPriceSnapshot;
+
+            return Math.Round(tourPriceSnapshot * (1 - discountPercent.Value / 100m), 0, MidpointRounding.AwayFromZero);
+        }
+
+        // 1–4 гостей: цена (уже со скидкой, если она есть) фиксирована за бронь целиком
+        // (НЕ умножается на число гостей). 5–6: та же цена ×1.2. 7+: «цена по запросу» — сайт
+        // не показывает сумму и не берёт с посетителя обязательство по конкретной цифре,
+        // поэтому и здесь автоматической суммы нет (0 — админ согласовывает цену отдельно,
+        // вне заказа).
+        private static decimal ResolveTotalAmount(decimal price, int guestCount)
         {
             if (guestCount <= TierBaseMaxGuests)
-                return tourPriceSnapshot;
+                return price;
             if (guestCount <= TierSurchargeMaxGuests)
-                return tourPriceSnapshot * TierSurchargeMultiplier;
+                return price * TierSurchargeMultiplier;
             return 0m;
         }
 
         // Seam под будущую политику предоплаты (ADR 014). Платёжного шлюза нет —
         // предоплата это просто число, и сейчас она нулевая.
-        private static decimal ResolvePrepayment(decimal tourPriceSnapshot, int guestCount) => 0m;
+        private static decimal ResolvePrepayment(decimal price, int guestCount) => 0m;
     }
 }

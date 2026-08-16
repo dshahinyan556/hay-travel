@@ -139,5 +139,46 @@
 
 Новых сущностей/репозиториев/миграции не потребовалось — всё укладывается в уже существующий каталог-в-коде `SiteSettingCatalog` (ADR 002).
 
+## Загрузка изображений (`api/Upload`) — 2026-08-15
+Второй способ заполнить те же `ImageUrl`-строковые поля, что раньше принимали только URL руками (тур `mainImageUrl`, `Place.imageUrl`/`Place.Images[].url`, `TourDay.Gallery[].url`, настройки `hero.imageUrl`/`branding.logoUrl`/`seo.ogImageUrl`/`branding.authImageUrl`) — контракт этих полей не менялся, они по-прежнему просто строка-URL. Ни новой сущности, ни миграции: загруженный файл просто возвращает URL, который фронт кладёт в то же поле, что раньше заполнялось руками.
+
+| Метод | Route | Тело / параметры | Возврат |
+| --- | --- | --- | --- |
+| POST | `api/Upload/Image` | `multipart/form-data`, поле `file` | `{ url: string }` |
+
+- **Доступ**: `[Authorize(Roles = TourManagerOrAdmin)]` — та же граница, что у Tour/Place Create/Update (тур-менеджер должен уметь загрузить фото прямо из формы тура/точки, не только Admin).
+- **Валидация**: content-type только `image/jpeg`/`image/png`/`image/webp` (400 `UploadContentTypeNotAllowed`=2301), размер ≤ 8 МБ по умолчанию (400 `UploadFileTooLarge`=2300, плюс `[RequestSizeLimit]` на контроллере), нечитаемый файл (400 `UploadInvalidImage`=2302). Лимиты — `UploadSettings` (`appsettings.json` секция `Upload`), не хардкод.
+- **Хранение**: локальный диск (`ATTours.BusinessServices.Files.ImageUploadService`, SkiaSharp — не ImageSharp, лицензия MIT, важно для коммерческого проекта), путь — `UploadSettings.StoragePath` (по умолчанию `uploads/` рядом с приложением, в Docker — `/app/uploads`, смонтирован volume'ом, см. `server-ops.md`). Раздача — `/uploads/*`, в проде nginx отдаёт файлы с диска напрямую, минуя .NET; `UseStaticFiles` в `Startup.cs` — только для локальной разработки, где nginx нет.
+- **Что сохраняется на каждую загрузку — ДВА файла, одно имя**: оригинал (EXIF-ориентация применена, длинная сторона ≤ `MaxOriginalDimension`=4000px) под тем же расширением, что и вход, и WebP-сжатая копия (`CompressedMaxDimension`=1600px, качество `WebpQuality`=75) **рядом, тем же basename** — фронт получает в ответе только URL оригинала, WebP-парную ссылку по конвенции строит сам (`url.replace(/\.[^./]+$/, '.webp')`, `shared/lib/adaptiveImage.ts`) — это НЕ часть JSON-контракта, а голая договорённость по неймингу файлов на диске, так что схема `ImageUrl`-полей нигде не менялась ради второй ссылки.
+- **EXIF-ориентация** применяется вручную (SkiaSharp декодирует "как лежит в файле") — без этого портретные фото с телефона ложились бы на бок.
+- Бэкап/удаление осиротевших файлов при замене/удалении записи — сознательно НЕ реализовано (отложено), см. `tech-debt.md`.
+
+## Теги (`api/Tag`) и скидка в заказе — 2026-08-16
+Мерч-теги продукта ("Скидка 15%", "Хит сезона", …) — каталог отдельной сущностью `Tag` (+ `TagTranslation`, + join `TourTag`), тот же паттерн, что `ExpenseTemplate`/`TourNoteTemplate` (3.4). Фронт — `admin-panel.md#справочники-admincatalog`, `client-site.md#мерч-теги-и-скидка-2026-08-16`.
+
+**`TagType`**: `Regular=1`, `Discount=2` — только `Discount` несёт `DiscountPercent` и меняет цену; остальные типы чисто декоративные.
+**`TagColor`**: `Gold=1`, `Wine=2`, `Success=3`, `Danger=4`, `Warning=5` — preset-токены сайтовой палитры, не свободный hex.
+
+**Правила** (`TourValidationService.ValidateTagsAsync`, работает и на create, и на update, как остальные правила тура): максимум 3 тега на тур, максимум 1 `Discount`-тег, без дублей `TagId`, все `TagId` должны существовать. `TagUpdateService` дополнительно запрещает менять `Type` тега, пока он назначен хотя бы одному туру (тот же принцип, что у `Tour.Type` — иначе Regular→Discount задним числом мог бы пробить лимит «максимум 1 Discount» мимо валидации тура).
+
+`TourInfoModel.Tags`/`TourCardModel.Tags` — плоская проекция (`TourTagInfoModel { Id, TagId }`), как `Regions`: без вложенного тега, каталог (имя/цвет/тип/процент) фронт резолвит одним запросом к `api/Tag`. Тот же null/`[]`-контракт на `UpdateTour`, что у `Regions`.
+
+| Метод | Route | Доступ | Возврат |
+| --- | --- | --- | --- |
+| GET | `api/Tag/GetAll` | TourManagerOrAdmin | `TagInfoModel[]` |
+| POST | `api/Tag/Create` | Admin | `TagInfoModel` |
+| PUT | `api/Tag/Update` | Admin | `TagInfoModel` |
+| DELETE | `api/Tag/Delete?id=` | Admin | — (400 `CatalogEntryInUse`/2010, если назначен туру) |
+| GET | `api/Tag/GetForClient?languageCode=` | анонимный | `TagInfoModel[]` (одна локаль) |
+
+**Коды ошибок**: `TagNotFound=2023`, `TooManyTags=2024` (>3 на тур), `MultipleDiscountTags=2025` (>1 Discount-тег на тур).
+
+### Скидка в заказе (`OrderCreationService`)
+Discount-тег меняет не только отображаемую цену (карточка/детальная), но и реальную сумму бронирования — то же значение, что видел посетитель на сайте. `EnrichAsync` при создании заказа одним запросом читает `Tour.TotalPrice` + процент активного Discount-тега (если есть, `FirstOrDefault` однозначен — максимум 1 по правилу выше), округляет `TourPriceSnapshot × (1 − percent/100)` до целого драма (`ApplyDiscount`, `MidpointRounding.AwayFromZero`), и ТОЛЬКО ПОТОМ применяет групповой тариф (1–4/5–6/7+) — тот же порядок discount-then-tier, что фронтовый `useTierPrice`.
+
+`OrderPayment` получил `DiscountPercent` (`decimal?`, `null` — скидки не было) — снапшот процента на момент заказа, ОТДЕЛЬНО от `TourPriceSnapshot` (который остаётся исходной, не сниженной ценой). Последующая правка/удаление тега не меняет задним числом уже оформленную бронь — тот же принцип, что у `TourPriceSnapshot` (ADR 014). Видно в админке — вкладка «Оплата» в деталях заказа, см. `admin-panel.md`.
+
+**Миграция**: `AddTagsAndOrderDiscount` (2026-08-15) — таблицы `Tag`/`TagTranslation`/`TourTag`, колонка `OrderPayment.DiscountPercent`.
+
 ## Миграции
 Актуальные (в `ATTours.DataLayer/Migrations`): `InitialCreate`, `AddRoutePoint`, `AddOrganizationalDetailAndRestriction`, `ChangeTourDayChildrenToCascade`, `AddTourIsArchived`, `AddSiteSettings`, `AddRegionAndTourRegion`, `SeedArmenianRegions`, `MergeRestrictionAndOrganizationalDetailIntoTourNote`, `AddReferenceCatalogs`, `AddTourFeatured`, `SeedRegionBlurbs`, `AddExchangeRate`, `AddOrdersAndClosureRules`, `AddTourRequiresPrepayment` (2026-08-13 — `Tour.RequiresPrepayment`, `bit NOT NULL DEFAULT 1`; см. `product-model.md`), `AddClosureRuleBatchId` (2026-08-14 — `ClosureRule.BatchId`, `uniqueidentifier NULL`; см. выше). Миграции применяются автоматически при старте backend (с retry, с 2026-08-10) — отдельного ручного шага `dotnet ef database update` в проде не требуется.

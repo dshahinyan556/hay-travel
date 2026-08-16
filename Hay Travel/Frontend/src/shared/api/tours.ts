@@ -19,13 +19,15 @@ import { translate } from '@/shared/i18n/translate'
 import type {
   AdditionalExpenseInfoModel,
   RoutePointInfoModel,
+  TagInfoModel,
   TourCardModel,
   TourInfoModel,
   TourNoteInfoModel,
   TourRegionInfoModel,
+  TourTagInfoModel,
   TranslatableInfoModel,
 } from '@/shared/types/attours'
-import type { ItineraryDay, Tour, TourDetail, TourKind } from '@/shared/types/tour'
+import type { ItineraryDay, Tour, TourDetail, TourKind, TourTag } from '@/shared/types/tour'
 
 function currentLanguageCode(): number {
   return LANGUAGE_CODE_BY_LOCALE[getStoredLocale()]
@@ -39,6 +41,10 @@ const TRANSLATION_DESCRIPTION = 3
 
 /** `TourType` on the backend. */
 const TOUR_TYPE_EXCURSION = 2
+
+/** `TagType` on the backend — only this type carries `discountPercent` and changes price
+ * display. */
+const TAG_TYPE_DISCOUNT = 2
 
 /** `TourNoteType` on the backend. */
 const NOTE_TYPE_ORGANIZATIONAL_DETAIL = 1
@@ -72,7 +78,61 @@ function toRegionSlugs(regions: readonly TourRegionInfoModel[]): RegionSlug[] {
   return regions.map((r) => r.slug).filter((slug): slug is RegionSlug => slug in REGION_BY_SLUG)
 }
 
-function mapCard(card: TourCardModel): Tour {
+/** Resolves a tour's flat `TourTagInfoModel[]` (just `tagId`s) against the tag catalog fetched
+ * once per page (`getTagCatalog`) — same denormalization pattern as `toRegionSlugs`/
+ * `REGION_BY_SLUG`. Sorted discount-first, then by the catalog's own `sortOrder`, matching the
+ * card mockup's rule ("скидка всегда наверху"); a `tagId` the catalog doesn't know (deleted
+ * between the two requests) is silently dropped rather than rendered blank. */
+function mapTags(tourTags: readonly TourTagInfoModel[], catalog: readonly TagInfoModel[]): TourTag[] {
+  const byId = new Map(catalog.map((tag) => [tag.id, tag]))
+  const resolved = tourTags
+    .map((tt) => byId.get(tt.tagId))
+    .filter((tag): tag is TagInfoModel => tag !== undefined)
+
+  const sorted = [...resolved].sort((a, b) => {
+    const aRank = a.type === TAG_TYPE_DISCOUNT ? 0 : 1
+    const bRank = b.type === TAG_TYPE_DISCOUNT ? 0 : 1
+    return aRank !== bRank ? aRank - bRank : a.sortOrder - b.sortOrder
+  })
+
+  return sorted.map((tag) => {
+    const isDiscount = tag.type === TAG_TYPE_DISCOUNT
+    return {
+      id: tag.id,
+      isDiscount,
+      discountPercent: tag.discountPercent,
+      color: tag.color,
+      // `label` is exactly the admin-typed name, verbatim — `discountPercent` is a
+      // server-side price-calculation input, never composed into the shown text (David,
+      // 2026-08-16). An admin who wants the percent visible on the pill types it into the
+      // name itself (e.g. "Скидка 15%"), same as any other tag's wording.
+      label: pickTranslation(tag.translations, TRANSLATION_SINGLE_FIELD),
+    }
+  })
+}
+
+/** In-flight dedupe for `getTagCatalog` (2026-08-16) — cleared as soon as the request settles, so
+ * it only collapses calls fired in the same burst (e.g. `HomePage` loading `getFeaturedTours` and
+ * `getToursByRegion` side by side, each wanting the catalog) and never serves stale data to a
+ * later page load. */
+let tagCatalogInFlight: { languageCode: number; promise: Promise<TagInfoModel[]> } | null = null
+
+/** The tag catalog (name/color/type/percent per tag), one request per page — every tour on that
+ * page resolves its `TourTagInfoModel[]` against this same list rather than each carrying its
+ * own copy. */
+export function getTagCatalog(): Promise<TagInfoModel[]> {
+  const languageCode = currentLanguageCode()
+  if (tagCatalogInFlight?.languageCode === languageCode) return tagCatalogInFlight.promise
+
+  const promise = apiFetch<TagInfoModel[]>(`api/Tag/GetForClient?languageCode=${languageCode}`)
+  tagCatalogInFlight = { languageCode, promise }
+  promise.finally(() => {
+    if (tagCatalogInFlight?.promise === promise) tagCatalogInFlight = null
+  })
+  return promise
+}
+
+function mapCard(card: TourCardModel, tagCatalog: readonly TagInfoModel[]): Tour {
   const kind = toKind(card.type)
   return {
     id: String(card.id),
@@ -84,6 +144,7 @@ function mapCard(card: TourCardModel): Tour {
     priceFrom: card.totalPrice ?? 0,
     coverImage: card.mainImageUrl || FALLBACK_IMAGE,
     shortDescription: pickTranslation(card.translations, TRANSLATION_SHORT_DESCRIPTION),
+    tags: mapTags(card.tags, tagCatalog),
   }
 }
 
@@ -109,7 +170,7 @@ function mapExpenses(expenses: readonly AdditionalExpenseInfoModel[]) {
   }))
 }
 
-function mapDetail(info: TourInfoModel): TourDetail {
+function mapDetail(info: TourInfoModel, tagCatalog: readonly TagInfoModel[]): TourDetail {
   const kind = toKind(info.type)
   const durationDays = info.tourDays.length
   const coverImage = info.mainImageUrl || FALLBACK_IMAGE
@@ -138,6 +199,7 @@ function mapDetail(info: TourInfoModel): TourDetail {
     priceFrom: info.totalPrice ?? 0,
     coverImage,
     shortDescription: pickTranslation(info.translations, TRANSLATION_SHORT_DESCRIPTION),
+    tags: mapTags(info.tags ?? [], tagCatalog),
     requiresPrepayment: info.requiresPrepayment,
     gallery: gallery.length > 0 ? gallery : [coverImage],
     itinerary,
@@ -150,16 +212,22 @@ function mapDetail(info: TourInfoModel): TourDetail {
 }
 
 export async function getTours(): Promise<readonly Tour[]> {
-  const cards = await apiFetch<TourCardModel[]>(`api/Tour/GetToursClient?languageCode=${currentLanguageCode()}`)
-  return cards.map(mapCard)
+  const [cards, tagCatalog] = await Promise.all([
+    apiFetch<TourCardModel[]>(`api/Tour/GetToursClient?languageCode=${currentLanguageCode()}`),
+    getTagCatalog(),
+  ])
+  return cards.map((card) => mapCard(card, tagCatalog))
 }
 
 /** Home page showcase — tours the admin marked `IsFeatured` (at most 6, `Продукты → Избранные`),
  * in their admin-set display order. Shows exactly however many are marked, including none: no
  * "first N tours" filler when the admin hasn't picked any yet (David, 2026-08-02). */
 export async function getFeaturedTours(): Promise<readonly Tour[]> {
-  const cards = await apiFetch<TourCardModel[]>(`api/Tour/GetFeaturedToursClient?languageCode=${currentLanguageCode()}`)
-  return cards.map(mapCard)
+  const [cards, tagCatalog] = await Promise.all([
+    apiFetch<TourCardModel[]>(`api/Tour/GetFeaturedToursClient?languageCode=${currentLanguageCode()}`),
+    getTagCatalog(),
+  ])
+  return cards.map((card) => mapCard(card, tagCatalog))
 }
 
 /** `undefined` for a 404 (hidden or nonexistent id) — same contract the mock had, so
@@ -167,10 +235,13 @@ export async function getFeaturedTours(): Promise<readonly Tour[]> {
  * still throws, which the route's `errorElement` already handles. */
 export async function getTourInfo(id: string): Promise<TourDetail | undefined> {
   try {
-    const info = await apiFetch<TourInfoModel>(
-      `api/Tour/GetTourInfo?id=${encodeURIComponent(id)}&languageCode=${currentLanguageCode()}`,
-    )
-    return mapDetail(info)
+    const [info, tagCatalog] = await Promise.all([
+      apiFetch<TourInfoModel>(
+        `api/Tour/GetTourInfo?id=${encodeURIComponent(id)}&languageCode=${currentLanguageCode()}`,
+      ),
+      getTagCatalog(),
+    ])
+    return mapDetail(info, tagCatalog)
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) return undefined
     throw err
@@ -181,10 +252,13 @@ export async function getTourInfo(id: string): Promise<TourDetail | undefined> {
  * is what the real `?region=` filter on `GetToursClient` does — `RegionExplorer`'s
  * loading/error states are the ones that actually run in production, not decoration. */
 export async function getToursByRegion(region: RegionSlug): Promise<readonly Tour[]> {
-  const cards = await apiFetch<TourCardModel[]>(
-    `api/Tour/GetToursClient?languageCode=${currentLanguageCode()}&region=${encodeURIComponent(region)}`,
-  )
-  return cards.map(mapCard)
+  const [cards, tagCatalog] = await Promise.all([
+    apiFetch<TourCardModel[]>(
+      `api/Tour/GetToursClient?languageCode=${currentLanguageCode()}&region=${encodeURIComponent(region)}`,
+    ),
+    getTagCatalog(),
+  ])
+  return cards.map((card) => mapCard(card, tagCatalog))
 }
 
 /**

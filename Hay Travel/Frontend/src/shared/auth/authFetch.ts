@@ -35,9 +35,10 @@ export class SessionExpiredError extends Error {
  * @throws {SessionExpiredError} when the session cannot be renewed.
  * @throws {ApiError} for any other non-2xx response.
  *
- * LIMITATION: `init.body` must be a string or absent. The retry re-sends the same `init`, and a
- * stream/`FormData` body would already be consumed by the first attempt. Every call site in the
- * project sends `JSON.stringify(...)`, so this is a documented constraint, not a runtime check.
+ * LIMITATION: `init.body` must be a string, a `FormData`, or absent. The retry re-sends the same
+ * `init` object, so the body must be safely re-readable. A `FormData` is fine — `fetch` reads its
+ * entries fresh on each call, it isn't a stream that gets drained — but a raw `ReadableStream`
+ * body would already be consumed by the first attempt and must never be passed here.
  */
 export async function authFetch<T>(path: string, init?: RequestInit): Promise<T> {
   await ensureAuthReady()

@@ -78,6 +78,14 @@ export interface TourRegionFormState {
   regionId: number
 }
 
+/** One tag checked on the tour. Same `serverId`/no-reorder-UI shape as `TourRegionFormState` —
+ * ordering on the card is derived (discount first, then the tag's own `sortOrder`), so there is
+ * nothing to reorder here. */
+export interface TourTagFormState {
+  serverId?: number
+  tagId: number
+}
+
 /** The whole create/edit form. */
 export interface TourFormState {
   type: TourType
@@ -105,4 +113,7 @@ export interface TourFormState {
   additionalExpenses: ExpenseFormState[]
   /** Regions the tour covers (4.4). Optional — a tour without a region is valid (backend D-2). */
   regions: TourRegionFormState[]
+  /** Tags shown on the card (up to 3, at most 1 discount — enforced by `toggleTag` in the
+   * reducer, mirrored server-side by `TourValidationService`). */
+  tags: TourTagFormState[]
 }

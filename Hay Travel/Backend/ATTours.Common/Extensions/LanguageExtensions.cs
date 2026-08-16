@@ -89,5 +89,19 @@ namespace ATTours.Common.Extensions
                 returnList.Add(template.ExtractWithNeededLanguage(languageCode));
             return returnList;
         }
+
+        public static Tag ExtractWithNeededLanguage(this Tag tag, int languageCode)
+        {
+            tag.Translations.RemoveWhere(t => (int)t.LanguageCode != languageCode);
+            return tag;
+        }
+
+        public static List<Tag> ExtractWithNeededLanguageFromCollection(this IEnumerable<Tag> tags, int languageCode)
+        {
+            var returnList = new List<Tag>();
+            foreach (var tag in tags)
+                returnList.Add(tag.ExtractWithNeededLanguage(languageCode));
+            return returnList;
+        }
     }
 }

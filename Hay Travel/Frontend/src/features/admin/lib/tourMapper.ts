@@ -179,6 +179,7 @@ export function createModelToForm(dto: TourCreateModel): TourFormState {
       description: readLocalized(e.translations ?? [], ExpenseTranslationType.Description),
     })),
     regions: sortBySortOrder(dto.regions ?? []).map((r) => ({ regionId: r.regionId })),
+    tags: (dto.tags ?? []).map((tg) => ({ tagId: tg.tagId })),
   }
 }
 
@@ -229,6 +230,7 @@ export function infoToForm(dto: TourInfoModel): TourFormState {
       description: readLocalized(e.translations ?? [], ExpenseTranslationType.Description),
     })),
     regions: sortBySortOrder(dto.regions ?? []).map((r) => ({ serverId: r.id, regionId: r.regionId })),
+    tags: (dto.tags ?? []).map((tg) => ({ serverId: tg.id, tagId: tg.tagId })),
   }
 }
 
@@ -350,6 +352,7 @@ export function formToCreateModel(form: TourFormState): TourCreateModel {
       })),
     ],
     regions: form.regions.map((r, i) => ({ regionId: r.regionId, sortOrder: i })),
+    tags: form.tags.map((tg) => ({ tagId: tg.tagId })),
   }
 }
 
@@ -451,6 +454,9 @@ export function formToUpdateModel(form: TourFormState, tourId: number): TourInfo
     // ignores it, matching by `RegionId`) — sent blank rather than threading the full region list
     // through just to fill a field nothing reads.
     regions: form.regions.map((r, i) => ({ id: r.serverId ?? NEW, regionId: r.regionId, slug: '', sortOrder: i })),
+    // Always the real list too (never omitted) — same "the admin form can express it, so never
+    // rely on the backend's null-means-untouched contract" reasoning as `regions` above.
+    tags: form.tags.map((tg) => ({ id: tg.serverId ?? NEW, tagId: tg.tagId })),
   }
 }
 

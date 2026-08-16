@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { useReducedMotion } from '@/shared/hooks'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
+import { adaptiveImageUrl } from '@/shared/lib/adaptiveImage'
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon } from '@/shared/ui/icons'
 
 /** `--dur-fast` (`index.css`) in framer's seconds — keep the two in step. */
@@ -56,7 +57,7 @@ export function TourGallery({ images, alt }: { images: readonly string[]; alt: s
               initial={{ opacity: 0, scale: reducedMotion ? 1 : 1.02 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: reducedMotion ? 0 : DUR_FAST_S }}
-              src={shown[active]}
+              src={adaptiveImageUrl(shown[active])}
               alt={alt}
               className="aspect-[16/10] w-full object-cover"
             />
@@ -112,7 +113,12 @@ export function TourGallery({ images, alt }: { images: readonly string[]; alt: s
                 index === active ? 'ring-accent' : 'ring-edge hover:ring-gold-line',
               ].join(' ')}
             >
-              <img src={image} alt="" className="h-16 w-24 object-cover" />
+              <img
+                src={adaptiveImageUrl(image)}
+                alt=""
+                loading="lazy"
+                className="h-16 w-24 object-cover"
+              />
             </button>
           ))}
         </div>
@@ -191,7 +197,7 @@ function GalleryLightbox({ images, alt, active, onChange, onClose }: GalleryLigh
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: DUR_FAST_S }}
-          src={images[active]}
+          src={adaptiveImageUrl(images[active])}
           alt={alt}
           className="max-h-[85vh] max-w-[92vw] rounded-lg object-contain"
         />

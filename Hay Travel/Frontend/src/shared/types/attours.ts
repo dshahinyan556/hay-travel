@@ -64,6 +64,7 @@ export interface TourCreateModel {
   additionalExpenses: AdditionalExpenseCreateModel[]
   notes: TourNoteCreateModel[]
   regions: TourRegionCreateModel[]
+  tags: TourTagCreateModel[]
 }
 
 /** Response of `CreateTour` — the id of the freshly created tour. */
@@ -145,6 +146,9 @@ export interface TourInfoModel {
    * untouched; `[]` clears them all. The admin form always sends the real list now (4.4), so a
    * save always reflects exactly what's checked — never omits the field. */
   regions?: TourRegionInfoModel[]
+  /** Same null/[] contract as `regions`. Up to 3, at most 1 of `Tag.type === Discount`
+   * (`TourValidationService`, backend). */
+  tags?: TourTagInfoModel[]
 }
 
 /** Public catalog card (`GET api/Tour/GetToursClient`) — a lightweight projection of
@@ -160,6 +164,7 @@ export interface TourCardModel {
   durationDays: number
   translations: TranslatableInfoModel[]
   regions: TourRegionInfoModel[]
+  tags: TourTagInfoModel[]
 }
 
 /* -------------------------------------------------------------------------- */
@@ -318,4 +323,40 @@ export interface TourRegionInfoModel {
 export interface TourRegionCreateModel {
   regionId: number
   sortOrder: number
+}
+
+/**
+ * A merch tag on a product card (discount / "hit of the season" / …). `type` — `TagType`
+ * (`features/admin/lib/enums.ts`): only `Discount` carries `discountPercent` and changes price
+ * display. `color` — `TagColor`, one of the site's own palette tokens (not a free hex), so a new
+ * tag is guaranteed to read in both themes. A product can carry up to 3 tags, at most 1 Discount
+ * (`TourValidationService`, backend).
+ */
+export interface TagInfoModel {
+  id: number
+  type: number
+  color: number
+  discountPercent: number | null
+  sortOrder: number
+  translations: TranslatableInfoModel[]
+}
+
+export interface TagCreateModel {
+  type: number
+  color: number
+  discountPercent: number | null
+  sortOrder: number
+  translations: TranslatableCreateModel[]
+}
+
+/** A tour's link to one of its tags — flat, no nested tag: the admin/public site gets tag
+ * definitions from `GET api/Tag/GetAll` / `GetForClient` once, not repeated inside every tour
+ * (same reasoning as `TourRegionInfoModel`). */
+export interface TourTagInfoModel {
+  id: number
+  tagId: number
+}
+
+export interface TourTagCreateModel {
+  tagId: number
 }

@@ -1,0 +1,46 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      MSSQL_PID: Express
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./Backend
+    restart: unless-stopped
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      ATToursConnectionString: "Server=sqlserver;Database=ATTour;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True;MultipleActiveResultSets=true"
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
+      Jwt__Issuer: ATTours
+      Jwt__Audience: ATTours.Client
+      Cors__AllowedOrigins: ${CORS_ALLOWED_ORIGINS}
+      Email__Provider: Brevo
+      Email__BrevoApiKey: ${BREVO_API_KEY}
+      Email__FromEmail: ${EMAIL_FROM}
+      Email__FromName: "Hay Travel"
+      Email__VerifyUrlBase: ${PUBLIC_BASE_URL}/verify-email
+      Email__ResetUrlBase: ${PUBLIC_BASE_URL}/reset-password
+      Email__EmailChangeConfirmUrlBase: ${PUBLIC_BASE_URL}/confirm-email-change
+      Upload__StoragePath: /app/uploads
+    volumes:
+      # Бинд-маунт, не named volume: nginx на хосте раздаёт "/uploads/*" напрямую с того же
+      # пути (см. nginx-haytravel.conf), должен быть виден вне контейнера.
+      - ./uploads:/app/uploads
+    ports:
+      - "127.0.0.1:5253:8080"
+
+volumes:
+  sqlserver_data:

@@ -16,5 +16,6 @@ namespace ATTours.Common.Dto.Init
         // задаёт Type, SortOrder считается внутри своего Type.
         public List<TourNoteCreateModel> Notes { get; set; }
         public List<TourRegionCreateModel> Regions { get; set; }
+        public List<TourTagCreateModel> Tags { get; set; }
     }
 }
