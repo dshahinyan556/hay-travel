@@ -10,6 +10,11 @@
     <PackageReference Include="AutoMapper" Version="16.1.1" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="MaxMind.GeoIP2" Version="6.1.0" />
+    <PackageReference Include="SkiaSharp" Version="4.151.1" />
+    <!-- "NoDependencies" вариант: без него нативная либа под Linux тянет libfontconfig/libGL,
+         которых нет в mcr.microsoft.com/dotnet/aspnet — а тут нужен только decode/resize/encode,
+         никакого рендеринга текста. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.151.1" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />
   </ItemGroup>
 

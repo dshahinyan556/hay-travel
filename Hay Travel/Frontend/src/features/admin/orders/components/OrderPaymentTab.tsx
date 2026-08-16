@@ -22,11 +22,22 @@ export function OrderPaymentTab({ order }: OrderPaymentTabProps) {
   const prepaidRatio = payment.totalAmount > 0 ? payment.prepaidAmount / payment.totalAmount : 0
   const prepaidPercent = Math.max(0, Math.min(100, Math.round(prepaidRatio * 100)))
 
+  const hasDiscount = payment.discountPercent != null && payment.discountPercent > 0
+
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-xl border border-neutral-200 bg-white p-4 text-sm">
-        <p className="text-xs text-neutral-500">{ordersCopy.tourPriceSnapshotLabel}</p>
-        <p className="mt-0.5 text-lg font-semibold tabular-nums text-neutral-900">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-neutral-500">{ordersCopy.tourPriceSnapshotLabel}</p>
+          {hasDiscount && (
+            <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">
+              {ordersCopy.discountBadge(payment.discountPercent!)}
+            </span>
+          )}
+        </div>
+        <p
+          className={`mt-0.5 text-lg font-semibold tabular-nums text-neutral-900 ${hasDiscount ? 'line-through decoration-neutral-400' : ''}`}
+        >
           {formatOrderMoney(payment.tourPriceSnapshot, payment.currency)}
         </p>
       </div>
@@ -39,7 +50,9 @@ export function OrderPaymentTab({ order }: OrderPaymentTabProps) {
       ) : (
         <>
           <div className="rounded-xl border border-neutral-200 bg-white p-4 text-sm">
-            <p className="text-xs text-neutral-500">{ordersCopy.totalAmountLabel}</p>
+            <p className="text-xs text-neutral-500">
+              {hasDiscount ? ordersCopy.totalAmountWithDiscountLabel : ordersCopy.totalAmountLabel}
+            </p>
             <p className="mt-0.5 text-lg font-semibold tabular-nums text-neutral-900">
               {formatOrderMoney(payment.totalAmount, payment.currency)}
             </p>

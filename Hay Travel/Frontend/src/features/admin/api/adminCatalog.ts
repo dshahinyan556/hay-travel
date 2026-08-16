@@ -20,6 +20,8 @@ import type {
   PlaceCreateModel,
   PlaceInfoModel,
   RegionInfoModel,
+  TagCreateModel,
+  TagInfoModel,
   TourNoteTemplateCreateModel,
   TourNoteTemplateInfoModel,
 } from '@/shared/types/attours'
@@ -114,6 +116,34 @@ export function updateTourNoteTemplate(
  * by a tour note. */
 export function deleteTourNoteTemplate(id: number): Promise<void> {
   return authFetch<void>(`api/TourNoteTemplate/Delete?id=${id}`, { method: 'DELETE' })
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Tags                                                                       */
+/* -------------------------------------------------------------------------- */
+
+export function getTags(): Promise<TagInfoModel[]> {
+  return authFetch<TagInfoModel[]>('api/Tag/GetAll')
+}
+
+export function createTag(model: TagCreateModel): Promise<TagInfoModel> {
+  return authFetch<TagInfoModel>('api/Tag/Create', {
+    method: 'POST',
+    body: JSON.stringify(model),
+  })
+}
+
+export function updateTag(model: TagInfoModel): Promise<TagInfoModel> {
+  return authFetch<TagInfoModel>('api/Tag/Update', {
+    method: 'PUT',
+    body: JSON.stringify(model),
+  })
+}
+
+/** Rejects with `ApiError` carrying `errorCode: CatalogEntryInUse` (2010) when still assigned to
+ * a tour. */
+export function deleteTag(id: number): Promise<void> {
+  return authFetch<void>(`api/Tag/Delete?id=${id}`, { method: 'DELETE' })
 }
 
 /* -------------------------------------------------------------------------- */

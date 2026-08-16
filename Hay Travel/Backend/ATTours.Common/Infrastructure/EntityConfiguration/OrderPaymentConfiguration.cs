@@ -15,6 +15,9 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
             builder.Property(x => x.TourPriceSnapshot)
                 .HasPrecision(18, 2);
 
+            builder.Property(x => x.DiscountPercent)
+                .HasPrecision(5, 2);
+
             builder.Property(x => x.TotalAmount)
                 .HasPrecision(18, 2);
 

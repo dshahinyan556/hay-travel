@@ -89,6 +89,8 @@ export interface TourFormActions {
   setExpenseDescription: (key: string, lang: LangKey, value: string) => void
   // regions
   toggleRegion: (regionId: number) => void
+  // tags
+  toggleTag: (tagId: number) => void
 }
 
 export interface UseTourFormResult {
@@ -197,6 +199,7 @@ export function useTourForm(
         dispatch({ kind: 'setExpenseDescription', key, lang, value }),
 
       toggleRegion: (regionId) => dispatch({ kind: 'toggleRegion', regionId }),
+      toggleTag: (tagId) => dispatch({ kind: 'toggleTag', tagId }),
     }),
     [],
   )

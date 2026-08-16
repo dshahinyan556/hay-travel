@@ -61,6 +61,8 @@ export const ordersCopy = {
   paymentTitle: 'Оплата',
   tourPriceSnapshotLabel: 'Цена тура на момент заказа',
   totalAmountLabel: 'Итого',
+  totalAmountWithDiscountLabel: 'Итого со скидкой',
+  discountBadge: (percent: number) => `Скидка ${percent}%`,
   prepaidAmountLabel: 'Предоплата',
   prepaidNone: 'не внесена',
   quoteNeeded: 'Цена по запросу',

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { TourTranslationType, TourType, tourTypeLabels } from '@/features/admin/lib/enums'
 import { readLocalized } from '@/features/admin/lib/tourMapper'
+import { adaptiveImageUrl } from '@/shared/lib/adaptiveImage'
 import type { TourInfoModel } from '@/shared/types/attours'
 
 /** The RU title of a tour, with an explicit flag for the "no title yet" case. */
@@ -27,7 +28,7 @@ export function TourThumb({ url, alt }: { url: string | null; alt: string }) {
 
   return (
     <img
-      src={url}
+      src={adaptiveImageUrl(url)}
       alt={alt}
       loading="lazy"
       onError={() => setFailed(true)}

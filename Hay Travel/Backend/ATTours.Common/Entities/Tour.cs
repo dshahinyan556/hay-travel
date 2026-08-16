@@ -29,5 +29,7 @@ namespace ATTours.Common.Entities
         // Орг. детали и ограничения слиты в одну коллекцию, различаются по TourNote.Type (ADR 003).
         public HashSet<TourNote> Notes { get; set; } = [];
         public HashSet<TourRegion> TourRegions { get; set; } = [];
+        // Мерч-теги (до 3, максимум 1 Discount) — TourValidationService.
+        public HashSet<TourTag> TourTags { get; set; } = [];
     }
 }

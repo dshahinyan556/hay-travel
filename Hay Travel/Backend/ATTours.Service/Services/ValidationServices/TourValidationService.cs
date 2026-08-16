@@ -16,6 +16,9 @@ namespace ATTours.BusinessServices.Services.ValidationServices
     // проверка существования RegionId требует БД.
     internal class TourValidationService : EntityValidationContextDependentBase<Tour, ATToursContextFactory>
     {
+        // «Максимум 3 тега на карточке» (мокап тегов) — ограничение бизнес-правила, не UI.
+        private const int MaxTagsPerTour = 3;
+
         public TourValidationService(List<Tour> entities, IApplicationDbContext context)
             : base(entities, context)
         {
@@ -31,6 +34,7 @@ namespace ATTours.BusinessServices.Services.ValidationServices
                 await ValidatePlaceReferencesAsync(entity);
                 await ValidateExpenseTemplateReferencesAsync(entity);
                 await ValidateTourNoteTemplateReferencesAsync(entity);
+                await ValidateTagsAsync(entity);
             }
         }
 
@@ -166,6 +170,37 @@ namespace ATTours.BusinessServices.Services.ValidationServices
                     throw new ErrorModelException(GlobalErrorCode.InvalidEntityRelation, HttpStatusCode.BadRequest,
                         $"Tour note type {(int)note.Type} does not match template type {(int)templateType}.");
             }
+        }
+
+        // Каталог Tag: не больше MaxTagsPerTour штук, не больше одного Type == Discount,
+        // без дублей TagId, все TagId должны существовать.
+        private async Task ValidateTagsAsync(Tour tour)
+        {
+            if (tour.TourTags is null || tour.TourTags.Count == 0)
+                return;
+
+            var tagIds = tour.TourTags.Select(tt => tt.TagId).ToList();
+
+            var duplicate = tagIds.GroupBy(id => id).FirstOrDefault(group => group.Count() > 1);
+            if (duplicate is not null)
+                throw new ErrorModelException(GlobalErrorCode.InvalidEntityRelation, HttpStatusCode.BadRequest,
+                    $"Tag with id {duplicate.Key} is duplicated in the tour's tags!");
+
+            if (tagIds.Count > MaxTagsPerTour)
+                throw new ErrorModelException(GlobalErrorCode.TooManyTags, HttpStatusCode.BadRequest,
+                    $"A tour can have at most {MaxTagsPerTour} tags.");
+
+            var tags = await Context.Set<Tag>()
+                                    .Where(tag => tagIds.Contains(tag.Id))
+                                    .Select(tag => new { tag.Id, tag.Type })
+                                    .ToListAsync();
+
+            if (tags.Count != tagIds.Count)
+                throw new ErrorModelException(GlobalErrorCode.TagNotFound, HttpStatusCode.BadRequest, "One or more tags do not exist.");
+
+            if (tags.Count(t => t.Type == Common.Enums.TagType.Discount) > 1)
+                throw new ErrorModelException(GlobalErrorCode.MultipleDiscountTags, HttpStatusCode.BadRequest,
+                    "A tour can have at most one discount tag.");
         }
     }
 }

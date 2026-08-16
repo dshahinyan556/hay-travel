@@ -387,6 +387,10 @@ namespace ATTours.DataLayer.Migrations
                         .HasMaxLength(3)
                         .HasColumnType("nvarchar(3)");
 
+                    b.Property<decimal?>("DiscountPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
                     b.Property<int>("OrderId")
                         .HasColumnType("int");
 
@@ -700,6 +704,58 @@ namespace ATTours.DataLayer.Migrations
                     b.ToTable("SiteSettingTranslation", (string)null);
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.Tag", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Color")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("DiscountPercent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Tag", (string)null);
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.TagTranslation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("LanguageCode")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TagId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TagId");
+
+                    b.ToTable("TagTranslation", (string)null);
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.Tour", b =>
                 {
                     b.Property<int>("Id")
@@ -972,6 +1028,30 @@ namespace ATTours.DataLayer.Migrations
                         .IsUnique();
 
                     b.ToTable("TourRegion", (string)null);
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.TourTag", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("TagId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TourId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TagId");
+
+                    b.HasIndex("TourId", "TagId")
+                        .IsUnique();
+
+                    b.ToTable("TourTag", (string)null);
                 });
 
             modelBuilder.Entity("ATTours.Common.Entities.User", b =>
@@ -1369,6 +1449,17 @@ namespace ATTours.DataLayer.Migrations
                     b.Navigation("SiteSetting");
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.TagTranslation", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.Tag", "Tag")
+                        .WithMany("Translations")
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tag");
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.TourDayInfoTranslation", b =>
                 {
                     b.HasOne("ATTours.Common.Entities.TourDay", "TourDay")
@@ -1469,6 +1560,25 @@ namespace ATTours.DataLayer.Migrations
                     b.Navigation("Tour");
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.TourTag", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.Tag", "Tag")
+                        .WithMany("TourTags")
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ATTours.Common.Entities.Tour", "Tour")
+                        .WithMany("TourTags")
+                        .HasForeignKey("TourId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tag");
+
+                    b.Navigation("Tour");
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.User", b =>
                 {
                     b.HasOne("ATTours.Common.Entities.UserRole", "Role")
@@ -1534,6 +1644,13 @@ namespace ATTours.DataLayer.Migrations
                     b.Navigation("Translations");
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.Tag", b =>
+                {
+                    b.Navigation("TourTags");
+
+                    b.Navigation("Translations");
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.Tour", b =>
                 {
                     b.Navigation("AdditionalExpenses");
@@ -1543,6 +1660,8 @@ namespace ATTours.DataLayer.Migrations
                     b.Navigation("TourDetails");
 
                     b.Navigation("TourRegions");
+
+                    b.Navigation("TourTags");
 
                     b.Navigation("Translations");
                 });

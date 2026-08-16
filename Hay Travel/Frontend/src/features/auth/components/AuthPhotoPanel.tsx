@@ -1,6 +1,7 @@
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion'
 import { useReducedMotion } from '@/shared/hooks'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
+import { adaptiveImageUrl } from '@/shared/lib/adaptiveImage'
 import { ClockIcon, MailIcon, StarIcon } from '@/shared/ui/icons'
 import { Reveal } from '@/shared/ui'
 import { useAuthImage } from '../hooks/useAuthImage'
@@ -67,7 +68,7 @@ export function AuthPhotoPanel() {
     >
       {imageUrl !== '' && (
         <motion.img
-          src={imageUrl}
+          src={adaptiveImageUrl(imageUrl)}
           alt=""
           style={{
             x: reducedMotion ? 0 : photoX,

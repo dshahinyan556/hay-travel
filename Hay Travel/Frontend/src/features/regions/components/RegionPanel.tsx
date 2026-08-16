@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { Region } from '@/shared/data/armeniaRegions'
 import type { Tour } from '@/shared/types/tour'
 import { formatDuration, formatTourCount } from '@/shared/lib/format'
+import { adaptiveImageUrl } from '@/shared/lib/adaptiveImage'
 import { useMoney } from '@/shared/currency'
 import { useReducedMotion } from '@/shared/hooks'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
@@ -167,7 +168,7 @@ function RegionTourRow({ tour }: { tour: Tour }) {
       className="group flex gap-3 rounded-xl bg-panel-raised p-2.5 ring-1 ring-edge transition-colors hover:ring-gold-line focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
     >
       <img
-        src={tour.coverImage}
+        src={adaptiveImageUrl(tour.coverImage)}
         alt=""
         loading="lazy"
         className="h-20 w-20 shrink-0 rounded-lg object-cover"

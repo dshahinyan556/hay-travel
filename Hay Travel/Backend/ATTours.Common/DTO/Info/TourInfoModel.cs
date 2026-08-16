@@ -26,5 +26,8 @@ namespace ATTours.Common.DTO.Info
         // Regions == [] — очистить все. Осознанная асимметрия с остальными коллекциями графа
         // тура, см. backend-stage3-architecture.md §3.2.9. Снять после этапа 4.4.
         public List<TourRegionInfoModel> Regions { get; set; }
+        // Тот же null/[] контракт, что у Regions: null — не трогать теги тура, [] — очистить
+        // все. Максимум 3 тега, максимум 1 Discount — TourValidationService.
+        public List<TourTagInfoModel> Tags { get; set; }
     }
 }

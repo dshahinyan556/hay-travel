@@ -5,7 +5,7 @@ import { TourType } from '@/features/admin/lib/enums'
 import type { CatalogSuggestions, TourFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
 import type { TourFormValidation } from '@/features/admin/tour-form/lib/validation'
-import type { RegionInfoModel } from '@/shared/types/attours'
+import type { RegionInfoModel, TagInfoModel } from '@/shared/types/attours'
 import { ImageListEditor } from '@/features/admin/ui/ImageListEditor'
 import { TourFormHeader } from './TourFormHeader'
 import { TourDaysEditor } from './TourDaysEditor'
@@ -26,6 +26,8 @@ interface TourFormProps {
   catalogSuggestions: CatalogSuggestions
   /** The fixed 11-region reference list, for the region picker (4.4). */
   regions: RegionInfoModel[]
+  /** The tag catalog, for the tag picker. */
+  tags: TagInfoModel[]
   onSubmit: () => void
 }
 
@@ -53,6 +55,7 @@ export function TourForm({
   typeLocked,
   catalogSuggestions,
   regions,
+  tags,
   onSubmit,
 }: TourFormProps) {
   const isExcursion = state.type === TourType.Excursion
@@ -99,6 +102,7 @@ export function TourForm({
         excursionPriceError={singleDay ? validation.dayPriceErrors[singleDay.key] : undefined}
         typeLocked={typeLocked}
         regions={regions}
+        tags={tags}
       />
 
       {isExcursion && singleDay && (

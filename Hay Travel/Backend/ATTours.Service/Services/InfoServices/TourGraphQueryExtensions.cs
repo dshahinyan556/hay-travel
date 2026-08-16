@@ -33,7 +33,10 @@ namespace ATTours.BusinessServices.Services.InfoServices
                     .ThenInclude(n => n.Translations)
                 // Переводы региона в граф тура не включаются (TourRegionInfoModel — плоская проекция).
                 .Include((Expression<Func<Tour, ICollection<TourRegion>>>)(x => x.TourRegions))
-                    .ThenInclude(tr => tr.Region);
+                    .ThenInclude(tr => tr.Region)
+                // Плоско, как TourRegions — Tag не грузится (TourTagInfoModel не несёт его полей,
+                // каталог тегов фронт резолвит через TagController).
+                .Include((Expression<Func<Tour, ICollection<TourTag>>>)(x => x.TourTags));
         }
 
         // Публичный путь чтения ОДНОГО тура (пункт 3.5): весь общий граф + переводы шаблонов
@@ -69,7 +72,8 @@ namespace ATTours.BusinessServices.Services.InfoServices
                 .Include(x => x.Translations)
                 .Include((Expression<Func<Tour, ICollection<TourRegion>>>)(x => x.TourRegions))
                     .ThenInclude(tr => tr.Region)
-                .Include((Expression<Func<Tour, ICollection<TourDetail>>>)(x => x.TourDetails));
+                .Include((Expression<Func<Tour, ICollection<TourDetail>>>)(x => x.TourDetails))
+                .Include((Expression<Func<Tour, ICollection<TourTag>>>)(x => x.TourTags));
         }
     }
 }

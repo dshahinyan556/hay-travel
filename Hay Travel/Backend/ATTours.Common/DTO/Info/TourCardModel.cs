@@ -26,5 +26,8 @@ namespace ATTours.Common.DTO.Info
         public List<TranslatableInfoModel> Translations { get; set; }
         // Плоские слаги регионов (как в TourInfoModel.Regions) → фронтовый regionSlugs.
         public List<TourRegionInfoModel> Regions { get; set; }
+        // Плоская проекция (как Regions) — имя/цвет/тип/процент тега фронт получает одним
+        // запросом к TagController.GetForClient, не из каждой карточки.
+        public List<TourTagInfoModel> Tags { get; set; }
     }
 }

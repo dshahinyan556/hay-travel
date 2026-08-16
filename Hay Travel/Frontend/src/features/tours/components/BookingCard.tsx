@@ -144,7 +144,9 @@ export function BookingCard({ tour, largeGroupInvitation, closedDates }: Booking
   const [authNotice, setAuthNotice] = useState(false)
   const [order, setOrder] = useState<OrderInfoModel | null>(null)
 
-  const price = useTierPrice(tour.priceFrom, guests)
+  // At most 1 discount tag per product (backend `TourValidationService`) — `find` is unambiguous.
+  const discountPercent = tour.tags.find((tag) => tag.isDiscount)?.discountPercent ?? null
+  const price = useTierPrice(tour.priceFrom, guests, discountPercent)
 
   /** `'idle' | 'loading'` means the session is still being resolved — that is "unknown", not
    * "anonymous", and must not produce a "sign in" prompt. */
@@ -240,7 +242,11 @@ export function BookingCard({ tour, largeGroupInvitation, closedDates }: Booking
           <p className="text-sm leading-relaxed text-ink-dim">{largeGroupInvitation}</p>
         ) : (
           <div>
-            <p className="text-[10px] tracking-wide text-ink-muted">{t('booking.total')}</p>
+            {price.originalTotal !== null ? (
+              <p className="text-xs text-ink-muted line-through">{price.originalTotal}</p>
+            ) : (
+              <p className="text-[10px] tracking-wide text-ink-muted">{t('booking.total')}</p>
+            )}
             <p className="text-3xl font-semibold tabular-nums text-gold-ink">{price.total}</p>
             {/* Приглушённый цвет и весь текст суммы, а не только подпись (B12, 2026-08-13):
                 раньше сумма предоплаты была того же золотого акцента, что и «Итого», и на

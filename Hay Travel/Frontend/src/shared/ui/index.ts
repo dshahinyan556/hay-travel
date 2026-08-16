@@ -49,3 +49,4 @@ export type { SortableListProps, SortableRowRenderProps, DragHandleProps } from 
 /* Public site only */
 export { TourCard, TourCardSkeleton } from './TourCard'
 export { KindChip } from './Chip'
+export { ProductTag, TAG_COLOR_HEX } from './ProductTag'

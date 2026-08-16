@@ -74,7 +74,11 @@ export type DayOfWeekCode = (typeof DayOfWeekCode)[keyof typeof DayOfWeekCode]
  * visitor just saw. See spec 003 §4.3 p.7.
  */
 export interface OrderPaymentInfoModel {
+  /** Original tour price at order time, BEFORE any discount (D-1, 2026-08-16). */
   tourPriceSnapshot: number
+  /** Snapshot of the discount tag's percent at order time, `null` — no discount was applied.
+   * A later edit/removal of the tag never changes this retroactively. */
+  discountPercent: number | null
   totalAmount: number
   prepaidAmount: number
   currency: string

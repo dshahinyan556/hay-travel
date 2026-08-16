@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { useReducedMotion } from '@/shared/hooks'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import type { HeroContent } from '@/shared/api/siteSettings'
+import { adaptiveImageUrl } from '@/shared/lib/adaptiveImage'
 import { ArrowRightIcon, MapIcon } from '@/shared/ui/icons'
 
 interface HeroSectionProps {
@@ -44,7 +45,7 @@ export function HeroSection({ hero }: HeroSectionProps) {
   return (
     <section className="hero relative isolate flex min-h-[78vh] items-end overflow-hidden">
       <motion.img
-        src={hero.imageUrl}
+        src={adaptiveImageUrl(hero.imageUrl)}
         alt=""
         initial={{ scale: 1.08 }}
         animate={{ scale: reducedMotion ? 1.08 : 1 }}

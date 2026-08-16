@@ -5,8 +5,9 @@ import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourFo
 import { computeTotalPrice, formatTotalPrice } from '@/features/admin/tour-form/lib/price'
 import { ImageUrlField } from '@/features/admin/ui/ImageUrlField'
 import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
-import type { RegionInfoModel } from '@/shared/types/attours'
+import type { RegionInfoModel, TagInfoModel } from '@/shared/types/attours'
 import { RegionPicker } from './RegionPicker'
+import { TagPicker } from './TagPicker'
 import { TourTypeToggle } from './TourTypeToggle'
 
 interface TourFormHeaderProps {
@@ -20,6 +21,8 @@ interface TourFormHeaderProps {
   typeLocked?: boolean
   /** The fixed 11-region reference list, for the region picker (4.4). */
   regions: RegionInfoModel[]
+  /** The tag catalog, for the tag picker. */
+  tags: TagInfoModel[]
 }
 
 /**
@@ -38,6 +41,7 @@ export function TourFormHeader({
   excursionPriceError,
   typeLocked,
   regions,
+  tags,
 }: TourFormHeaderProps) {
   const isExcursion = state.type === TourType.Excursion
   const totalPrice = computeTotalPrice(state.days)
@@ -117,6 +121,8 @@ export function TourFormHeader({
         />
 
         <RegionPicker regions={regions} selected={state.regions} onToggle={actions.toggleRegion} />
+
+        <TagPicker tags={tags} selected={state.tags} onToggle={actions.toggleTag} />
 
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-semibold text-neutral-700">Публикация</span>

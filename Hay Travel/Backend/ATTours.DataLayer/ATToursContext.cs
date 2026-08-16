@@ -34,6 +34,9 @@ namespace ATTours.DataLayer
         public DbSet<Region> Regions { get; set; }
         public DbSet<RegionTranslation> RegionTranslations { get; set; }
         public DbSet<TourRegion> TourRegions { get; set; }
+        public DbSet<Tag> Tags { get; set; }
+        public DbSet<TagTranslation> TagTranslations { get; set; }
+        public DbSet<TourTag> TourTags { get; set; }
         public DbSet<Place> Places { get; set; }
         public DbSet<PlaceTranslation> PlaceTranslations { get; set; }
         public DbSet<PlaceImage> PlaceImages { get; set; }

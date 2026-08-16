@@ -92,6 +92,11 @@ export type TourFormAction =
   | { kind: 'setExpenseDescription'; key: string; lang: LangKey; value: string }
   // regions (tour-level, unordered checkbox set)
   | { kind: 'toggleRegion'; regionId: number }
+  // tags (tour-level, unordered checkbox set). Dumb toggle only — the max-3/max-1-discount
+  // rule needs the tag catalog's `type` per id, which the reducer doesn't have; that
+  // enforcement (block + message) lives in `TagPicker`, the same layering `RegionPicker` uses
+  // for its own (looser) rule.
+  | { kind: 'toggleTag'; tagId: number }
 
 /* -------------------------------------------------------------------------- */
 /*  Immutable list helpers                                                     */
@@ -355,6 +360,17 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
         regions: isSelected
           ? state.regions.filter((r) => r.regionId !== action.regionId)
           : [...state.regions, { regionId: action.regionId }],
+      }
+    }
+
+    /* ---- tags ---- */
+    case 'toggleTag': {
+      const isSelected = state.tags.some((tg) => tg.tagId === action.tagId)
+      return {
+        ...state,
+        tags: isSelected
+          ? state.tags.filter((tg) => tg.tagId !== action.tagId)
+          : [...state.tags, { tagId: action.tagId }],
       }
     }
   }
