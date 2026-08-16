@@ -365,8 +365,15 @@
   /* Accent #2: GOLD (material, not text) */
   --gold-ink: #6b4a15; /* "gold" text = bronze, 6.90:1 on page */
   --gold-line: #a87a22; /* stroke/border, 3.30:1 on page */
-  --gold-fill: #d9a93c; /* fill; ink-primary on it: 7.87:1 */
-  --gold-fill-hover: #c9971f;
+  /* 2026-08-16, by request: filled CTAs on light theme read "muddy" next to the hero's
+     "Смотреть туры" button, which is hardcoded to `--color-gold` (#d9b45a) and never themes —
+     the hero is dark in both themes, so it never needed a lighter variant. Bumped to match that
+     exact hex; contrast only improves (lighter fill against the same `--gold-on` text), so the
+     documented ratio below is a floor, not a ceiling. Hover keeps DARKENING rather than adopting
+     the dark theme's lighter hover (`#f0d9a0`) — that value sits almost on top of the light
+     theme's own `--surface-page` (#f4ede0) and would make the button nearly vanish on hover. */
+  --gold-fill: #d9b45a; /* fill; ink-primary on it: >= 7.87:1 (was #d9a93c) */
+  --gold-fill-hover: #c9a23d;
   --gold-soft: #fbf0d6;
   --gold-on: #241a12;
 
@@ -863,11 +870,22 @@ body {
 
 /**
  * Button sheen (2026-08-14, timing revised same day after live review — the first cut swept back
- * and forth continuously and read as too busy): ONE slow pass every 5s, then a real pause, not a
- * ping-pong loop — `28%` is where the sweep finishes crossing the button; the remaining ~72% of
- * the cycle just holds the highlight parked off to the right (invisible) until the next pass. A
- * separate `::after` overlay, not the button's own `background-image`: the button already paints
- * its resting/hover fill (`bg-gold-fill`/`hover:bg-gold-fill-hover` etc.) and a shared
+ * and forth continuously and read as too busy; revised again 2026-08-16 — `-160%`/`260%` travelled
+ * ~5x the button's own width, so even though that phase lasted 1.4s, the streak only crossed the
+ * visible area in ~0.3s and read as a flash; direction fixed same day — it was sweeping right to
+ * left, and David wants left to right).
+ *
+ * ONE slow pass every 5s, then a real pause, not a ping-pong loop — `24%` (1.2s of the 5s cycle)
+ * is spent actually crossing the button; the remaining ~76% just holds the highlight parked
+ * off-screen (invisible) until the next pass. The keyframe values are counter-intuitive on
+ * purpose, so don't "simplify" the direction without re-deriving it: for a `background-size`
+ * WIDER than the element (220% here), a HIGHER `background-position-x` shifts the image itself
+ * further LEFT, which is what pushes a fixed feature inside that image (the highlight band)
+ * toward and off the button's LEFT edge — so `0% { 110% }` is the streak parked off-screen on the
+ * LEFT, and `-10%` at the end is off-screen on the RIGHT. `110% → -10%` is what reads as
+ * left-to-right on screen, even though the numbers themselves go right-to-left. A separate
+ * `::after` overlay, not the button's own `background-image`: the button already paints its
+ * resting/hover fill (`bg-gold-fill`/`hover:bg-gold-fill-hover` etc.) and a shared
  * background-position animation would fight that. `border-radius: inherit` follows whatever shape
  * the button actually is (`rounded-full` here, but this is not tied to that one value);
  * `overflow-hidden` on the button itself clips the streak to it, so it never spills past a
@@ -875,11 +893,11 @@ body {
  */
 @keyframes btn-sheen {
   0% {
-    background-position: -160% 0;
+    background-position: 110% 0;
   }
-  28%,
+  24%,
   100% {
-    background-position: 260% 0;
+    background-position: -10% 0;
   }
 }
 .btn-sheen {

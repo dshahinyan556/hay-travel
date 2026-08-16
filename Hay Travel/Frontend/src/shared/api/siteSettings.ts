@@ -125,11 +125,16 @@ export interface ContentText {
   largeGroupInvitation: string
 }
 
-/** In-flight dedupe (2026-08-16) — `Footer` (every page's layout) and the page body
- * (`HomePage`/`ToursPage`/`TourDetailPage`) each call `getContentText` independently, so a plain
- * navigation fired it twice. Cleared as soon as the request settles, so this only collapses calls
- * fired in the same burst and never serves stale data to a later page load. */
-let contentTextInFlight: { languageCode: number; promise: Promise<ContentText> } | null = null
+/** Per-language session cache (2026-08-16) — `Footer` (every page's layout, fetches in its own
+ * `useEffect` on mount) and the page body (`HomePage`/`ToursPage`/`TourDetailPage`, fetched from
+ * the route loader) both call `getContentText`. A route loader always resolves and the page
+ * mounts (Footer included) BEFORE Footer's effect runs, so by the time it calls this the loader's
+ * request has already settled — an in-flight-only dedupe can't catch that, only a cache that
+ * outlives the request does. Kept for the SPA session (evicted only on failure, so a transient
+ * network error doesn't wedge the footer blank forever) — this is admin-set marketing copy that
+ * changes rarely, a switched-tab reload is an acceptable way to pick up an edit. Keyed by language
+ * so switching locale mid-session still fetches the new language's copy. */
+const contentTextCache = new Map<number, Promise<ContentText>>()
 
 /** Footer tagline, catalog (/trips) heading + subtitle, and the home "избранное" section
  * heading — admin-editable since 2026-08-02 (`Настройки → Тексты сайта`), previously hardcoded
@@ -137,7 +142,8 @@ let contentTextInFlight: { languageCode: number; promise: Promise<ContentText> }
  * case, so callers use the value directly with no local fallback string. */
 export function getContentText(): Promise<ContentText> {
   const languageCode = LANGUAGE_CODE_BY_LOCALE[getStoredLocale()]
-  if (contentTextInFlight?.languageCode === languageCode) return contentTextInFlight.promise
+  const cached = contentTextCache.get(languageCode)
+  if (cached) return cached
 
   const promise = (async (): Promise<ContentText> => {
     try {
@@ -152,6 +158,7 @@ export function getContentText(): Promise<ContentText> {
         largeGroupInvitation: res.values['content.largeGroupInvitation'] ?? '',
       }
     } catch {
+      contentTextCache.delete(languageCode)
       return {
         footerTagline: '',
         catalogTitle: '',
@@ -162,10 +169,7 @@ export function getContentText(): Promise<ContentText> {
     }
   })()
 
-  contentTextInFlight = { languageCode, promise }
-  promise.finally(() => {
-    if (contentTextInFlight?.promise === promise) contentTextInFlight = null
-  })
+  contentTextCache.set(languageCode, promise)
   return promise
 }
 

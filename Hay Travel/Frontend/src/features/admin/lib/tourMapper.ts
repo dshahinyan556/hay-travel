@@ -84,6 +84,7 @@ export const emptyDay = (): TourDayFormState => ({
   duration: emptyLocalized(),
   routePoints: [],
   gallery: [],
+  autofilledImageKeys: {},
 })
 
 /* -------------------------------------------------------------------------- */
@@ -123,7 +124,19 @@ export function placesToSuggestions(places: PlaceInfoModel[]): Localized[] {
 /** Place catalog entries offered as a hard link for a route point (F13 gap closure) — distinct
  * from `placesToSuggestions`, which only offers the bilingual name for free-text autocomplete. */
 export function placesToOptions(places: PlaceInfoModel[]): PlaceOption[] {
-  return places.map((p) => ({ id: p.id, name: readLocalized(p.translations, CATALOG_NAME_TYPE) }))
+  return places.map((p) => ({
+    id: p.id,
+    name: readLocalized(p.translations, CATALOG_NAME_TYPE),
+    images: placeImageUrls(p),
+  }))
+}
+
+/** Same `images`-then-`imageUrl` fallback as the backend's `RoutePointGalleryImageCopier`, so the
+ * live gallery autofill offers exactly what a save would otherwise have copied in. */
+function placeImageUrls(place: PlaceInfoModel): string[] {
+  if (place.images.length > 0) return sortBySortOrder(place.images).map((img) => img.url)
+  const fallback = place.imageUrl.trim()
+  return fallback ? [fallback] : []
 }
 
 export function expenseTemplatesToSuggestions(templates: ExpenseTemplateInfoModel[]): Localized[] {
@@ -261,6 +274,7 @@ function createDayToForm(day: TourDayCreateModel): TourDayFormState {
       placeId: rp.placeId ?? null,
     })),
     gallery: (day.galleryImages ?? []).map((g) => ({ key: newKey(), url: g.url })),
+    autofilledImageKeys: {},
   }
 }
 
@@ -285,6 +299,7 @@ function infoDayToForm(day: TourDayInfoModel): TourDayFormState {
       serverId: g.id,
       url: g.url,
     })),
+    autofilledImageKeys: {},
   }
 }
 
@@ -488,10 +503,9 @@ function parseDecimal(value: string): number {
 /* -------------------------------------------------------------------------- */
 
 /** What a day-fill actually copies: text + route points (with their Place link). Deliberately
- * excludes price and gallery — price stays the target day's own, and gallery photos arrive on
- * save through the normal Place auto-copy for any route point that carries a `placeId`
- * (`RoutePointGalleryImageCopier` on the backend); copying gallery URLs here would double them
- * up with that mechanism. */
+ * excludes price (stays the target day's own) and the gallery URLs themselves — a copied route
+ * point's images are derived live from its `placeId` by the reducer's `fillDayFromSource` case
+ * instead, the same live autofill a manual pick in `RoutePointPlaceSelect` triggers. */
 export interface DaySourceContent {
   title: Localized
   shortDescription: Localized

@@ -10,22 +10,8 @@
 
 /**
  * Известные фронту id пресетов. Должны совпадать с `ThemePaletteCatalog` на бэкенде.
- *
- * Шесть `*-champagne`/`*-brass`/`*-rosegold`/`*-terracotta`/`*-warmcopper`/`*-rust` — временные
- * превью-варианты оттенка золота/меди (2026-08-14, см. `ThemePaletteCatalog.cs`), не постоянная
- * часть каталога. Убрать вместе с их блоками в `styles/palettes.css`, `THEME_COLORS` (`theme.ts`)
- * и `COLORS` (`index.html`) сразу после того, как Давид выберет один вариант.
  */
-export const PALETTE_IDS = [
-  'obsidian',
-  'basalt',
-  'obsidian-champagne',
-  'obsidian-brass',
-  'obsidian-rosegold',
-  'basalt-terracotta',
-  'basalt-warmcopper',
-  'basalt-rust',
-] as const
+export const PALETTE_IDS = ['obsidian', 'basalt'] as const
 
 export type PaletteId = (typeof PALETTE_IDS)[number]
 

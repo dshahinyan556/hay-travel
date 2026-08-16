@@ -45,6 +45,10 @@ export interface RoutePointFormState extends LocalizedListItem {
 export interface PlaceOption {
   id: number
   name: Localized
+  /** Ordered image URLs offered for the gallery autofill when this Place is picked — `images`
+   * if the Place has any, else a single-item fallback to its legacy `imageUrl` (mirrors the
+   * backend's own fallback in `RoutePointGalleryImageCopier`). */
+  images: string[]
 }
 
 /** One additional expense of the tour. */
@@ -68,6 +72,14 @@ export interface TourDayFormState {
   duration: Localized
   routePoints: RoutePointFormState[]
   gallery: GalleryItemFormState[]
+  /** Which gallery items (by `key`) were auto-added because a route point (keyed the same way)
+   * is linked to a Place — session-only bookkeeping so picking a different Place for that route
+   * point (or clearing the link) can swap out exactly those images without touching ones the
+   * admin added by hand. Never sent to the backend. Days loaded from an existing tour start
+   * empty: the backend has no record of which stored gallery image came from which Place, so a
+   * route point that already had a link when the form opened is treated as "unknown origin"
+   * until the admin re-picks its Place in this session. */
+  autofilledImageKeys: Record<string, string[]>
 }
 
 /** Existing catalog entries offered as autocomplete while typing route points, organizational

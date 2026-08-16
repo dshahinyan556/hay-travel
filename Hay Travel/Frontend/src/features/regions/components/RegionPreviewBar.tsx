@@ -66,7 +66,7 @@ export function RegionPreviewBar({ region, tourCount, onOpen, onDismiss }: Regio
       <button
         type="button"
         onClick={onOpen}
-        className="btn-motion inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-gold-fill px-4 py-2.5 text-sm font-medium text-gold-on hover:bg-gold-fill-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-page focus-visible:outline-none"
+        className="btn-motion btn-sheen inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full bg-gold-fill px-4 py-2.5 text-sm font-medium text-gold-on hover:bg-gold-fill-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-page focus-visible:outline-none"
       >
         {t('regions.previewBar.open')}
         <ArrowRightIcon size={15} />

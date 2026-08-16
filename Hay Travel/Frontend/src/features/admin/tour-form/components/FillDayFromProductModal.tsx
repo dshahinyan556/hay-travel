@@ -16,8 +16,9 @@ interface FillDayFromProductModalProps {
  * prefill a day's text + route points from an existing excursion or another tour's day (e.g. a
  * multi-day tour's second day IS the "Гарни-Гегард" excursion in substance, no need to retype
  * it). Copy-once: picking a source replaces the day's content immediately; nothing stays linked
- * afterwards, so further edits are free. Price and gallery are never touched (see
- * `DaySourceContent`'s doc comment in `tourMapper.ts`).
+ * afterwards, so further edits are free. Price is never touched; the gallery keeps whatever the
+ * admin added by hand and gains the images of any copied route point that carries a Place link
+ * (see `tourFormReducer`'s `fillDayFromSource` case).
  */
 export function FillDayFromProductModal({
   open,
@@ -48,8 +49,8 @@ export function FillDayFromProductModal({
         <div className="flex flex-col gap-4">
           <p className="text-sm text-neutral-600">
             В дне уже есть текст или точки маршрута — заливка из «{pending.tourTitle.ru || pending.tourTitle.en}
-            {pending.dayLabel ? `, ${pending.dayLabel}` : ''}» полностью заменит их. Цена и галерея дня не
-            меняются.
+            {pending.dayLabel ? `, ${pending.dayLabel}` : ''}» полностью заменит их. Цена дня и уже добавленные
+            картинки не меняются; для скопированных точек с привязкой к каталогу в галерею добавятся их фото.
           </p>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => setPending(null)}>
