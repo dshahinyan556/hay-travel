@@ -21,14 +21,10 @@ interface TagsTabProps {
 
 type PanelState = { mode: 'create' } | { mode: 'edit'; item: TagInfoModel } | null
 
-function parsePercent(value: string): number {
-  const n = Number(value.replace(',', '.'))
-  return Number.isFinite(n) ? n : 0
-}
-
-/** Product tags catalog — up to 3 per tour, at most 1 `Discount` (enforced when assigning, on
- * the tour form's `TagPicker`, not here: this screen manages the tag *definitions*, not which
- * tour has which). Same CRUD/drag-reorder shell as `ExpenseTemplatesTab`. */
+/** Product tags catalog — up to 3 per tour (enforced when assigning, on the tour form's
+ * `TagPicker`, not here: this screen manages the tag *definitions*, not which tour has which).
+ * Purely decorative — discount lives on the tour itself (Фаза 3/7), not on a tag. Same
+ * CRUD/drag-reorder shell as `ExpenseTemplatesTab`. */
 export function TagsTab({ items, onMutated }: TagsTabProps) {
   const [panel, setPanel] = useState<PanelState>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -51,23 +47,20 @@ export function TagsTab({ items, onMutated }: TagsTabProps) {
   async function handleSubmit(values: TagFormValues) {
     setIsSubmitting(true)
     setFormError(null)
-    const discountPercent = values.type === TagType.Discount ? parsePercent(values.discountPercent) : null
     try {
       if (panel?.mode === 'edit') {
         await updateTag({
           id: panel.item.id,
-          type: values.type,
+          type: TagType.Regular,
           color: values.color,
-          discountPercent,
           // Position is owned by drag-and-drop now — keep whatever the row already has.
           sortOrder: panel.item.sortOrder,
           translations: writeLocalizedForUpdate(values.name),
         })
       } else {
         await createTag({
-          type: values.type,
+          type: TagType.Regular,
           color: values.color,
-          discountPercent,
           sortOrder: nextSortOrder(items),
           translations: writeLocalized(values.name),
         })
@@ -98,7 +91,6 @@ export function TagsTab({ items, onMutated }: TagsTabProps) {
 
   function renderRow(item: TagInfoModel, sortable?: SortableRowRenderProps) {
     const name = readLocalized(item.translations).ru
-    const isDiscount = item.type === TagType.Discount
     return (
       <tr
         key={sortable ? undefined : item.id}
@@ -131,9 +123,6 @@ export function TagsTab({ items, onMutated }: TagsTabProps) {
               {name || <span className="text-neutral-400">—</span>}
             </span>
           </span>
-        </td>
-        <td className="px-3 py-2.5 text-sm text-neutral-600">
-          {isDiscount ? `Скидка ${item.discountPercent ?? '—'}%` : 'Обычный'}
         </td>
         <td className="px-3 py-2.5">
           <div className="flex justify-end gap-1.5">
@@ -187,7 +176,6 @@ export function TagsTab({ items, onMutated }: TagsTabProps) {
                   <span className="sr-only">Порядок</span>
                 </th>
                 <th className="px-3 py-2.5">Название</th>
-                <th className="px-3 py-2.5">Тип</th>
                 <th className="px-3 py-2.5" />
               </tr>
             </thead>

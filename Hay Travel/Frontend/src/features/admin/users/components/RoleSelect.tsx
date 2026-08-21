@@ -8,6 +8,7 @@ function parseRole(value: string): RoleType | null {
   if (value === String(RoleType.Regular)) return RoleType.Regular
   if (value === String(RoleType.TourManager)) return RoleType.TourManager
   if (value === String(RoleType.Admin)) return RoleType.Admin
+  if (value === String(RoleType.Employee)) return RoleType.Employee
   return null
 }
 

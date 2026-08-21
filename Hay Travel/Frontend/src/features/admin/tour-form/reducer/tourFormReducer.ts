@@ -55,6 +55,9 @@ export type TourFormAction =
   | { kind: 'setField'; field: 'mainImageUrl'; value: string }
   | { kind: 'setField'; field: 'isActive'; value: boolean }
   | { kind: 'setField'; field: 'requiresPrepayment'; value: boolean }
+  | { kind: 'setField'; field: 'discountPercent'; value: string }
+  | { kind: 'setField'; field: 'discountStartDate'; value: string }
+  | { kind: 'setField'; field: 'discountValidUntil'; value: string }
   | { kind: 'setLocalized'; field: TourLocalizedField; lang: LangKey; value: string }
   // days
   | { kind: 'addDay' }
@@ -116,10 +119,8 @@ export type TourFormAction =
   | { kind: 'setExpenseDescription'; key: string; lang: LangKey; value: string }
   // regions (tour-level, unordered checkbox set)
   | { kind: 'toggleRegion'; regionId: number }
-  // tags (tour-level, unordered checkbox set). Dumb toggle only — the max-3/max-1-discount
-  // rule needs the tag catalog's `type` per id, which the reducer doesn't have; that
-  // enforcement (block + message) lives in `TagPicker`, the same layering `RegionPicker` uses
-  // for its own (looser) rule.
+  // tags (tour-level, unordered checkbox set). Dumb toggle only — the max-3 rule lives in
+  // `TagPicker`, the same layering `RegionPicker` uses for its own (looser) rule.
   | { kind: 'toggleTag'; tagId: number }
 
 /* -------------------------------------------------------------------------- */
@@ -224,7 +225,10 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
     case 'setField':
       if (action.field === 'mainImageUrl') return { ...state, mainImageUrl: action.value }
       if (action.field === 'isActive') return { ...state, isActive: action.value }
-      return { ...state, requiresPrepayment: action.value }
+      if (action.field === 'requiresPrepayment') return { ...state, requiresPrepayment: action.value }
+      if (action.field === 'discountPercent') return { ...state, discountPercent: action.value }
+      if (action.field === 'discountStartDate') return { ...state, discountStartDate: action.value }
+      return { ...state, discountValidUntil: action.value }
 
     case 'setLocalized':
       return { ...state, [action.field]: setLoc(state[action.field], action.lang, action.value) }

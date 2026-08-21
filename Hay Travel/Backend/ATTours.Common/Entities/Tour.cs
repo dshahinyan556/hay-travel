@@ -22,6 +22,16 @@ namespace ATTours.Common.Entities
         // сумма предоплаты по-прежнему глобальная константа (OrderCreationService.
         // ResolvePrepayment) — это только видимость блока, не per-tour процент.
         public bool RequiresPrepayment { get; set; }
+        // Скидка тура (Фаза 3, checklist-orders-redesign.txt): ОДНО активное правило на сам
+        // тур, не список тегов (заменяет прежний TagType.Discount-подход). Активна в диапазоне
+        // [DiscountStartDate; DiscountValidUntil] включительно (checklist-discount-fix.txt) —
+        // сама включается и сама перестаёт применяться по датам, снимать вручную не нужно.
+        // Все три поля обязаны быть заданы или не заданы вместе (TourValidationService);
+        // DiscountStartDate == null у старых строк (до миграции AddTourDiscountStartDate)
+        // трактуется как «нижней границы нет». Резолв активности — TourDiscountExtensions.
+        public decimal? DiscountPercent { get; set; }
+        public DateOnly? DiscountStartDate { get; set; }
+        public DateOnly? DiscountValidUntil { get; set; }
         public string MainImageUrl { get; set; }
         public HashSet<TourDetail> TourDetails { get; set; } = [];
         public HashSet<TourInfoTranslation> Translations { get; set; } = [];

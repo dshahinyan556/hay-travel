@@ -10,6 +10,12 @@
     <PackageReference Include="AutoMapper" Version="16.1.1" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="MaxMind.GeoIP2" Version="6.1.0" />
+    <!-- Community-лицензия (checklist-orders-redesign.txt Фаза 4, подтверждено Давидом
+         2026-08-16): бесплатно для частных лиц и компаний с выручкой < $1M/год.
+         QuestPDF.Settings.License проставляется в Startup.ConfigureServices. Фонты не
+         регистрируем: с 2024.3.0 QuestPDF не требует libfontconfig на Linux, а весь текст
+         в PDF — RU/EN (LanguageCode всего 2 значения), это покрывает встроенный Lato. -->
+    <PackageReference Include="QuestPDF" Version="2026.7.3" />
     <PackageReference Include="SkiaSharp" Version="4.151.1" />
     <!-- "NoDependencies" вариант: без него нативная либа под Linux тянет libfontconfig/libGL,
          которых нет в mcr.microsoft.com/dotnet/aspnet — а тут нужен только decode/resize/encode,

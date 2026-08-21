@@ -52,7 +52,9 @@ namespace ATTours.DataLayer
         public DbSet<LoginHistory> LoginHistories { get; set; }
         public DbSet<ExchangeRate> ExchangeRates { get; set; }
         public DbSet<Order> Orders { get; set; }
+        public DbSet<OrderLine> OrderLines { get; set; }
         public DbSet<OrderPayment> OrderPayments { get; set; }
+        public DbSet<OrderEvent> OrderEvents { get; set; }
         public DbSet<ClosureRule> ClosureRules { get; set; }
     }
 }

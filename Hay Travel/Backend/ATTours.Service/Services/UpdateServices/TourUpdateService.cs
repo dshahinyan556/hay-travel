@@ -57,6 +57,9 @@ namespace ATTours.BusinessServices.Services.UpdateServices
             // Скалярные поля тура (IsActive/IsArchived/TotalPrice здесь не трогаем).
             existing.MainImageUrl = incoming.MainImageUrl;
             existing.RequiresPrepayment = incoming.RequiresPrepayment;
+            existing.DiscountPercent = incoming.DiscountPercent;
+            existing.DiscountStartDate = incoming.DiscountStartDate;
+            existing.DiscountValidUntil = incoming.DiscountValidUntil;
 
             ReconcileCollection(existing.Translations, incoming.Translations,
                 (target, src) => { target.Type = src.Type; target.LanguageCode = src.LanguageCode; target.Value = src.Value; });

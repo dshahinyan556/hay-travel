@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
+using QuestPDF.Infrastructure;
 using System.Security.Claims;
 using System.Text;
 
@@ -23,6 +24,10 @@ namespace ATTours.ClientAPI
     {
         public override void ConfigureServices(IServiceCollection services)
         {
+            // Обязательный вызов до первой генерации PDF (Фаза 4, checklist-orders-redesign.txt),
+            // иначе QuestPDF бросает исключение при первом Document.GeneratePdf().
+            QuestPDF.Settings.License = LicenseType.Community;
+
             base.ConfigureServices(services);
             services.AddDAL();
             services.AddServices();

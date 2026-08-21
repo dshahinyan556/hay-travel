@@ -35,7 +35,30 @@ namespace ATTours.BusinessServices.Services.ValidationServices
                 await ValidateExpenseTemplateReferencesAsync(entity);
                 await ValidateTourNoteTemplateReferencesAsync(entity);
                 await ValidateTagsAsync(entity);
+                ValidateDiscount(entity);
             }
+        }
+
+        // Скидка тура (Фаза 3, диапазон дат — checklist-discount-fix.txt): процент и обе границы
+        // задаются вместе или не задаются вовсе. "Процент без дат" нарушил бы правило ADR
+        // "скидка сама снимается по дате", а дата начала без даты окончания дала бы вечную акцию.
+        private static void ValidateDiscount(Tour tour)
+        {
+            if (tour.DiscountPercent is null && tour.DiscountStartDate is null && tour.DiscountValidUntil is null)
+                return;
+
+            if (tour.DiscountPercent is null || tour.DiscountStartDate is null || tour.DiscountValidUntil is null)
+                throw new ErrorModelException(GlobalErrorCode.InvalidTourDiscount, HttpStatusCode.BadRequest,
+                    "Tour discount requires a percent value together with both start and valid-until dates.");
+
+            if (tour.DiscountPercent <= 0 || tour.DiscountPercent > 100)
+                throw new ErrorModelException(GlobalErrorCode.InvalidTourDiscount, HttpStatusCode.BadRequest,
+                    "Tour discount percent must be between 0 and 100.");
+
+            // Диапазон включительный с обеих сторон, поэтому акция на один день (start == end) — ОК.
+            if (tour.DiscountStartDate > tour.DiscountValidUntil)
+                throw new ErrorModelException(GlobalErrorCode.InvalidTourDiscount, HttpStatusCode.BadRequest,
+                    "Tour discount start date cannot be later than the valid-until date.");
         }
 
         private void ValidateTourDaysByType(Tour tour)
@@ -172,8 +195,7 @@ namespace ATTours.BusinessServices.Services.ValidationServices
             }
         }
 
-        // Каталог Tag: не больше MaxTagsPerTour штук, не больше одного Type == Discount,
-        // без дублей TagId, все TagId должны существовать.
+        // Каталог Tag: не больше MaxTagsPerTour штук, без дублей TagId, все TagId должны существовать.
         private async Task ValidateTagsAsync(Tour tour)
         {
             if (tour.TourTags is null || tour.TourTags.Count == 0)
@@ -190,17 +212,12 @@ namespace ATTours.BusinessServices.Services.ValidationServices
                 throw new ErrorModelException(GlobalErrorCode.TooManyTags, HttpStatusCode.BadRequest,
                     $"A tour can have at most {MaxTagsPerTour} tags.");
 
-            var tags = await Context.Set<Tag>()
+            var existingCount = await Context.Set<Tag>()
                                     .Where(tag => tagIds.Contains(tag.Id))
-                                    .Select(tag => new { tag.Id, tag.Type })
-                                    .ToListAsync();
+                                    .CountAsync();
 
-            if (tags.Count != tagIds.Count)
+            if (existingCount != tagIds.Count)
                 throw new ErrorModelException(GlobalErrorCode.TagNotFound, HttpStatusCode.BadRequest, "One or more tags do not exist.");
-
-            if (tags.Count(t => t.Type == Common.Enums.TagType.Discount) > 1)
-                throw new ErrorModelException(GlobalErrorCode.MultipleDiscountTags, HttpStatusCode.BadRequest,
-                    "A tour can have at most one discount tag.");
         }
     }
 }

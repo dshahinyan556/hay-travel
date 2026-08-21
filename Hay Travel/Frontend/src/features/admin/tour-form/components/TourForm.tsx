@@ -114,6 +114,9 @@ export function TourForm({
         mainImageUrlError={validation.mainImageUrl}
         titleRuError={validation.titleRu}
         excursionPriceError={singleDay ? validation.dayPriceErrors[singleDay.key] : undefined}
+        discountPercentError={validation.discountPercent}
+        discountStartDateError={validation.discountStartDate}
+        discountValidUntilError={validation.discountValidUntil}
         typeLocked={typeLocked}
         regions={regions}
         tags={tags}

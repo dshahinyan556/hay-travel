@@ -1,37 +1,33 @@
+using ATTours.Common.Enums;
 using ATTours.Common.Infrastructure.Abstractions;
 using ATTours.Common.Infrastructure.EntityConfiguration;
 using Microsoft.EntityFrameworkCore;
 
 namespace ATTours.Common.Entities
 {
-    // Денежная часть заказа (ADR 014): отдельная сущность со своим Id и unique-FK на Order,
-    // а не плоские колонки в Order и не owned-type (owned-типов в проекте нет ни одного).
-    // Точка расширения под платёжный шлюз: провайдер/транзакции/статусы оплаты добавятся
-    // сюда, не трогая Order.
+    // Денежная ПРОВОДКА заказа (ADR 019, заменяет ADR 014 — см. docs/adr/019). Раньше это была
+    // 1:1 сущность-снапшот (цена/скидка/итог на момент заказа); переделка B14 (мульти-строчные
+    // заказы) забрала эти снапшоты на OrderLine, а OrderPayment стал тем самым журналом
+    // проводок, под который ADR 014 изначально резервировал точку расширения — просто раньше,
+    // чем ожидался платёжный шлюз, и по форме, которую задал мокап Давида (грид "платежи").
     [EntityTypeConfiguration(typeof(OrderPaymentConfiguration))]
     public class OrderPayment : EntityBase
     {
-        public int OrderId { get; set; }
-        public Order Order { get; set; }
+        // Заказ адресуется ТОЛЬКО через строку (OrderLine.OrderId) — второй прямой FK на Order
+        // создал бы два каскадных пути удаления к одной таблице (Order->OrderPayment и
+        // Order->OrderLine->OrderPayment), что SQL Server прямо запрещает ("multiple cascade
+        // paths"). К какой строке относится проводка — обязательно (мокап: "order line nbr").
+        public int OrderLineId { get; set; }
+        public OrderLine OrderLine { get; set; }
 
-        // Снапшот Tour.TotalPrice на момент заказа (ДО скидки): последующая правка цены тура
-        // не должна задним числом менять уже оформленную бронь.
-        public decimal TourPriceSnapshot { get; set; }
+        public OrderPaymentType Type { get; set; }
 
-        // Снапшот процента Discount-тега тура на момент заказа, null — скидки не было.
-        // Хранится отдельно от TourPriceSnapshot, чтобы в деталях заказа было видно и
-        // исходную цену, и процент, а не только уже посчитанный итог (D-1, 2026-08-16).
-        // Последующая правка/удаление тега не меняет задним числом уже оформленную бронь.
-        public decimal? DiscountPercent { get; set; }
+        // Автономер вида PP0000000001 (OrderPaymentNumberGenerator, сквозной счётчик — не
+        // сбрасывается по дням, в отличие от Order.Number).
+        public string Number { get; set; }
 
-        // Согласованная сумма заказа (цена со скидкой, если она была * тариф по числу гостей).
-        public decimal TotalAmount { get; set; }
+        public decimal Amount { get; set; }
 
-        // Предоплата. Шлюза нет — сейчас всегда 0 (см. OrderCreationService.ResolvePrepayment),
-        // поле уже готово принять реальную политику предоплаты.
-        public decimal PrepaidAmount { get; set; }
-
-        // ISO-4217. Базовая цена на бэке всегда в AMD; мультивалютность — отображение на фронте.
-        public string Currency { get; set; }
+        public DateTime CreatedAtUtc { get; set; }
     }
 }

@@ -1,33 +1,19 @@
 import { Link } from 'react-router'
-import { resolveTier } from '@/shared/currency/pricing'
-import { OrderStatus, type OrderInfoModel } from '@/shared/types/booking'
-import { formatOrderMoney, ordersCopy } from '../lib/ordersCopy'
-
-const statusClasses: Record<OrderStatus, string> = {
-  [OrderStatus.PendingConfirmation]: 'bg-amber-50 text-amber-700',
-  [OrderStatus.Confirmed]: 'bg-emerald-50 text-emerald-700',
-  [OrderStatus.Cancelled]: 'bg-neutral-100 text-neutral-500',
-}
-
-const statusLabels: Record<OrderStatus, string> = {
-  [OrderStatus.PendingConfirmation]: ordersCopy.statusPending,
-  [OrderStatus.Confirmed]: ordersCopy.statusConfirmed,
-  [OrderStatus.Cancelled]: ordersCopy.statusCancelled,
-}
+import type { OrderInfoModel } from '@/shared/types/booking'
+import { formatOrderMoney, ordersCopy, statusClasses, statusLabels } from '../lib/ordersCopy'
+import { orderEarliestDate, orderHeadline, orderTotalGuests } from '../lib/ordersModel'
 
 export interface OrderRowProps {
   order: OrderInfoModel
 }
 
 /**
- * One row of the Заказы list — deliberately minimal (tour+date, client, status, total): the full
- * picture (payment breakdown, timestamps, client's other orders, confirm/edit/cancel) lives one
- * click away on `OrderDetailPage` (B12 redesign, 2026-08-13). The whole card is the link, not a
- * button inside it — a list of orders is a list of navigation targets, nothing here mutates state.
+ * One row of the Заказы list — deliberately minimal (headline tour + earliest date, client,
+ * status, grand total): the full picture (per-line grid, payments, fulfillment) lives one click
+ * away on `OrderDetailPage`. The whole card is the link, not a button inside it — a list of orders
+ * is a list of navigation targets, nothing here mutates state.
  */
 export function OrderRow({ order }: OrderRowProps) {
-  const isQuoteNeeded = resolveTier(order.guestCount) === 'hidden'
-
   return (
     <Link
       to={`/admin/orders/${order.id}`}
@@ -35,9 +21,9 @@ export function OrderRow({ order }: OrderRowProps) {
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-semibold break-words text-neutral-900">{order.tourTitle}</p>
+          <p className="font-semibold break-words text-neutral-900">{orderHeadline(order)}</p>
           <p className="mt-0.5 text-xs text-neutral-500">
-            {order.tourDate} · Заказ №{order.id}
+            {orderEarliestDate(order) || ordersCopy.dash} · Заказ №{order.number}
           </p>
         </div>
         <span
@@ -48,11 +34,11 @@ export function OrderRow({ order }: OrderRowProps) {
       </div>
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm">
-        <span className="text-neutral-600">{order.userFullName.trim() || order.userEmail}</span>
+        <span className="text-neutral-600">
+          {order.userFullName.trim() || order.userEmail} · {orderTotalGuests(order)} гостей
+        </span>
         <span className="font-semibold tabular-nums text-neutral-900">
-          {isQuoteNeeded
-            ? ordersCopy.quoteNeeded
-            : formatOrderMoney(order.payment.totalAmount, order.payment.currency)}
+          {formatOrderMoney(order.total, order.currency)}
         </span>
       </div>
     </Link>

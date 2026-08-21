@@ -83,8 +83,14 @@ namespace ATTours.Helper.Enums
         TagNotFound = 2023,
         [Description("A tour can have at most 3 tags.")]
         TooManyTags = 2024,
-        [Description("A tour can have at most one discount tag.")]
-        MultipleDiscountTags = 2025,
+        [Description("Tour discount percent/valid-until date are invalid or incomplete.")]
+        InvalidTourDiscount = 2025,
+        [Description("Order line not found.")]
+        OrderLineNotFound = 2026,
+        [Description("Selected user is not an employee.")]
+        UserIsNotEmployee = 2027,
+        [Description("Order must have at least one line.")]
+        OrderMustHaveAtLeastOneLine = 2028,
 
         #endregion
 

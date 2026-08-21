@@ -51,7 +51,7 @@ export function Header() {
       <div className="mx-auto flex w-full max-w-6xl items-center gap-4 rounded-full border border-edge/70 bg-panel/85 px-4 py-2.5 shadow-lg shadow-black/20 backdrop-blur-md sm:px-6">
         <NavLink to="/" className="flex items-center gap-2">
           {logoUrl ? (
-            <img src={logoUrl} alt="Hay Travel" className="h-7 w-auto sm:h-8" />
+            <img src={logoUrl} alt="Hay Travel" className="h-9 w-auto sm:h-11" />
           ) : (
             <>
               <span className="text-gold-ink">

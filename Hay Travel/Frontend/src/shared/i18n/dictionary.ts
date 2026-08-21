@@ -127,6 +127,7 @@ const ru = {
 
   // ── Tour card ─────────────────────────────────────────────────────────────────────────────
   'tourCard.priceFrom': 'цена от',
+  'tourCard.discountUntil': 'до {date}',
   'chip.tour': 'Тур',
   'chip.excursion': 'Экскурсия',
 
@@ -196,6 +197,9 @@ const ru = {
   /* Суффикс к `aria-label` погашенной даты: визуальное отличие (зачёркивание) должно быть
      продублировано словом. */
   'datePicker.unavailable': 'недоступно',
+  /* Суффикс к `aria-label` дня внутри диапазона скидки: красная лента «-15%» нарисована
+     как графика (`aria-hidden`), поэтому смысл дублируется словами. */
+  'datePicker.discount': 'скидка {percent}%',
   'datePicker.prevMonth': 'Предыдущий месяц',
   'datePicker.nextMonth': 'Следующий месяц',
   'datePicker.month.0': 'Январь',
@@ -316,6 +320,7 @@ const ru = {
   'auth.role.regular': 'Пользователь',
   'auth.role.tourManager': 'Тур-менеджер',
   'auth.role.admin': 'Администратор',
+  'auth.role.employee': 'Исполнитель',
   'auth.goToPanel': 'Панель',
   'auth.logout': 'Выйти',
 
@@ -474,6 +479,7 @@ const en: Record<TranslationKey, string> = {
   'filter.reset': 'Reset',
 
   'tourCard.priceFrom': 'from',
+  'tourCard.discountUntil': 'until {date}',
   'chip.tour': 'Tour',
   'chip.excursion': 'Excursion',
 
@@ -530,6 +536,7 @@ const en: Record<TranslationKey, string> = {
 
   'datePicker.placeholder': 'Pick a date',
   'datePicker.unavailable': 'unavailable',
+  'datePicker.discount': '{percent}% off',
   'datePicker.prevMonth': 'Previous month',
   'datePicker.nextMonth': 'Next month',
   'datePicker.month.0': 'January',
@@ -634,6 +641,7 @@ const en: Record<TranslationKey, string> = {
   'auth.role.regular': 'Customer',
   'auth.role.tourManager': 'Tour manager',
   'auth.role.admin': 'Administrator',
+  'auth.role.employee': 'Employee',
   'auth.goToPanel': 'Panel',
   'auth.logout': 'Log out',
 

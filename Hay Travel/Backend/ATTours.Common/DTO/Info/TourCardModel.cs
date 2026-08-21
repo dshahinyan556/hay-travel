@@ -17,6 +17,14 @@ namespace ATTours.Common.DTO.Info
         public int Id { get; set; }
         public TourType Type { get; set; }
         public decimal? TotalPrice { get; set; }
+        // Резолвнутая цена со скидкой (Фаза 3) — null, если активной скидки нет.
+        // TotalPrice остаётся «старой» ценой для зачёркнутого отображения.
+        public decimal? DiscountedPrice { get; set; }
+        // Границы акции — только для отображения ("с ДД.ММ" / "действует до ДД.ММ") рядом
+        // с DiscountedPrice. Обе приходят непустыми только когда скидка реально активна
+        // сегодня, иначе null (MappingProfile) — карточка не должна анонсировать будущую акцию.
+        public DateOnly? DiscountStartDate { get; set; }
+        public DateOnly? DiscountValidUntil { get; set; }
         public string MainImageUrl { get; set; }
         // Число дней тура = количество TourDetails. Число ночей выводимо на фронте
         // (экскурсия = 0, тур = дни − 1) и в БД не хранится — отдельным полем не дублируем.

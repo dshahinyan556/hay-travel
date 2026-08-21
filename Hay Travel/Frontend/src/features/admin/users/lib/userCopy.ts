@@ -22,6 +22,7 @@ export const roleLabels: Record<RoleType, string> = {
   [RoleType.Regular]: 'Пользователь',
   [RoleType.TourManager]: 'Тур-менеджер',
   [RoleType.Admin]: 'Администратор',
+  [RoleType.Employee]: 'Исполнитель',
 }
 
 /** Short description of what each tier can do — shown under the table, not per row. */
@@ -29,6 +30,7 @@ export const roleHints: Record<RoleType, string> = {
   [RoleType.Regular]: 'клиент сайта, без доступа к панели',
   [RoleType.TourManager]: 'создаёт и редактирует туры, архивирует; без удаления и настроек',
   [RoleType.Admin]: 'полный доступ, включая справочники, настройки и роли',
+  [RoleType.Employee]: 'видит только назначенные ему заказы, без права редактировать',
 }
 
 /**
@@ -43,7 +45,7 @@ export function roleIdFor(role: RoleType, users: UserInfoModel[]): number {
   return users.find((user) => user.role === role)?.roleId ?? role
 }
 
-const ROLE_ORDER: RoleType[] = [RoleType.Regular, RoleType.TourManager, RoleType.Admin]
+const ROLE_ORDER: RoleType[] = [RoleType.Regular, RoleType.Employee, RoleType.TourManager, RoleType.Admin]
 
 /**
  * Options for one row's `RoleSelect` (D3, 2026-08-09).

@@ -1,7 +1,7 @@
 import { Button, DatePicker, Input, Select } from '@/shared/ui'
 import type { TourInfoModel } from '@/shared/types/attours'
 import { ordersCopy } from '../lib/ordersCopy'
-import { hasActiveFilters, tourTitleResolver, type OrderFiltersState } from '../lib/ordersModel'
+import { emptyOrderFilters, hasActiveFilters, tourTitleResolver, type OrderFiltersState } from '../lib/ordersModel'
 
 export interface OrderFiltersProps {
   filters: OrderFiltersState
@@ -49,12 +49,11 @@ export function OrderFilters({ filters, onChange, tours }: OrderFiltersProps) {
         </label>
 
         <label className="text-xs text-neutral-500">
-          {ordersCopy.filterIdLabel}
+          {ordersCopy.filterNumberLabel}
           <Input
-            value={filters.idQuery}
-            onChange={(e) => set('idQuery', e.target.value.replace(/\D/g, ''))}
-            placeholder={ordersCopy.filterIdPlaceholder}
-            inputMode="numeric"
+            value={filters.numberQuery}
+            onChange={(e) => set('numberQuery', e.target.value)}
+            placeholder={ordersCopy.filterNumberPlaceholder}
             className="mt-1"
           />
         </label>
@@ -86,7 +85,7 @@ export function OrderFilters({ filters, onChange, tours }: OrderFiltersProps) {
           type="button"
           variant="secondary"
           size="sm"
-          onClick={() => onChange({ tourId: null, client: '', idQuery: '', dateFrom: '', dateTo: '' })}
+          onClick={() => onChange(emptyOrderFilters)}
           className="min-h-11 w-fit"
         >
           {ordersCopy.filtersClear}

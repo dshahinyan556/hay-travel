@@ -26,11 +26,12 @@ export const tourTypeLabels: Record<TourType, string> = {
 /*  Tags                                                                       */
 /* -------------------------------------------------------------------------- */
 
-/** Only `Discount` carries `discountPercent` and changes price display (card, detail, booking);
- * every other type is purely cosmetic. Mirrors backend `TagType`. */
+/** Purely cosmetic — mirrors backend `TagType`. Скидка тура больше не тег (Фаза 3/7,
+ * checklist-orders-redesign.txt) — она живёт прямо на туре, см. `TourFormState.discountPercent`.
+ * Single-member on purpose (kept as an object, not inlined, so a future second tag kind doesn't
+ * need every call site rewritten). */
 export const TagType = {
   Regular: 1,
-  Discount: 2,
 } as const
 
 export type TagType = (typeof TagType)[keyof typeof TagType]
@@ -48,11 +49,6 @@ export const TagColor = {
 } as const
 
 export type TagColor = (typeof TagColor)[keyof typeof TagColor]
-
-export const tagTypeLabels: Record<TagType, string> = {
-  [TagType.Regular]: 'Обычный',
-  [TagType.Discount]: 'Скидка',
-}
 
 export const tagColorLabels: Record<TagColor, string> = {
   [TagColor.Gold]: 'Золотой',

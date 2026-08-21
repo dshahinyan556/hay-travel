@@ -57,6 +57,22 @@ namespace ATTours.BusinessServices.Email
                          EmailMessageFactory.BuildNewOrderNotificationBody(tourTitle, tourDate, guestCount, customerName, customerEmail),
                          cancellationToken);
 
+        public Task SendOrderDocumentAsync(string toEmail, string toName, string orderNumber, byte[] pdfDocument,
+            CancellationToken cancellationToken = default)
+            => SendWithAttachmentAsync(toEmail, toName,
+                         EmailMessageFactory.OrderDocumentSubject(orderNumber),
+                         EmailMessageFactory.BuildOrderDocumentBody(toName, orderNumber),
+                         $"order-{orderNumber}.pdf", pdfDocument,
+                         cancellationToken);
+
+        public Task SendAssignmentAsync(string toEmail, string toName, string orderNumber, string assignmentDetails,
+            byte[] pdfDocument, CancellationToken cancellationToken = default)
+            => SendWithAttachmentAsync(toEmail, toName,
+                         EmailMessageFactory.AssignmentSubject(orderNumber),
+                         EmailMessageFactory.BuildAssignmentBody(toName, orderNumber, assignmentDetails),
+                         $"assignment-{orderNumber}.pdf", pdfDocument,
+                         cancellationToken);
+
         // Сбой провайдера не должен ронять запрос: регистрация/восстановление уже записаны
         // в БД, а повторная отправка достигается повторным вызовом эндпоинта.
         private async Task SendAsync(string toEmail, string toName, string subject, string body, CancellationToken cancellationToken)
@@ -70,6 +86,49 @@ namespace ATTours.BusinessServices.Email
                 from = new { email = settings.FromEmail, name = settings.FromName },
                 subject,
                 content = new[] { new { type = "text/plain", value = body } }
+            };
+
+            try
+            {
+                using var response = await httpClient.PostAsJsonAsync(MailSendUrl, payload, cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var details = await response.Content.ReadAsStringAsync(cancellationToken);
+                    logger.LogError("SendGrid rejected the message to {Email}: {StatusCode} {Details}",
+                        toEmail, response.StatusCode, details);
+                }
+            }
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+            {
+                logger.LogError(exception, "SendGrid request for {Email} failed.", toEmail);
+            }
+        }
+
+        // Отдельный метод (не доп. параметр SendAsync выше) — письма без вложения не должны
+        // менять форму payload'а, который уже работает в проде (verify/reset/email-change).
+        private async Task SendWithAttachmentAsync(string toEmail, string toName, string subject, string body,
+            string attachmentFileName, byte[] attachmentContent, CancellationToken cancellationToken)
+        {
+            var payload = new
+            {
+                personalizations = new[]
+                {
+                    new { to = new[] { new { email = toEmail, name = toName } } }
+                },
+                from = new { email = settings.FromEmail, name = settings.FromName },
+                subject,
+                content = new[] { new { type = "text/plain", value = body } },
+                // SendGrid v3 mail/send: ключ "attachments" (мн. число), base64 content.
+                attachments = new[]
+                {
+                    new
+                    {
+                        content = Convert.ToBase64String(attachmentContent),
+                        filename = attachmentFileName,
+                        type = "application/pdf",
+                        disposition = "attachment"
+                    }
+                }
             };
 
             try

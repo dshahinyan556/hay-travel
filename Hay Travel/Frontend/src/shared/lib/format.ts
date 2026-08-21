@@ -1,4 +1,5 @@
 import type { Locale } from '@/shared/lib/locale'
+import { parseISODate } from '@/shared/lib/date'
 
 /** Russian plural forms: [1, 2–4, 5+] — e.g. `['день', 'дня', 'дней']`. */
 function pluralizeRu(count: number, [one, few, many]: [string, string, string]): string {
@@ -42,4 +43,13 @@ export function formatDuration(days: number, nights: number, locale: Locale = 'r
 export function formatTourCount(count: number, locale: Locale = 'ru'): string {
   if (locale === 'en') return `${count} ${pluralizeEn(count, ['tour', 'tours'])}`
   return `${count} ${pluralizeRu(count, ['тур', 'тура', 'туров'])}`
+}
+
+/** `15 сент.`/`Sep 15` — compact day+month for a discount's "действует до" badge (`TourCard`).
+ * `parseISODate` (local-time, not UTC) avoids the day-shift trap its own doc comment explains.
+ * `''` for an unparseable/empty value — the caller decides whether to hide the whole badge. */
+export function formatShortDate(iso: string, locale: Locale = 'ru'): string {
+  const date = parseISODate(iso)
+  if (!date) return ''
+  return new Intl.DateTimeFormat(locale === 'en' ? 'en-US' : 'ru-RU', { day: 'numeric', month: 'short' }).format(date)
 }

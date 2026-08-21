@@ -10,7 +10,7 @@ using System.Net;
 
 namespace ATTours.BusinessServices.Services.UpdateServices
 {
-    // Обновление тега: Type/Color/DiscountPercent/SortOrder + сверка переводов по Id.
+    // Обновление тега: Type/Color/SortOrder + сверка переводов по Id.
     public class TagUpdateService : EntityActionServiceBase<Tag, ATToursContextFactory>
     {
         public TagUpdateService(Tag entity, CancellationToken cancellationToken = default)
@@ -38,15 +38,14 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                            ?? throw new ErrorModelException(GlobalErrorCode.TagNotFound, HttpStatusCode.NotFound, $"Tag with id {incoming.Id} not found.");
 
             // Тип тега неизменяем, пока тег назначен хотя бы одному туру (тот же принцип, что
-            // у Tour.Type в TourUpdateService) — иначе Regular->Discount задним числом мог бы
-            // молча пробить лимит «максимум 1 Discount-тег на тур» мимо TourValidationService.
+            // у Tour.Type в TourUpdateService) — задел под будущие виды тегов, сейчас
+            // TagType содержит только Regular.
             if (existing.TourTags.Count > 0 && existing.Type != incoming.Type)
                 throw new ErrorModelException(GlobalErrorCode.InvalidEntityRelation, HttpStatusCode.BadRequest,
                     "Tag type cannot be changed while the tag is assigned to a tour.");
 
             existing.Type = incoming.Type;
             existing.Color = incoming.Color;
-            existing.DiscountPercent = incoming.DiscountPercent;
             existing.SortOrder = incoming.SortOrder;
 
             ReconcileTranslations(existing.Translations, incoming.Translations);

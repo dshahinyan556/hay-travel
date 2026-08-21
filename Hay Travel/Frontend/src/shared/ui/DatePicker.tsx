@@ -62,6 +62,31 @@ function formatDisplay(date: Date, locale: Locale): string {
   return `${date.getDate()} ${MONTHS_GENITIVE[locale][date.getMonth()]} ${date.getFullYear()}`
 }
 
+/**
+ * A span of days to mark with a discount ribbon (see `DatePickerProps.discountRange`).
+ *
+ * ISO `YYYY-MM-DD` strings rather than `Date` objects, like every other date on this component's
+ * API (`value`/`min`/`max`/`disabledDates`): they compare correctly with `<`/`>` as plain strings,
+ * they are what the backend sends, and — unlike a `Date` — a fresh object each render costs
+ * nothing here.
+ */
+export interface DatePickerDiscountRange {
+  /** Inclusive lower bound. `null` = open-ended (the campaign has no start date on record —
+   * every day up to `end` is discounted), NOT "no discount": pass `undefined`/`null` for the
+   * whole range object to mean that. */
+  start: string | null
+  /** Inclusive upper bound. */
+  end: string
+  /** Percent off, as a number — `15` renders as "-15%". */
+  percent: number
+}
+
+/** "-15%", and "-12.5%" for a fractional percent — `Number(...)` drops the trailing zeros a
+ * `decimal(5,2)` coming off the wire may carry ("15.00" → 15). */
+function formatDiscountLabel(percent: number): string {
+  return `-${Number(percent.toFixed(2))}%`
+}
+
 export interface DatePickerProps {
   id?: string
   /** ISO `YYYY-MM-DD`, or `''` for no selection — the same shape as `<input type="date">`. */
@@ -90,6 +115,16 @@ export interface DatePickerProps {
    * so a fresh `Set` on every render defeats that memoization.
    */
   disabledDates?: ReadonlySet<string>
+  /**
+   * Marks a span of days as discounted: every day inside it gets a red ribbon with the percent
+   * across the bottom of its circle. Purely informational — it changes nothing about which days
+   * can be picked, and the price a booking actually gets is still resolved server-side.
+   *
+   * Days that are disabled (past, out of `min`/`max`, or closed via `disabledDates`) never show
+   * the ribbon even when they fall inside the range: "-15% on a day you cannot book" is an offer
+   * the visitor cannot take, and it would collide with the struck-through unavailable treatment.
+   */
+  discountRange?: DatePickerDiscountRange | null
   placeholder?: string
   disabled?: boolean
   /** Marks the field as invalid: red border. Pair with `Field`'s `error` text. */
@@ -146,6 +181,7 @@ export function DatePicker({
   max,
   disablePast = true,
   disabledDates,
+  discountRange,
   placeholder,
   disabled = false,
   error = false,
@@ -190,6 +226,13 @@ export function DatePicker({
   /** A day blocked by `disabledDates` specifically, as opposed to one merely out of range — the
    * two get different affordances (see `dayClasses` and the cell's `aria-label`). */
   const isUnavailable = (date: Date): boolean => disabledDates?.has(formatISODate(date)) === true
+
+  /** Takes the cell's already-computed ISO key: `YYYY-MM-DD` orders lexicographically, so the
+   * range test is two string comparisons and no `Date` allocation per cell. */
+  const isDiscountDay = (iso: string): boolean =>
+    discountRange != null &&
+    iso <= discountRange.end &&
+    (discountRange.start === null || iso >= discountRange.start)
 
   const initialFocusDate = selectedDate && !isDisabledDate(selectedDate) ? selectedDate : today
 
@@ -314,14 +357,27 @@ export function DatePicker({
     ? 'flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30'
     : 'flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus'
 
-  function dayClasses(date: Date, dayDisabled: boolean): string {
+  /**
+   * The discount ribbon's own colours. `bg-danger` flips with the theme (a light red on dark, a
+   * deep red on light), so the text on it has to flip the other way — which is exactly what
+   * `text-panel` does, and why it is not a hardcoded white. The admin surface has no `panel`
+   * token, hence its own literal pair.
+   */
+  const discountRibbonClasses = isAdmin ? 'bg-rose-600 text-white' : 'bg-danger text-panel'
+
+  function dayClasses(date: Date, dayDisabled: boolean, discounted: boolean): string {
     const inMonth = date.getMonth() === viewMonth.getMonth()
     const selected = selectedDate ? isSameDay(date, selectedDate) : false
     const isToday = isSameDay(date, today)
     // `mx-auto`: the grid's columns are `1fr` (so the weekday header text, which has no fixed
     // width, centers itself across the same 7 equal columns) — a fixed 44px button would
     // otherwise sit flush at a column's start instead of centered in it.
-    const base = 'mx-auto flex h-11 w-11 items-center justify-center rounded-full text-sm transition-colors focus-visible:outline-none focus-visible:ring-2'
+    // `overflow-hidden` only when a ribbon is drawn: it is what clips the full-width strip into
+    // the circle's silhouette. The focus ring is the element's own box-shadow, so it is NOT
+    // clipped by this.
+    const base = `relative mx-auto flex h-11 w-11 items-center justify-center rounded-full text-sm transition-colors focus-visible:outline-none focus-visible:ring-2${
+      discounted ? ' overflow-hidden' : ''
+    }`
     if (dayDisabled) {
       // `line-through` ONLY for explicitly unavailable days: a struck-through past date would read
       // as "we cancelled this", which is not what "yesterday" means.
@@ -385,6 +441,7 @@ export function DatePicker({
               const key = formatISODate(date)
               const dayDisabled = isDisabledDate(date)
               const isFocusTarget = isSameDay(date, focusedDate)
+              const discounted = !dayDisabled && isDiscountDay(key)
               return (
                 <button
                   key={key}
@@ -399,13 +456,30 @@ export function DatePicker({
                   aria-disabled={dayDisabled || undefined}
                   aria-label={`${date.getDate()} ${MONTHS_GENITIVE[locale][date.getMonth()]} ${date.getFullYear()}, ${WEEKDAYS_FULL[locale][mondayFirstWeekday(date)]}${
                     isUnavailable(date) ? `, ${t('datePicker.unavailable')}` : ''
+                  }${
+                    // The ribbon is `aria-hidden` (it is a graphic), so the offer is spelled out
+                    // here instead — colour alone must never be the only carrier of meaning.
+                    discounted && discountRange
+                      ? `, ${t('datePicker.discount', { percent: Number(discountRange.percent.toFixed(2)) })}`
+                      : ''
                   }`}
                   onClick={() => commit(date)}
                   onKeyDown={(event) => handleDayKeyDown(event, date)}
                   onFocus={() => setFocusedDate(date)}
-                  className={dayClasses(date, dayDisabled)}
+                  className={dayClasses(date, dayDisabled, discounted)}
                 >
-                  {date.getDate()}
+                  {/* A 3px nudge, not the ribbon's full 13px: it buys the digits breathing room
+                      above the strip while keeping them close enough to their un-ribboned
+                      neighbours that a week row still reads as one line of numbers. */}
+                  <span className={discounted ? '-translate-y-[3px]' : undefined}>{date.getDate()}</span>
+                  {discounted && discountRange && (
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none absolute inset-x-0 bottom-0 text-center text-[9px] leading-[13px] font-semibold tracking-tight ${discountRibbonClasses}`}
+                    >
+                      {formatDiscountLabel(discountRange.percent)}
+                    </span>
+                  )}
                 </button>
               )
             })}

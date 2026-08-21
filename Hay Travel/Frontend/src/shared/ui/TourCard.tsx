@@ -1,7 +1,7 @@
 import { Link } from 'react-router'
 import type { Tour } from '@/shared/types/tour'
 import { REGION_BY_SLUG } from '@/shared/data/armeniaRegions'
-import { formatDuration } from '@/shared/lib/format'
+import { formatDuration, formatShortDate } from '@/shared/lib/format'
 import { adaptiveImageUrl } from '@/shared/lib/adaptiveImage'
 import { useMoney } from '@/shared/currency'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
@@ -50,12 +50,10 @@ export function TourCard({ tour }: { tour: Tour }) {
     locale === 'en' ? REGION_BY_SLUG[slug].en : REGION_BY_SLUG[slug].ru,
   )
 
-  // At most 1 discount tag per product (backend `TourValidationService`) — `find` is unambiguous.
-  const discountTag = tour.tags.find((tag) => tag.isDiscount)
-  const discountedPrice =
-    discountTag?.discountPercent != null
-      ? tour.priceFrom * (1 - discountTag.discountPercent / 100)
-      : null
+  // Server-resolved (Фаза 3/7) — null when there is no discount or it has expired. Nothing here
+  // re-derives a percent or checks a date; the backend already did.
+  const discountedPrice = tour.discountedPrice
+  const discountEndLabel = discountedPrice !== null ? formatShortDate(tour.discountValidUntil ?? '', locale) : ''
 
   return (
     <article className="card-lift group h-full">
@@ -85,8 +83,8 @@ export function TourCard({ tour }: { tour: Tour }) {
           {/* Scrim keeps chip text legible over any photo. */}
           <div className="absolute inset-0 bg-gradient-to-t from-obsidian/85 via-obsidian/10 to-obsidian/40" />
 
-          {/* Merch tags (up to 3, discount first) share the left edge with `KindChip` below —
-              top vs. bottom keeps the right side of the photo untouched at any count. */}
+          {/* Merch tags (up to 3) share the left edge with `KindChip` below — top vs. bottom
+              keeps the right side of the photo untouched at any count. */}
           {tour.tags.length > 0 && (
             <div className="absolute top-3 left-3 flex flex-col items-start gap-1.5">
               {tour.tags.map((tag) => (
@@ -121,8 +119,8 @@ export function TourCard({ tour }: { tour: Tour }) {
             </span>
             <span className="text-right leading-tight">
               {discountedPrice !== null ? (
-                // Discount tag present: the original price moves into the label's slot and gets
-                // struck through — same two-line footprint, so the card's height never changes.
+                // Active discount: the original price moves into the label's slot and gets
+                // struck through — same footprint as the non-discounted label line above.
                 <span className="block text-xs text-ink-muted line-through">
                   {money.format(tour.priceFrom)}
                 </span>
@@ -134,6 +132,11 @@ export function TourCard({ tour }: { tour: Tour }) {
               <span className="font-display text-2xl text-gold-ink">
                 {money.format(discountedPrice ?? tour.priceFrom)}
               </span>
+              {discountedPrice !== null && discountEndLabel && (
+                <span className="block text-[10px] text-ink-dim">
+                  {t('tourCard.discountUntil', { date: discountEndLabel })}
+                </span>
+              )}
             </span>
           </div>
         </div>

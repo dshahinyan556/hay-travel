@@ -9,6 +9,7 @@ const KEYS: Record<RoleType, TranslationKey> = {
   [RoleType.Regular]: 'auth.role.regular',
   [RoleType.TourManager]: 'auth.role.tourManager',
   [RoleType.Admin]: 'auth.role.admin',
+  [RoleType.Employee]: 'auth.role.employee',
 }
 
 export function roleLabelKey(role: RoleType): TranslationKey {
