@@ -2,14 +2,9 @@ import { useMemo, useRef } from 'react'
 import { parseISODate } from '@/shared/lib/date'
 import { SidePanel } from '@/features/admin/ui/SidePanel'
 import type { TourInfoModel } from '@/shared/types/attours'
-import type {
-  CalendarDayModel,
-  ClosureRuleInfoModel,
-  DayOfWeekCode,
-  OrderInfoModel,
-} from '@/shared/types/booking'
+import type { CalendarDayModel, ClosureRuleInfoModel, DayOfWeekCode } from '@/shared/types/booking'
 import { calendarCopy, monthLabelsGenitive, weekdayLabelsFull } from '../lib/calendarCopy'
-import { tourTitleResolver } from '../lib/calendarModel'
+import { tourTitleResolver, type CalendarOrderLine } from '../lib/calendarModel'
 import { DayClosureControls } from './DayClosureControls'
 import { DayOrdersList } from './DayOrdersList'
 
@@ -19,7 +14,7 @@ export interface DayDetailPanelProps {
   /** The server's row for this day; `null` for a tail day of a neighbouring month. */
   day: CalendarDayModel | null
   /** Already narrowed to this day by the page. */
-  orders: OrderInfoModel[]
+  orders: CalendarOrderLine[]
   tours: TourInfoModel[]
   rules: ClosureRuleInfoModel[]
   pending: boolean

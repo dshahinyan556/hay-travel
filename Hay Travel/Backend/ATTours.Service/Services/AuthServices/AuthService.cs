@@ -242,6 +242,42 @@ namespace ATTours.BusinessServices.Services.AuthServices
             return new LoginOutcome(result, new IssuedRefreshToken(refreshToken.Token, refreshToken.ExpiresAtUtc));
         }
 
+        // Дев-бэкдор (см. IAuthService.DevLoginAsync) — та же выдача токенов, что и
+        // LoginAsync, без пароля/блокировки/верификации/записи в LoginHistory. Только для
+        // локального UI-тестирования, вызывающий контроллер обязан гейтить IsDevelopment().
+        public async Task<LoginOutcome> DevLoginAsync(string usernameOrEmail, RequestContextModel requestContext, CancellationToken cancellationToken = default)
+        {
+            var user = await FindUserByLoginAsync(usernameOrEmail, cancellationToken)
+                       ?? throw InvalidCredentials();
+
+            if (user.IsDeleted)
+                throw new ErrorModelException(GlobalErrorCode.AccountDeleted, HttpStatusCode.Unauthorized,
+                    "Account has been deleted.");
+
+            var now = DateTime.UtcNow;
+            var refreshToken = jwtTokenService.CreateRefreshToken();
+            await RefreshTokenRepository.AddAsync(new RefreshToken
+            {
+                UserId = user.Id,
+                TokenHash = refreshToken.TokenHash,
+                ExpiresAtUtc = refreshToken.ExpiresAtUtc,
+                CreatedAtUtc = now,
+                CreatedByIp = requestContext.IpAddress
+            }, cancellationToken);
+            await UserRepository.SaveChangesAsync(cancellationToken);
+
+            var accessToken = jwtTokenService.CreateAccessToken(user);
+            var result = new LoginResultModel
+            {
+                AccessToken = accessToken.AccessToken,
+                ExpiresInSeconds = accessToken.ExpiresInSeconds,
+                User = mapper.Map<UserInfoModel>(user),
+                ForceChangePassword = false
+            };
+
+            return new LoginOutcome(result, new IssuedRefreshToken(refreshToken.Token, refreshToken.ExpiresAtUtc));
+        }
+
         public async Task<RefreshOutcome> RefreshAsync(string? refreshToken, RequestContextModel requestContext, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(refreshToken))

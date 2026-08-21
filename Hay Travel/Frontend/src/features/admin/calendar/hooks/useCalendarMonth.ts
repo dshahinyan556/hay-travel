@@ -18,16 +18,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { endOfMonth, formatISODate, startOfMonth } from '@/shared/lib/date'
 import { getCalendarMonth } from '@/features/admin/api/adminAvailability'
 import { getOrders } from '@/features/admin/api/adminOrders'
-import { OrderStatus, type CalendarMonthModel, type OrderInfoModel } from '@/shared/types/booking'
-import { monthKey } from '../lib/calendarModel'
+import type { CalendarMonthModel } from '@/shared/types/booking'
+import { flattenOrderLines, monthKey, type CalendarOrderLine } from '../lib/calendarModel'
 
 export interface MonthBundle {
   calendar: CalendarMonthModel
   /**
-   * Every order of the month, minus cancelled ones — filtered HERE so the day panel agrees with
-   * the grid counters, which the server already computes without cancelled orders.
+   * Every order LINE of the month, minus Rejected orders — flattened and filtered HERE so the day
+   * panel agrees with the grid counters, which the server already computes the same way
+   * (`OrderCalendarInfo`). See `flattenOrderLines`.
    */
-  orders: OrderInfoModel[]
+  orders: CalendarOrderLine[]
 }
 
 export interface UseCalendarMonthResult {
@@ -52,7 +53,7 @@ async function fetchMonth(year: number, month: number, signal: AbortSignal): Pro
     getCalendarMonth(year, month, signal),
     getOrders({ from, to }, signal),
   ])
-  return { calendar, orders: orders.filter((order) => order.status !== OrderStatus.Cancelled) }
+  return { calendar, orders: flattenOrderLines(orders) }
 }
 
 /** @param month 1..12. */

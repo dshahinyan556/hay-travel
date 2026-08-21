@@ -1,0 +1,10 @@
+<svg viewBox="0 0 600 108" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hay Travel">
+  <!-- Header variant of hay-travel-wordmark-light-ink.svg with the "ARMENIA TRAVEL" caption
+       dropped and the viewBox cropped to the remaining content — sibling of
+       hay-travel-wordmark-dark-ink-notag.svg, kept for dark-background use even though only the
+       dark-ink variant is wired into the site header today (2026-08-16). -->
+  <text x="300" y="76" text-anchor="middle"
+        font-family="Prata, 'Bodoni MT', Didot, Georgia, serif"
+        font-size="60" letter-spacing="0.5" fill="#F4EBD7">Hay Travel</text>
+  <line x1="220" y1="98" x2="380" y2="98" stroke="#D9B45A" stroke-width="1.5" />
+</svg>

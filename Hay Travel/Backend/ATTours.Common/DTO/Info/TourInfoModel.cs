@@ -15,6 +15,16 @@ namespace ATTours.Common.DTO.Info
         public int FeaturedSortOrder { get; set; }
         public bool RequiresPrepayment { get; set; }
         public decimal? TotalPrice { get; set; }
+        // Скидка тура (Фаза 3): сырые поля — то, что реально хранится и что редактирует
+        // админ. Все три заданы или все три null (TourValidationService). Скидка активна
+        // в диапазоне [DiscountStartDate; DiscountValidUntil] включительно — эти же поля
+        // клиентский сайт использует для ленты «-N%» в календаре бронирования.
+        public decimal? DiscountPercent { get; set; }
+        public DateOnly? DiscountStartDate { get; set; }
+        public DateOnly? DiscountValidUntil { get; set; }
+        // Резолвнутая цена со скидкой — null, если скидки нет, она ещё не началась или уже истекла.
+        // Считается на бэке (MappingProfile), чтобы клиент не дублировал дата-логику.
+        public decimal? DiscountedPrice { get; set; }
         public string MainImageUrl { get; set; }
         public List<TourDayInfoModel> TourDays { get; set; }
         public List<TranslatableInfoModel> Translations { get; set; }

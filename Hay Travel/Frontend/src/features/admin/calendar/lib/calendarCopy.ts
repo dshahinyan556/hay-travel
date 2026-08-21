@@ -80,9 +80,13 @@ export const calendarCopy = {
   closureReasonLabel: 'Причина',
   noOrders: 'Заказов на этот день нет.',
   noDayData: 'Нет данных за этот день.',
-  statusConfirmed: 'Подтверждён',
-  statusPending: 'Ждёт подтверждения',
-  statusCancelled: 'Отменён',
+  statusOpen: 'Открыт',
+  statusHold: 'На удержании',
+  statusApproved: 'Одобрен',
+  statusRejected: 'Отклонён',
+  statusReadyForAssignment: 'Готов к назначению',
+  statusPendingPayment: 'Ждёт оплаты',
+  statusCompleted: 'Завершён',
 
   /* ── Bulk panel ─────────────────────────────────────────────────────────────────────────── */
   bulkTitle: 'Массовые операции',

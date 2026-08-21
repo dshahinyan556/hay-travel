@@ -61,6 +61,13 @@ export interface TourCreateModel {
   mainImageUrl: string | null
   isActive: boolean
   requiresPrepayment: boolean
+  /** Скидка тура (Фаза 7): все три поля заданы вместе или все три `null` —
+   * see `TourInfoModel.discountPercent`. */
+  discountPercent: number | null
+  /** ISO `YYYY-MM-DD` — начало акции (2026-08-18). */
+  discountStartDate: string | null
+  /** ISO `YYYY-MM-DD`. */
+  discountValidUntil: string | null
   tourDays: TourDayCreateModel[]
   translations: TranslatableCreateModel[]
   additionalExpenses: AdditionalExpenseCreateModel[]
@@ -141,6 +148,18 @@ export interface TourInfoModel {
   requiresPrepayment: boolean
   /** Sum of every day's price, computed on the server. Read-only; omitted from update payloads. */
   totalPrice?: number | null
+  /** Скидка тура (Фаза 7, replaces the old Tag-based approach): raw fields the admin edits.
+   * All three set together or all three `null`/`undefined`, and `discountStartDate <=
+   * discountValidUntil` — enforced server-side (`TourValidationService`, ErrorCode 2025). */
+  discountPercent?: number | null
+  /** ISO `YYYY-MM-DD` — начало акции; скидка активна в диапазоне [start; end] (2026-08-18).
+   * `null` у старых записей = нижней границы нет. */
+  discountStartDate?: string | null
+  /** ISO `YYYY-MM-DD`. */
+  discountValidUntil?: string | null
+  /** Server-resolved price after the active discount — `null`/absent when there is no discount
+   * or it has expired. Compute nothing client-side; this is already the number to show. */
+  discountedPrice?: number | null
   mainImageUrl: string | null
   tourDays: TourDayInfoModel[]
   translations: TranslatableInfoModel[]
@@ -150,8 +169,7 @@ export interface TourInfoModel {
    * untouched; `[]` clears them all. The admin form always sends the real list now (4.4), so a
    * save always reflects exactly what's checked — never omits the field. */
   regions?: TourRegionInfoModel[]
-  /** Same null/[] contract as `regions`. Up to 3, at most 1 of `Tag.type === Discount`
-   * (`TourValidationService`, backend). */
+  /** Same null/[] contract as `regions`. Up to 3 (`TourValidationService`, backend). */
   tags?: TourTagInfoModel[]
 }
 
@@ -164,6 +182,14 @@ export interface TourCardModel {
   id: number
   type: number
   totalPrice: number | null
+  /** Server-resolved price after an active discount — `null` when there is none/it expired.
+   * `totalPrice` stays the "old" price for a strikethrough; this is the bold new one. */
+  discountedPrice: number | null
+  /** ISO `YYYY-MM-DD` — начало акции. Приходит непустым только у скидки, активной СЕГОДНЯ
+   * (будущая акция на карточке не анонсируется, см. `MappingProfile`). */
+  discountStartDate: string | null
+  /** ISO `YYYY-MM-DD` — only meaningful alongside a non-null `discountedPrice`. */
+  discountValidUntil: string | null
   mainImageUrl: string | null
   durationDays: number
   translations: TranslatableInfoModel[]
@@ -330,17 +356,16 @@ export interface TourRegionCreateModel {
 }
 
 /**
- * A merch tag on a product card (discount / "hit of the season" / …). `type` — `TagType`
- * (`features/admin/lib/enums.ts`): only `Discount` carries `discountPercent` and changes price
- * display. `color` — `TagColor`, one of the site's own palette tokens (not a free hex), so a new
- * tag is guaranteed to read in both themes. A product can carry up to 3 tags, at most 1 Discount
- * (`TourValidationService`, backend).
+ * A merch tag on a product card ("hit of the season" / …) — purely cosmetic. `type` — `TagType`
+ * (`features/admin/lib/enums.ts`), single-member for now. `color` — `TagColor`, one of the
+ * site's own palette tokens (not a free hex), so a new tag is guaranteed to read in both themes.
+ * A product can carry up to 3 tags (`TourValidationService`, backend). Discount is NOT a tag
+ * (Фаза 3/7) — see `TourInfoModel.discountPercent`.
  */
 export interface TagInfoModel {
   id: number
   type: number
   color: number
-  discountPercent: number | null
   sortOrder: number
   translations: TranslatableInfoModel[]
 }
@@ -348,7 +373,6 @@ export interface TagInfoModel {
 export interface TagCreateModel {
   type: number
   color: number
-  discountPercent: number | null
   sortOrder: number
   translations: TranslatableCreateModel[]
 }

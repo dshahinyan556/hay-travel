@@ -46,6 +46,9 @@ export interface TourFormActions {
   setMainImageUrl: (value: string) => void
   setIsActive: (value: boolean) => void
   setRequiresPrepayment: (value: boolean) => void
+  setDiscountPercent: (value: string) => void
+  setDiscountStartDate: (value: string) => void
+  setDiscountValidUntil: (value: string) => void
   setLocalized: (field: TourLocalizedField, lang: LangKey, value: string) => void
   // days
   addDay: () => void
@@ -161,6 +164,11 @@ export function useTourForm(
       setIsActive: (value) => dispatch({ kind: 'setField', field: 'isActive', value }),
       setRequiresPrepayment: (value) =>
         dispatch({ kind: 'setField', field: 'requiresPrepayment', value }),
+      setDiscountPercent: (value) => dispatch({ kind: 'setField', field: 'discountPercent', value }),
+      setDiscountStartDate: (value) =>
+        dispatch({ kind: 'setField', field: 'discountStartDate', value }),
+      setDiscountValidUntil: (value) =>
+        dispatch({ kind: 'setField', field: 'discountValidUntil', value }),
       setLocalized: (field, lang, value) => dispatch({ kind: 'setLocalized', field, lang, value }),
 
       addDay: () => dispatch({ kind: 'addDay' }),

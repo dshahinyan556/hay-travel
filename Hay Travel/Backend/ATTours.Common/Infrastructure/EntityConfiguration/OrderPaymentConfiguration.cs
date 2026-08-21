@@ -10,27 +10,24 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
         {
             builder.ToTable(nameof(OrderPayment));
 
-            // Деньги — decimal(18,2), как и любая денежная величина: без явной точности
-            // SQL Server взял бы decimal(18,0) и молча округлил бы копейки/лумы.
-            builder.Property(x => x.TourPriceSnapshot)
-                .HasPrecision(18, 2);
+            // Cascade: удаление строки/заказа целиком (действие "Удалить заказ") забирает и
+            // журнал проводок по ней — история платежей отдельно от заказа не хранится.
+            builder.HasOne(x => x.OrderLine)
+                .WithMany(x => x.Payments)
+                .HasForeignKey(x => x.OrderLineId)
+                .OnDelete(DeleteBehavior.Cascade);
 
-            builder.Property(x => x.DiscountPercent)
-                .HasPrecision(5, 2);
-
-            builder.Property(x => x.TotalAmount)
-                .HasPrecision(18, 2);
-
-            builder.Property(x => x.PrepaidAmount)
-                .HasPrecision(18, 2);
-
-            builder.Property(x => x.Currency)
+            builder.Property(x => x.Number)
                 .IsRequired()
-                .HasMaxLength(3);
-
-            // Гарантия 1:1 на уровне БД (ADR 014). Саму связь настраивает OrderConfiguration.
-            builder.HasIndex(x => x.OrderId)
+                .HasMaxLength(20);
+            // Автономер сквозной по всей базе, не только внутри заказа.
+            builder.HasIndex(x => x.Number)
                 .IsUnique();
+
+            builder.Property(x => x.Amount)
+                .HasPrecision(18, 2);
+
+            builder.HasIndex(x => x.OrderLineId);
         }
     }
 }

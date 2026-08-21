@@ -196,6 +196,37 @@ export function CloseIcon(props: IconProps) {
   )
 }
 
+export function PlusIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 4v16M4 12h16" />
+    </Icon>
+  )
+}
+
+export function TrashIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 7h16" />
+      <path d="M9 7V4.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V7" />
+      <path d="M6.5 7 7.3 19.5a2 2 0 0 0 2 1.8h5.4a2 2 0 0 0 2-1.8L17.5 7" />
+      <path d="M10 11v6M14 11v6" />
+    </Icon>
+  )
+}
+
+/** Floppy disk — "Save" in the admin toolbar (checklist §1). Same geometry contract as the rest
+ * of this set: a folded-corner body, the write-shutter at the top, the label area at the bottom. */
+export function SaveIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 3h11.5L20 6.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" strokeLinejoin="round" />
+      <path d="M8 3v5h7V3" />
+      <path d="M7.5 21v-6.5h9V21" />
+    </Icon>
+  )
+}
+
 export function AlertIcon(props: IconProps) {
   return (
     <Icon {...props}>
@@ -259,6 +290,18 @@ export function MenuIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="M4 7h16M4 12h16M4 17h16" />
+    </Icon>
+  )
+}
+
+/** Kebab (vertical three-dot) trigger for `shared/ui/ActionsMenu` — distinct from `MenuIcon`
+ * (a hamburger, used for navigation), this one means "more actions for this one row/item". */
+export function MoreIcon(props: IconProps) {
+  return (
+    <Icon {...props} fill="currentColor" stroke="none">
+      <circle cx="12" cy="5.5" r="1.6" />
+      <circle cx="12" cy="12" r="1.6" />
+      <circle cx="12" cy="18.5" r="1.6" />
     </Icon>
   )
 }

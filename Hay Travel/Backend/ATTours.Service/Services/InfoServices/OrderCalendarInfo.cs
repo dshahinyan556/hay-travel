@@ -87,20 +87,23 @@ namespace ATTours.BusinessServices.Services.InfoServices
         }
 
         // Счётчики считает SQL: группировка по (дата, тур) уезжает в БД, наружу приезжают
-        // только готовые агрегаты. Отменённые брони в занятость не идут.
+        // только готовые агрегаты. Занятость теперь читается по СТРОКАМ заказа (ADR 019 — тур
+        // и дата переехали на OrderLine). Rejected в занятость не идёт — рабочая гипотеза
+        // (не подтверждена Давидом явно, см. OrderStatus.cs и checklist-orders-redesign.txt):
+        // всё остальное (включая Hold) считается активной бронью до явного отклонения.
         private async Task<Dictionary<DateOnly, List<CalendarDayTourOrdersModel>>> LoadOrderAggregatesAsync(DateOnly firstDay, DateOnly lastDay)
         {
-            var aggregates = await Context.Set<Order>()
-                .Where(order => order.Status != OrderStatus.Cancelled
-                                && order.TourDate >= firstDay
-                                && order.TourDate <= lastDay)
-                .GroupBy(order => new { order.TourDate, order.TourId })
+            var aggregates = await Context.Set<OrderLine>()
+                .Where(line => line.Order.Status != OrderStatus.Rejected
+                                && line.TourDate >= firstDay
+                                && line.TourDate <= lastDay)
+                .GroupBy(line => new { line.TourDate, line.TourId })
                 .Select(group => new
                 {
                     group.Key.TourDate,
                     group.Key.TourId,
                     OrderCount = group.Count(),
-                    GuestCount = group.Sum(order => order.GuestCount)
+                    GuestCount = group.Sum(line => line.GuestCount)
                 })
                 .ToListAsync(cancellationToken);
 

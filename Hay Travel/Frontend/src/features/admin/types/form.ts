@@ -105,8 +105,8 @@ export interface TourRegionFormState {
 }
 
 /** One tag checked on the tour. Same `serverId`/no-reorder-UI shape as `TourRegionFormState` —
- * ordering on the card is derived (discount first, then the tag's own `sortOrder`), so there is
- * nothing to reorder here. */
+ * ordering on the card is derived from the tag's own `sortOrder`, so there is nothing to reorder
+ * here. */
 export interface TourTagFormState {
   serverId?: number
   tagId: number
@@ -120,6 +120,16 @@ export interface TourFormState {
   /** Показывать ли блок предоплаты на публичной странице тура (B12, 2026-08-13). В отличие
    * от isActive — не игнорируется UpdateTour, редактируется прямо здесь. */
   requiresPrepayment: boolean
+  /** Скидка тура (Фаза 7). Строковый ввод, как `TourDayFormState.price` — пусто = без скидки.
+   * Все три поля (percent + start + end) обязаны быть заданы вместе или пустыми все три
+   * (validation.ts) — процент без даты окончания нарушил бы правило "скидка сама снимается
+   * по дате", а без даты начала непонятно, с какого дня она действует. */
+  discountPercent: string
+  /** ISO `YYYY-MM-DD`, `''` = не задано. Начало акции; скидка активна в диапазоне
+   * [start; end] включительно (равенство = однодневная акция). */
+  discountStartDate: string
+  /** ISO `YYYY-MM-DD`, `''` = не задано — тот же контракт, что у `DatePicker`. */
+  discountValidUntil: string
   title: Localized
   shortDescription: Localized
   description: Localized

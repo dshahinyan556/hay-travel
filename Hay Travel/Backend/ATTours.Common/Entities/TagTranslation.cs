@@ -6,10 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace ATTours.Common.Entities
 {
     // Название тега — показывается на карточке ровно как ввёл админ, без изменений.
-    // Tag.DiscountPercent НЕ подставляется в этот текст: это чисто серверное поле для расчёта
-    // цены со скидкой (OrderCreationService/TourCard), не UI-текст (David, 2026-08-16). Если
-    // процент должен быть виден на самом теге — админ вписывает его в название сам
-    // (например "Скидка 15%").
+    // Скидка больше не тег (Фаза 3, checklist-orders-redesign.txt) — см. Tour.DiscountPercent.
     [EntityTypeConfiguration(typeof(TagTranslationConfiguration))]
     public class TagTranslation : EntityBase
     {

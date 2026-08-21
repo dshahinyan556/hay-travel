@@ -31,31 +31,36 @@ export interface TierPriceView {
  * `tiered.amountAmd` is already the flat total; converting+rounding happens exactly once, inside
  * `money.format`.
  *
- * `discountPercent` mirrors `OrderCreationService.ApplyDiscount` on the backend: the actual order
- * total the visitor is charged is discount-then-tier too, so what this card shows during booking
- * has to be the same figure, not just the card/detail display price (the "и в бронировании"
- * requirement — a discount that only looked real on the catalog card would be worse than none).
+ * `discountedBasePriceAmd` mirrors `OrderCreationService`'s order on the backend
+ * (`ApplyDiscount` THEN `ResolveTotalAmount`/tier): the tier multiplier applies to the ALREADY
+ * discounted price, so what this card shows during booking has to be the same figure, not just
+ * the card/detail display price (the "и в бронировании" requirement — a discount that only
+ * looked real on the catalog card would be worse than none). It is an absolute price, not a
+ * percent — nothing HERE re-derives a rate or checks a date. Which date that price was resolved
+ * against is the caller's business: `BookingCard` passes the figure for the picked trip date
+ * (`lib/tourDiscount.ts`), matching what the backend will snapshot on the order, and falls back to
+ * the server's "today" figure (`Tour.discountedPrice`) while no date is picked.
  */
 export function useTierPrice(
   basePriceAmd: number,
   guestCount: number,
-  discountPercent?: number | null,
+  discountedBasePriceAmd?: number | null,
 ): TierPriceView {
   const money = useMoney()
-  const hasDiscount = discountPercent != null && discountPercent > 0
+  const hasDiscount = discountedBasePriceAmd != null && discountedBasePriceAmd < basePriceAmd
 
-  const tiered = applyGroupTier(basePriceAmd, guestCount)
+  const tiered = applyGroupTier(hasDiscount ? discountedBasePriceAmd : basePriceAmd, guestCount)
   if (tiered.amountAmd === null) {
     return { tier: tiered.tier, hidden: true, total: null, prepayment: null, originalTotal: null }
   }
 
-  const discountedAmd = hasDiscount ? tiered.amountAmd * (1 - discountPercent! / 100) : tiered.amountAmd
+  const originalTiered = hasDiscount ? applyGroupTier(basePriceAmd, guestCount) : null
 
   return {
     tier: tiered.tier,
     hidden: false,
-    total: money.format(discountedAmd),
-    prepayment: money.format(discountedAmd * PREPAYMENT_SHARE),
-    originalTotal: hasDiscount ? money.format(tiered.amountAmd) : null,
+    total: money.format(tiered.amountAmd),
+    prepayment: money.format(tiered.amountAmd * PREPAYMENT_SHARE),
+    originalTotal: originalTiered?.amountAmd != null ? money.format(originalTiered.amountAmd) : null,
   }
 }

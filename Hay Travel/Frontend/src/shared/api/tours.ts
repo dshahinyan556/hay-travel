@@ -27,7 +27,14 @@ import type {
   TourTagInfoModel,
   TranslatableInfoModel,
 } from '@/shared/types/attours'
-import type { ItineraryDay, Tour, TourDetail, TourKind, TourTag } from '@/shared/types/tour'
+import type {
+  ItineraryDay,
+  Tour,
+  TourDetail,
+  TourDiscountWindow,
+  TourKind,
+  TourTag,
+} from '@/shared/types/tour'
 
 function currentLanguageCode(): number {
   return LANGUAGE_CODE_BY_LOCALE[getStoredLocale()]
@@ -41,10 +48,6 @@ const TRANSLATION_DESCRIPTION = 3
 
 /** `TourType` on the backend. */
 const TOUR_TYPE_EXCURSION = 2
-
-/** `TagType` on the backend — only this type carries `discountPercent` and changes price
- * display. */
-const TAG_TYPE_DISCOUNT = 2
 
 /** `TourNoteType` on the backend. */
 const NOTE_TYPE_ORGANIZATIONAL_DETAIL = 1
@@ -80,35 +83,21 @@ function toRegionSlugs(regions: readonly TourRegionInfoModel[]): RegionSlug[] {
 
 /** Resolves a tour's flat `TourTagInfoModel[]` (just `tagId`s) against the tag catalog fetched
  * once per page (`getTagCatalog`) — same denormalization pattern as `toRegionSlugs`/
- * `REGION_BY_SLUG`. Sorted discount-first, then by the catalog's own `sortOrder`, matching the
- * card mockup's rule ("скидка всегда наверху"); a `tagId` the catalog doesn't know (deleted
- * between the two requests) is silently dropped rather than rendered blank. */
+ * `REGION_BY_SLUG`. Sorted by the catalog's own `sortOrder`; a `tagId` the catalog doesn't know
+ * (deleted between the two requests) is silently dropped rather than rendered blank. */
 function mapTags(tourTags: readonly TourTagInfoModel[], catalog: readonly TagInfoModel[]): TourTag[] {
   const byId = new Map(catalog.map((tag) => [tag.id, tag]))
   const resolved = tourTags
     .map((tt) => byId.get(tt.tagId))
     .filter((tag): tag is TagInfoModel => tag !== undefined)
 
-  const sorted = [...resolved].sort((a, b) => {
-    const aRank = a.type === TAG_TYPE_DISCOUNT ? 0 : 1
-    const bRank = b.type === TAG_TYPE_DISCOUNT ? 0 : 1
-    return aRank !== bRank ? aRank - bRank : a.sortOrder - b.sortOrder
-  })
+  const sorted = [...resolved].sort((a, b) => a.sortOrder - b.sortOrder)
 
-  return sorted.map((tag) => {
-    const isDiscount = tag.type === TAG_TYPE_DISCOUNT
-    return {
-      id: tag.id,
-      isDiscount,
-      discountPercent: tag.discountPercent,
-      color: tag.color,
-      // `label` is exactly the admin-typed name, verbatim — `discountPercent` is a
-      // server-side price-calculation input, never composed into the shown text (David,
-      // 2026-08-16). An admin who wants the percent visible on the pill types it into the
-      // name itself (e.g. "Скидка 15%"), same as any other tag's wording.
-      label: pickTranslation(tag.translations, TRANSLATION_SINGLE_FIELD),
-    }
-  })
+  return sorted.map((tag) => ({
+    id: tag.id,
+    color: tag.color,
+    label: pickTranslation(tag.translations, TRANSLATION_SINGLE_FIELD),
+  }))
 }
 
 /** Per-language session cache (2026-08-16, same pattern as `getContentText` in
@@ -144,10 +133,32 @@ function mapCard(card: TourCardModel, tagCatalog: readonly TagInfoModel[]): Tour
     durationDays: card.durationDays,
     durationNights: nightsFor(kind, card.durationDays),
     priceFrom: card.totalPrice ?? 0,
+    discountedPrice: card.discountedPrice,
+    discountStartDate: card.discountStartDate,
+    discountValidUntil: card.discountValidUntil,
     coverImage: card.mainImageUrl || FALLBACK_IMAGE,
     shortDescription: pickTranslation(card.translations, TRANSLATION_SHORT_DESCRIPTION),
     tags: mapTags(card.tags, tagCatalog),
   }
+}
+
+/**
+ * The raw discount range of a tour, for the booking calendar's "-N%" ribbon (`TourDiscountWindow`).
+ *
+ * `null` unless there is a real range to draw: the backend enforces "percent + end together or
+ * neither", so a partial trio means an old row and is treated as "no discount" rather than
+ * guessed at. `discountStartDate` is the one member that may legitimately be missing on its own —
+ * rows predating the column — and that means "no lower bound", not "no discount"
+ * (`TourDiscountExtensions.IsDiscountActive`).
+ *
+ * Note this does NOT check whether the campaign is live today. That is `discountedPrice`'s job;
+ * a window starting next month is exactly what the calendar has to be able to show.
+ */
+function toDiscountWindow(info: TourInfoModel): TourDiscountWindow | null {
+  const percent = info.discountPercent
+  const endDate = info.discountValidUntil
+  if (percent == null || percent <= 0 || !endDate) return null
+  return { percent, startDate: info.discountStartDate ?? null, endDate }
 }
 
 function sortedRoutePoints(points: readonly RoutePointInfoModel[]): string[] {
@@ -199,6 +210,10 @@ function mapDetail(info: TourInfoModel, tagCatalog: readonly TagInfoModel[]): To
     durationDays,
     durationNights: nightsFor(kind, durationDays),
     priceFrom: info.totalPrice ?? 0,
+    discountedPrice: info.discountedPrice ?? null,
+    discountStartDate: info.discountStartDate ?? null,
+    discountValidUntil: info.discountValidUntil ?? null,
+    discountWindow: toDiscountWindow(info),
     coverImage,
     shortDescription: pickTranslation(info.translations, TRANSLATION_SHORT_DESCRIPTION),
     tags: mapTags(info.tags ?? [], tagCatalog),

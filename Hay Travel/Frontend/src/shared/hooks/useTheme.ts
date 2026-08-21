@@ -25,9 +25,14 @@ import {
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(readStoredTheme)
 
+  // Applies on every change, including the initial mount value and server-sync-driven updates —
+  // but deliberately does NOT persist here. Persisting unconditionally used to hard-write
+  // whatever `readStoredTheme()` returned on first render (usually 'dark', before the server's
+  // soft default even arrived) into `THEME_STORAGE_KEY` — the "visitor's explicit choice" key —
+  // which permanently overrode the admin's `theme.defaultMode` for every fresh visitor. Only
+  // `toggleTheme` (an actual user action) is allowed to persist a choice.
   useEffect(() => {
     applyTheme(theme)
-    persistTheme(theme)
   }, [theme])
 
   useEffect(() => {
@@ -51,7 +56,11 @@ export function useTheme() {
   }, [])
 
   const toggleTheme = useCallback(() => {
-    setTheme((current) => (current === 'dark' ? 'light' : 'dark'))
+    setTheme((current) => {
+      const next = current === 'dark' ? 'light' : 'dark'
+      persistTheme(next)
+      return next
+    })
   }, [])
 
   return { theme, toggleTheme }
