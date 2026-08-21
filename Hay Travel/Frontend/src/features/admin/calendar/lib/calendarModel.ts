@@ -8,7 +8,14 @@
 import { formatISODate, getMonthGrid, isSameDay, stripTime } from '@/shared/lib/date'
 import { LanguageCode, TourTranslationType } from '@/features/admin/lib/enums'
 import type { TourInfoModel } from '@/shared/types/attours'
-import { ClosureRuleType, type CalendarDayModel, type CalendarMonthModel, type ClosureRuleInfoModel } from '@/shared/types/booking'
+import {
+  ClosureRuleType,
+  OrderStatus,
+  type CalendarDayModel,
+  type CalendarMonthModel,
+  type ClosureRuleInfoModel,
+  type OrderInfoModel,
+} from '@/shared/types/booking'
 
 /** Cache/lookup key of a month: `YYYY-MM`. `month` is 1..12. */
 export function monthKey(year: number, month: number): string {
@@ -89,6 +96,49 @@ export function tourTitleResolver(tours: TourInfoModel[]): (tourId: number) => s
     if (title) titles.set(tour.id, title)
   }
   return (tourId: number) => titles.get(tourId) ?? `Тур #${tourId}`
+}
+
+/**
+ * One `OrderLine` paired with its parent order's header fields — what the calendar's day panel
+ * actually renders (ADR 019: `Order` is multi-line, but a day cell/panel is about lines that fall
+ * on THAT day, which can belong to different tours/dates even within one order).
+ */
+export interface CalendarOrderLine {
+  orderId: number
+  orderNumber: string
+  status: OrderStatus
+  userEmail: string
+  userFullName: string
+  /** ISO-8601 UTC instant — the ORDER's creation time, not the line's (a line has none of its own). */
+  createdAtUtc: string
+  tourId: number
+  /** `YYYY-MM-DD`. */
+  tourDate: string
+  guestCount: number
+}
+
+/**
+ * Flattens orders into their lines, dropping Rejected orders (`OrderCalendarInfo`'s own occupancy
+ * rule — everything counts as "occupying" the calendar except Rejected, checklist-orders-redesign
+ * Фаза 1.8). Order-level fields (status/number/client) are on `Order`, not `OrderLine`, so they
+ * are copied onto every line of that order.
+ */
+export function flattenOrderLines(orders: OrderInfoModel[]): CalendarOrderLine[] {
+  return orders
+    .filter((order) => order.status !== OrderStatus.Rejected)
+    .flatMap((order) =>
+      order.lines.map((line) => ({
+        orderId: order.id,
+        orderNumber: order.number,
+        status: order.status,
+        userEmail: order.userEmail,
+        userFullName: order.userFullName,
+        createdAtUtc: order.createdAtUtc,
+        tourId: line.tourId,
+        tourDate: line.tourDate,
+        guestCount: line.guestCount,
+      })),
+    )
 }
 
 /**

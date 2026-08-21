@@ -18,6 +18,10 @@ export const RoleType = {
   Regular: 1,
   TourManager: 2,
   Admin: 3,
+  /** Read-only access to orders/lines they're assigned to (checklist-orders-redesign.txt, Фаза
+   * 2/9) — does not reuse TourManager, which has full tour-management rights, a different
+   * permission boundary. */
+  Employee: 4,
 } as const
 
 export type RoleType = (typeof RoleType)[keyof typeof RoleType]
@@ -27,6 +31,7 @@ export const ROLE_NAME_TO_TYPE: Record<string, RoleType> = {
   Regular: RoleType.Regular,
   TourManager: RoleType.TourManager,
   Admin: RoleType.Admin,
+  Employee: RoleType.Employee,
 }
 
 /* -------------------------------------------------------------------------- */

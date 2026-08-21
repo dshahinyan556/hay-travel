@@ -1,0 +1,296 @@
+<title>Направление D — «Ровная линия»</title>
+<style>
+  /* ============================================================================================
+     Токены — буквально из реального сайта (Hay Travel):
+     Hay Travel/Frontend/src/index.css (obsidian, дефолт) и src/styles/palettes.css (basalt).
+     Состояние живёт на #qline-root (обёртка ниже), а не на :root/html — Артефакт сам владеет
+     <html>/<body>, эта страница получает только фрагмент.
+     ============================================================================================ */
+  #qline-root[data-preset="obsidian"][data-theme="dark"] {
+    --surface-page:#0f0c08; --surface-panel:#1a150f; --surface-panel-raised:#201a12;
+    --surface-edge:#3a2e1c; --surface-edge-strong:#6b5426;
+    --ink-primary:#f4ebd7; --ink-secondary:#c9b896; --ink-muted:#8e7e63;
+    --gold-ink:#d9b45a; --gold-fill:#d9b45a; --gold-fill-hover:#f0d9a0;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.35), 0 4px 14px rgba(0,0,0,.28);
+  }
+  #qline-root[data-preset="obsidian"][data-theme="light"] {
+    --surface-page:#f4ede0; --surface-panel:#fdf9f1; --surface-panel-raised:#ffffff;
+    --surface-edge:#e3d7c2; --surface-edge-strong:#9c8460;
+    --ink-primary:#241a12; --ink-secondary:#4e4234; --ink-muted:#756450;
+    --gold-ink:#6b4a15; --gold-fill:#d9a93c; --gold-fill-hover:#c9971f;
+    --shadow-sm: 0 1px 2px rgba(40,30,15,.10), 0 4px 14px rgba(40,30,15,.10);
+  }
+  #qline-root[data-preset="basalt"][data-theme="dark"] {
+    --surface-page:#0e1214; --surface-panel:#171c1f; --surface-panel-raised:#1e2428;
+    --surface-edge:#2b3237; --surface-edge-strong:#64737c;
+    --ink-primary:#eceff1; --ink-secondary:#b4bec4; --ink-muted:#86929a;
+    --gold-ink:#de8f5f; --gold-fill:#de8f5f; --gold-fill-hover:#efae81;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.35), 0 4px 14px rgba(0,0,0,.28);
+  }
+  #qline-root[data-preset="basalt"][data-theme="light"] {
+    --surface-page:#edeeec; --surface-panel:#f7f7f5; --surface-panel-raised:#ffffff;
+    --surface-edge:#dcdcd7; --surface-edge-strong:#7e868d;
+    --ink-primary:#14191c; --ink-secondary:#3e474c; --ink-muted:#5d686f;
+    --gold-ink:#94491f; --gold-fill:#c97a3c; --gold-fill-hover:#b87340;
+    --shadow-sm: 0 1px 2px rgba(40,30,15,.10), 0 4px 14px rgba(40,30,15,.10);
+  }
+
+  #qline-root { background: var(--surface-page); color: var(--ink-primary); }
+  #qline-root * { box-sizing: border-box; }
+  #qline-root {
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.55;
+  }
+  #qline-root .display { font-family: Georgia, 'Palatino Linotype', 'Book Antiqua', serif; }
+  #qline-root .mono { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace; }
+  #qline-root a { color: inherit; }
+  #qline-root .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+  #qline-root .intro { padding: 56px 0 40px; }
+  #qline-root .intro .kicker {
+    font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--gold-ink);
+    font-weight: 600; margin: 0 0 10px;
+  }
+  #qline-root .intro h1 { font-size: 34px; margin: 0 0 14px; text-wrap: balance; }
+  #qline-root .intro p.lede { max-width: 62ch; color: var(--ink-secondary); font-size: 16px; margin: 0; }
+
+  #qline-root .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    padding: 18px 0 8px; border-top: 1px solid var(--surface-edge); margin-top: 28px;
+  }
+  #qline-root .controls span { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-muted); margin-right: 4px; }
+  #qline-root .chip {
+    font-size: 13px; padding: 7px 14px; border: 1px solid var(--surface-edge-strong);
+    border-radius: 0; background: var(--surface-panel); color: var(--ink-secondary); cursor: pointer;
+  }
+  #qline-root .chip[aria-pressed="true"] { color: var(--surface-page); background: var(--gold-ink); border-color: var(--gold-ink); }
+
+  /* ============================================================================================
+     THE DIRECTION — "Ровная линия". Solid, flush, one hairline. No radius, no blur, no capsule.
+     ============================================================================================ */
+  #qline-root .stage { border-top: 1px solid var(--surface-edge); border-bottom: 1px solid var(--surface-edge); }
+  #qline-root .stage-label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-muted);
+    padding: 14px 24px 0; max-width: 1180px; margin: 0 auto;
+  }
+
+  #qline-root .qbar {
+    background: var(--surface-panel);
+    border-bottom: 1px solid var(--surface-edge);
+    transition: box-shadow .18s ease;
+  }
+  #qline-root .qbar[data-scrolled="true"] { box-shadow: var(--shadow-sm); }
+  #qline-root .qbar-row {
+    max-width: 1180px; margin: 0 auto; padding: 0 24px;
+    height: 64px; display: flex; align-items: center; gap: 28px;
+  }
+  #qline-root .qbar-logo { display: flex; align-items: center; gap: 8px; font-size: 19px; font-weight: 600; white-space: nowrap; color: var(--ink-primary); }
+  #qline-root .qbar-logo svg { flex-shrink: 0; color: var(--gold-ink); }
+  #qline-root .qbar-logo .word { color: var(--gold-ink); }
+
+  #qline-root .qbar-nav { display: flex; gap: 26px; margin-right: auto; }
+  #qline-root .qbar-nav a {
+    text-decoration: none; font-size: 14px; letter-spacing: .01em; color: var(--ink-secondary);
+    padding-bottom: 3px; border-bottom: 1px solid transparent; position: relative;
+  }
+  #qline-root .qbar-nav a:hover { color: var(--ink-primary); }
+  #qline-root .qbar-nav a[data-active="true"] { color: var(--ink-primary); }
+  #qline-root .qbar-nav a[data-active="true"]::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -3px; height: 1px; background: var(--gold-ink);
+  }
+
+  #qline-root .qbar-tools { display: flex; align-items: center; gap: 14px; }
+  #qline-root .qbar-tools .sep { width: 1px; height: 18px; background: var(--surface-edge); }
+  #qline-root .qbar-btn {
+    font-size: 13px; color: var(--ink-secondary); background: none; border: none; cursor: pointer;
+    display: flex; align-items: center; gap: 5px; padding: 4px 2px;
+  }
+  #qline-root .qbar-btn:hover { color: var(--ink-primary); }
+  #qline-root .qbar-cta {
+    font-size: 13px; padding: 8px 18px; background: var(--gold-fill); color: var(--surface-page);
+    border: none; border-radius: 0; cursor: pointer; font-weight: 600;
+  }
+  #qline-root .qbar-cta:hover { background: var(--gold-fill-hover); }
+
+  #qline-root .qbar-demo-body {
+    height: 260px; background: var(--surface-page);
+    display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px;
+  }
+  #qline-root .qbar-demo-body p { margin: 0; color: var(--ink-muted); font-size: 13px; text-align: center; }
+
+  #qline-root .scroll-toggle { text-align: center; padding: 14px 0 26px; }
+  #qline-root .scroll-toggle button {
+    font-size: 13px; padding: 8px 16px; border: 1px solid var(--surface-edge-strong);
+    border-radius: 0; background: var(--surface-panel); color: var(--ink-secondary); cursor: pointer;
+  }
+
+  #qline-root .mobile-section { padding: 44px 0 60px; }
+  #qline-root .mobile-section h2 { font-size: 20px; margin: 0 0 16px; }
+  #qline-root .phone {
+    width: 320px; height: 560px; margin: 0 auto; border: 8px solid var(--surface-panel-raised);
+    outline: 1px solid var(--surface-edge); position: relative; overflow: hidden;
+    background: var(--surface-page); display: flex; flex-direction: column;
+  }
+  #qline-root .phone-body { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 12px; text-align: center; padding: 0 24px; }
+  #qline-root .qdock {
+    background: var(--surface-panel); border-top: 1px solid var(--surface-edge);
+    display: flex; padding-bottom: 6px; margin: 0; list-style: none; padding-left: 0; padding-right: 0;
+  }
+  #qline-root .qdock-item {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 10px 0 4px; color: var(--ink-muted); font-size: 10px; position: relative;
+  }
+  #qline-root .qdock-item[data-active="true"] { color: var(--gold-ink); }
+  #qline-root .qdock-item[data-active="true"]::before {
+    content: ""; position: absolute; top: 0; left: 30%; right: 30%; height: 2px; background: var(--gold-ink);
+  }
+  #qline-root .qdock-item svg { width: 20px; height: 20px; }
+
+  #qline-root .spec { padding: 10px 0 70px; }
+  #qline-root .spec h2 { font-size: 20px; margin: 0 0 6px; }
+  #qline-root .spec p.note { color: var(--ink-secondary); font-size: 14px; max-width: 68ch; margin: 0 0 24px; }
+  #qline-root table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  #qline-root th, #qline-root td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--surface-edge); vertical-align: top; }
+  #qline-root th { color: var(--ink-muted); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: .06em; }
+  #qline-root td.no { color: var(--ink-muted); }
+  #qline-root .table-wrap { overflow-x: auto; }
+
+  #qline-root .foot { padding: 20px 0 56px; color: var(--ink-muted); font-size: 12.5px; border-top: 1px solid var(--surface-edge); }
+</style>
+
+<div id="qline-root" data-preset="obsidian" data-theme="dark">
+
+  <div class="wrap intro">
+    <p class="kicker">Hay Travel — направление D</p>
+    <h1 class="display">«Ровная линия»</h1>
+    <p class="lede">
+      Третья попытка (после отклонённого «Титула»). Идея прежняя по формулировке задания, но
+      выполнение обратное: никакой концепции поверх контента — ни типографики на фото, ни стекла,
+      ни капсулы. Вся личность страницы уже есть в шрифте, фото и вёрстке; у шапки одна работа —
+      не мешать. Плоская панель, один волосок снизу, ноль скруглений, минимум состояний.
+    </p>
+
+    <div class="controls">
+      <span>Палитра:</span>
+      <button class="chip" data-preset-btn="obsidian" aria-pressed="true">Обсидиан</button>
+      <button class="chip" data-preset-btn="basalt" aria-pressed="false">Базальт</button>
+      <span style="margin-left:18px">Тема:</span>
+      <button class="chip" data-theme-btn="dark" aria-pressed="true">Тёмная</button>
+      <button class="chip" data-theme-btn="light" aria-pressed="false">Светлая</button>
+    </div>
+  </div>
+
+  <div class="stage">
+    <p class="stage-label mono">Десктоп — 1180px</p>
+    <header class="qbar" id="qbar" data-scrolled="false">
+      <div class="qbar-row">
+        <div class="qbar-logo">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 19l7-11 5 7 3-4 5 8H2z"/></svg>
+          <span class="word display">Hay Travel</span>
+        </div>
+        <nav class="qbar-nav">
+          <a href="#" data-active="true">Главная</a>
+          <a href="#">Путешествия</a>
+          <a href="#">Карта регионов</a>
+        </nav>
+        <div class="qbar-tools">
+          <button class="qbar-btn">֏ AMD</button>
+          <div class="sep"></div>
+          <button class="qbar-btn">RU</button>
+          <button class="qbar-btn" style="opacity:.55">EN</button>
+          <div class="sep"></div>
+          <button class="qbar-btn" aria-label="Тема">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg>
+          </button>
+          <button class="qbar-cta">Войти</button>
+        </div>
+      </div>
+    </header>
+    <div class="qbar-demo-body">
+      <p class="mono">↓ контент страницы — фото, заголовок, карточки ↓</p>
+      <p>Панель полностью непрозрачна с первого кадра — переход «стекло → сплошная» не нужен,<br>потому что стеклянного состояния никогда не было.</p>
+    </div>
+  </div>
+  <div class="scroll-toggle">
+    <button id="scrollBtn">Показать состояние «после скролла» (только тень, ± несколько px)</button>
+  </div>
+
+  <div class="wrap mobile-section">
+    <h2>Мобильный низ — та же логика</h2>
+    <div class="phone">
+      <div class="phone-body">320 × ~560, содержимое страницы</div>
+      <nav class="qdock">
+        <div class="qdock-item" data-active="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 11l9-7 9 7"/><path d="M5 10v9h14v-9"/></svg>
+          Главная
+        </div>
+        <div class="qdock-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg>
+          Путешествия
+        </div>
+        <div class="qdock-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 20l-6-3V4l6 3 6-3 6 3v13l-6-3-6 3z"/></svg>
+          Карта
+        </div>
+        <div class="qdock-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+          Войти
+        </div>
+      </nav>
+    </div>
+  </div>
+
+  <div class="wrap spec">
+    <h2>Что не так, как в «Капсуле» и «Ленте» — и почему</h2>
+    <p class="note">Обе уже реализованы фичи, обе используют своё «фирменное» состояние (плавучесть, стекло). Здесь — ни того, ни другого; сравнение построчно:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Свойство</th><th>Капсула (pill)</th><th>Лента (rail)</th><th>Ровная линия (это направление)</th></tr></thead>
+        <tbody>
+          <tr><td>Фон</td><td>85% непрозрачности + blur</td><td>3 слоя blur с масками затухания</td><td class="no">100% непрозрачный, без blur вообще</td></tr>
+          <tr><td>Форма</td><td>rounded-full, отступы от края</td><td>во всю ширину, без радиуса</td><td>во всю ширину, без радиуса — как у ленты</td></tr>
+          <tr><td>Граница</td><td>тень + кольцо по всей капсуле</td><td>«шов» проявляется только при скролле</td><td class="no">один hairline снизу, всегда виден</td></tr>
+          <tr><td>При скролле</td><td>без изменений (уже плавает)</td><td>80px → 60px, blur-слои проявляются</td><td class="no">только тень, высота не меняется</td></tr>
+          <tr><td>Nav-ссылки</td><td>внутри капсулы, обычный текст</td><td>сегментированный трек для валюты/языка</td><td>обычные текстовые ссылки, метка — подчёркивание, без пилюль</td></tr>
+          <tr><td>Мобильный низ</td><td>плавающий, скруглённый, отступ от края</td><td>doc с блюром снизу вверх</td><td class="no">вплотную к краю, один hairline сверху</td></tr>
+          <tr><td>Требует своей палитры</td><td>нет</td><td>нет</td><td class="no">нет — работает на токенах обоих пресетов без правок</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="wrap foot">
+    Цвета выше — буквальные значения из <span class="mono">index.css</span> / <span class="mono">palettes.css</span>, не приближение.
+    Шрифты здесь — системные (в Артефакте недоступны веб-шрифты сайта); в реальном коде это будет
+    обычный <span class="mono">Prata</span>/<span class="mono">Manrope</span> сайта, макет тестирует форму и поведение, не типографику.
+    Мокап, реализация — после выбора.
+  </p>
+
+</div>
+
+<script>
+  (function () {
+    const root = document.getElementById('qline-root');
+    root.querySelectorAll('[data-preset-btn]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        root.setAttribute('data-preset', btn.dataset.presetBtn);
+        root.querySelectorAll('[data-preset-btn]').forEach(function (b) { b.setAttribute('aria-pressed', b === btn); });
+      });
+    });
+    root.querySelectorAll('[data-theme-btn]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        root.setAttribute('data-theme', btn.dataset.themeBtn);
+        root.querySelectorAll('[data-theme-btn]').forEach(function (b) { b.setAttribute('aria-pressed', b === btn); });
+      });
+    });
+    const qbar = root.querySelector('#qbar');
+    const scrollBtn = root.querySelector('#scrollBtn');
+    scrollBtn.addEventListener('click', function () {
+      const on = qbar.getAttribute('data-scrolled') !== 'true';
+      qbar.setAttribute('data-scrolled', String(on));
+      scrollBtn.textContent = on
+        ? 'Вернуть состояние «в начале страницы»'
+        : 'Показать состояние «после скролла» (только тень, ± несколько px)';
+    });
+  })();
+</script>

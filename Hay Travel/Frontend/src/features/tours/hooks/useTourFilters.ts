@@ -89,10 +89,17 @@ export function useTourFilters(): UseTourFilters {
       setParams(
         (current) => {
           const next = new URLSearchParams(current)
-          // `'all'`, `null`, `''` and `[]` are the defaults — omit them so links stay clean.
-          // `Array.prototype.toString` (via the `String()` fallback below) already comma-joins,
-          // which is exactly the `?region=lori,tavush` encoding `parseRegionParam` expects back.
-          if (value === 'all' || value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
+          // `'all'` (kind), `'default'` (sort), `null`, `''` and `[]` are the defaults — omit
+          // them so links stay clean. `Array.prototype.toString` (via the `String()` fallback
+          // below) already comma-joins, which is exactly the `?region=lori,tavush` encoding
+          // `parseRegionParam` expects back.
+          if (
+            value === 'all' ||
+            value === 'default' ||
+            value === null ||
+            value === '' ||
+            (Array.isArray(value) && value.length === 0)
+          ) {
             next.delete(key)
           } else {
             next.set(key, String(value))

@@ -33,7 +33,34 @@ namespace ATTours.BusinessServices.Services.InfoServices
                     .ThenInclude(n => n.Translations)
                 // Переводы региона в граф тура не включаются (TourRegionInfoModel — плоская проекция).
                 .Include((Expression<Func<Tour, ICollection<TourRegion>>>)(x => x.TourRegions))
-                    .ThenInclude(tr => tr.Region);
+                    .ThenInclude(tr => tr.Region)
+                // Плоско, как TourRegions — Tag не грузится (TourTagInfoModel не несёт его полей,
+                // каталог тегов фронт резолвит через TagController).
+                .Include((Expression<Func<Tour, ICollection<TourTag>>>)(x => x.TourTags));
+        }
+
+        // Админский СПИСОК туров (2026-08-16, GetAllAsync — дашборд/страница продуктов): всё, что
+        // TourInfoModel несёт на уровне Tour (то же, что IncludeTourGraph), НО без по-дневного
+        // контента (TourDay.Translations/GalleryImages/RoutePoints) — именно эта тройная
+        // вложенность и была источником cartesian explosion, помноженной здесь ещё и на
+        // количество туров в списке. Ни дашборд (StatCards, недавние 5), ни таблица продуктов
+        // не читают содержимое дня — только tour.tourDays.length (счётчик), см. tech-debt.md.
+        // TourDetails.TourDay ОБЯЗАН остаться Included (без ThenInclude вглубь): маппер строит
+        // TourDays через `TourDetails.Select(td => td.TourDay)` — без Include это был бы null на
+        // каждом элементе (TourDay — не HashSet со своим default, а голая reference-навигация).
+        public static IEntityQueryableRepository<Tour> IncludeTourAdminListGraph(this IEntityQueryableRepository<Tour> query)
+        {
+            return query
+                .Include((Expression<Func<Tour, ICollection<TourDetail>>>)(x => x.TourDetails))
+                    .ThenInclude(td => td.TourDay)
+                .Include(x => x.Translations)
+                .Include((Expression<Func<Tour, ICollection<AdditionalExpense>>>)(x => x.AdditionalExpenses))
+                    .ThenInclude(ae => ae.Translations)
+                .Include((Expression<Func<Tour, ICollection<TourNote>>>)(x => x.Notes))
+                    .ThenInclude(n => n.Translations)
+                .Include((Expression<Func<Tour, ICollection<TourRegion>>>)(x => x.TourRegions))
+                    .ThenInclude(tr => tr.Region)
+                .Include((Expression<Func<Tour, ICollection<TourTag>>>)(x => x.TourTags));
         }
 
         // Публичный путь чтения ОДНОГО тура (пункт 3.5): весь общий граф + переводы шаблонов
@@ -69,7 +96,8 @@ namespace ATTours.BusinessServices.Services.InfoServices
                 .Include(x => x.Translations)
                 .Include((Expression<Func<Tour, ICollection<TourRegion>>>)(x => x.TourRegions))
                     .ThenInclude(tr => tr.Region)
-                .Include((Expression<Func<Tour, ICollection<TourDetail>>>)(x => x.TourDetails));
+                .Include((Expression<Func<Tour, ICollection<TourDetail>>>)(x => x.TourDetails))
+                .Include((Expression<Func<Tour, ICollection<TourTag>>>)(x => x.TourTags));
         }
     }
 }

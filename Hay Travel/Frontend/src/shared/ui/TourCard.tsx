@@ -1,10 +1,12 @@
 import { Link } from 'react-router'
 import type { Tour } from '@/shared/types/tour'
 import { REGION_BY_SLUG } from '@/shared/data/armeniaRegions'
-import { formatDuration } from '@/shared/lib/format'
+import { formatDuration, formatShortDate } from '@/shared/lib/format'
+import { adaptiveImageUrl } from '@/shared/lib/adaptiveImage'
 import { useMoney } from '@/shared/currency'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { KindChip } from './Chip'
+import { ProductTag } from './ProductTag'
 import { ClockIcon, MapPinIcon } from './icons'
 
 /**
@@ -48,6 +50,11 @@ export function TourCard({ tour }: { tour: Tour }) {
     locale === 'en' ? REGION_BY_SLUG[slug].en : REGION_BY_SLUG[slug].ru,
   )
 
+  // Server-resolved (Фаза 3/7) — null when there is no discount or it has expired. Nothing here
+  // re-derives a percent or checks a date; the backend already did.
+  const discountedPrice = tour.discountedPrice
+  const discountEndLabel = discountedPrice !== null ? formatShortDate(tour.discountValidUntil ?? '', locale) : ''
+
   return (
     <article className="card-lift group h-full">
       <Link
@@ -68,13 +75,25 @@ export function TourCard({ tour }: { tour: Tour }) {
         {/* Cover */}
         <div className="relative aspect-[4/3] shrink-0 overflow-hidden">
           <img
-            src={tour.coverImage}
+            src={adaptiveImageUrl(tour.coverImage)}
             alt={tour.title}
             loading="lazy"
             className="h-full w-full object-cover transition-transform duration-[var(--dur-reveal)] ease-[var(--ease-out-soft)] group-hover:scale-105"
           />
           {/* Scrim keeps chip text legible over any photo. */}
           <div className="absolute inset-0 bg-gradient-to-t from-obsidian/85 via-obsidian/10 to-obsidian/40" />
+
+          {/* Merch tags (up to 3) share the left edge with `KindChip` below — top vs. bottom
+              keeps the right side of the photo untouched at any count. */}
+          {tour.tags.length > 0 && (
+            <div className="absolute top-3 left-3 flex flex-col items-start gap-1.5">
+              {tour.tags.map((tag) => (
+                <ProductTag key={tag.id} color={tag.color}>
+                  {tag.label}
+                </ProductTag>
+              ))}
+            </div>
+          )}
 
           <div className="absolute bottom-3 left-3">
             <KindChip kind={tour.kind} />
@@ -99,12 +118,25 @@ export function TourCard({ tour }: { tour: Tour }) {
               {formatDuration(tour.durationDays, tour.durationNights, locale)}
             </span>
             <span className="text-right leading-tight">
-              {/* "цена от"/"from" — now true in two senses: the smallest group tier, and per
-                  person. `tour.priceFrom` is the base (1–4 guests) price. */}
-              <span className="block text-[10px] tracking-wide text-ink-muted">{t('tourCard.priceFrom')}</span>
+              {discountedPrice !== null ? (
+                // Active discount: the original price moves into the label's slot and gets
+                // struck through — same footprint as the non-discounted label line above.
+                <span className="block text-xs text-ink-muted line-through">
+                  {money.format(tour.priceFrom)}
+                </span>
+              ) : (
+                // "цена от"/"from" — true in two senses: the smallest group tier, and per
+                // person. `tour.priceFrom` is the base (1–4 guests) price.
+                <span className="block text-[10px] tracking-wide text-ink-muted">{t('tourCard.priceFrom')}</span>
+              )}
               <span className="font-display text-2xl text-gold-ink">
-                {money.format(tour.priceFrom)}
+                {money.format(discountedPrice ?? tour.priceFrom)}
               </span>
+              {discountedPrice !== null && discountEndLabel && (
+                <span className="block text-[10px] text-ink-dim">
+                  {t('tourCard.discountUntil', { date: discountEndLabel })}
+                </span>
+              )}
             </span>
           </div>
         </div>

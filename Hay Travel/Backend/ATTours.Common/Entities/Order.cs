@@ -5,9 +5,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ATTours.Common.Entities
 {
-    // Бронирование тура на конкретный календарный день.
-    // Денежная часть намеренно вынесена в отдельную сущность OrderPayment (1:1, ADR 014):
-    // подключение платёжного шлюза будет растить её, а не Order.
+    // Шапка заказа (переделка B14, 2026-08-16 — ADR 019 заменяет ADR 014): один заказ теперь
+    // может нести НЕСКОЛЬКО строк (OrderLine — тур/дата/гости/деньги/исполнитель на каждой),
+    // бронь с сайта по-прежнему создаёт заказ с одной строкой, дополнительные строки — только
+    // ручное действие админа. Денежные ПРОВОДКИ (не снапшот) — отдельная сущность OrderPayment,
+    // список, привязанный к конкретной строке.
     //
     // Обратных коллекций (Tour.Orders / User.Orders) нет: заказы никогда не читаются
     // графом тура/пользователя, FK-стороны достаточно (как у Place.RegionId).
@@ -19,26 +21,25 @@ namespace ATTours.Common.Entities
         public int UserId { get; set; }
         public User User { get; set; }
 
-        public int TourId { get; set; }
-        public Tour Tour { get; set; }
-
-        // Календарный день брони. DateOnly (SQL date), не DateTime: у дня нет часового
-        // пояса, и глобальный UtcDateTimeConverter его не касается (ADR 012).
-        public DateOnly TourDate { get; set; }
-
-        public int GuestCount { get; set; }
+        // "Человеческий" номер: ДДММГГ + 4-значный счётчик, сброс каждый день
+        // (OrderNumberGenerator, Фаза 1.4). Отдельно от Id — Id остаётся техническим PK.
+        public string Number { get; set; }
 
         public OrderStatus Status { get; set; }
+
+        // Заполняется только при Status == Rejected, необязательно (Давид, 2026-08-16).
+        public string RejectReason { get; set; }
 
         // Настоящий момент времени, поэтому DateTime (UTC). Ставит OrderCreationService.
         public DateTime CreatedAtUtc { get; set; }
 
-        // Null, пока заказ PendingConfirmation. Ставит OrderConfirmationService в момент
-        // подтверждения — единственное место, где это происходит.
-        public DateTime? ConfirmedAtUtc { get; set; }
+        // Момент перехода в Approved. Null, пока этого не произошло.
+        public DateTime? ApprovedAtUtc { get; set; }
 
-        // 1:1, создаётся всегда вместе с заказом в одной транзакции — «заказа без денег»
-        // не существует (ADR 014).
-        public OrderPayment Payment { get; set; }
+        // ISO-4217, вся сумма заказа в одной валюте. Базовая цена на бэке всегда AMD
+        // (мультивалютность — отображение на фронте, как и раньше — см. ADR 014).
+        public string Currency { get; set; }
+
+        public HashSet<OrderLine> Lines { get; set; } = [];
     }
 }

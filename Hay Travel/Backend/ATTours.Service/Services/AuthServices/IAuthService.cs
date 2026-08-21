@@ -12,6 +12,12 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
         Task<LoginOutcome> LoginAsync(LoginModel model, RequestContextModel requestContext, CancellationToken cancellationToken = default);
 
+        // Дев-бэкдор для локального UI-тестирования (Давид, 2026-08-16): та же выдача
+        // токенов, что и LoginAsync, но БЕЗ проверки пароля/блокировки/верификации почты.
+        // Контроллер обязан гейтить вызов IWebHostEnvironment.IsDevelopment() — этот метод
+        // сам такую проверку не делает, чтобы не тащить IWebHostEnvironment в Service-слой.
+        Task<LoginOutcome> DevLoginAsync(string usernameOrEmail, RequestContextModel requestContext, CancellationToken cancellationToken = default);
+
         // Ротация с reuse-detection: предъявленный уже отозванный токен отзывает все
         // сессии пользователя.
         Task<RefreshOutcome> RefreshAsync(string? refreshToken, RequestContextModel requestContext, CancellationToken cancellationToken = default);

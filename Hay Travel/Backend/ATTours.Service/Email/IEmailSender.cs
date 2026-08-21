@@ -21,5 +21,16 @@ namespace ATTours.BusinessServices.Email
         // подтверждения — идёт на EmailSettings.AdminNotificationEmail, а не клиенту.
         Task SendNewOrderNotificationAsync(string tourTitle, DateOnly tourDate, int guestCount,
             string customerName, string customerEmail, CancellationToken cancellationToken = default);
+
+        // "Отправить заказ" клиенту (Фаза 5.1, checklist-orders-redesign.txt) — весь заказ
+        // PDF-вложением (OrderPdfService.GenerateOrderDocument).
+        Task SendOrderDocumentAsync(string toEmail, string toName, string orderNumber, byte[] pdfDocument,
+            CancellationToken cancellationToken = default);
+
+        // "Назначить и отправить" исполнителю (Фаза 5.2) — assignmentDetails уже содержит
+        // текст "детали для выполнения" (место встречи/навигатор) построчно, pdfDocument —
+        // только назначенные строки (OrderPdfService.GenerateAssignmentDocument).
+        Task SendAssignmentAsync(string toEmail, string toName, string orderNumber, string assignmentDetails,
+            byte[] pdfDocument, CancellationToken cancellationToken = default);
     }
 }

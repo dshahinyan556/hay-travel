@@ -1,0 +1,9 @@
+<svg viewBox="0 0 600 108" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hay Travel">
+  <!-- Header variant of hay-travel-wordmark-dark-ink.svg with the "ARMENIA TRAVEL" caption
+       dropped and the viewBox cropped to the remaining content — requested 2026-08-16 so the
+       site header can render the wordmark larger without carrying the caption's dead space. -->
+  <text x="300" y="76" text-anchor="middle"
+        font-family="Prata, 'Bodoni MT', Didot, Georgia, serif"
+        font-size="60" letter-spacing="0.5" fill="#241A10">Hay Travel</text>
+  <line x1="220" y1="98" x2="380" y2="98" stroke="#C9974B" stroke-width="1.5" />
+</svg>

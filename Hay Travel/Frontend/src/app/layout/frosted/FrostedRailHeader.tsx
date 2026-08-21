@@ -84,7 +84,7 @@ export function FrostedRailHeader() {
         <div className="relative mx-auto flex h-full max-w-[1200px] items-center justify-between gap-4 px-3.5 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:px-7">
           <NavLink to="/" className="flex items-center gap-2.5">
             {logoUrl ? (
-              <img src={logoUrl} alt="Hay Travel" className="h-7 w-auto lg:h-8" />
+              <img src={logoUrl} alt="Hay Travel" className="h-9 w-auto lg:h-11" />
             ) : (
               <>
                 <span className="text-gold-ink">

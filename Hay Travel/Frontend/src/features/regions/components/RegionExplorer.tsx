@@ -199,7 +199,10 @@ export function RegionExplorer({ tours, defaultOpen = false }: RegionExplorerPro
                   aria-expanded={open}
                   // `.btn-motion` carries the colour transition itself, so it REPLACES
                   // `transition-colors` (unlayered CSS outranks the utility — see `index.css`).
-                  className="btn-motion inline-flex cursor-pointer items-center gap-2 rounded-full bg-gold-fill px-5 py-2.5 text-sm font-medium text-gold-on hover:bg-gold-fill-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-page focus-visible:outline-none"
+                  // `.btn-sheen` is the same slow one-pass streak used on the hero "View trips"
+                  // CTA and the booking "Book now" button — this is the third primary CTA that
+                  // gets it.
+                  className="btn-motion btn-sheen inline-flex cursor-pointer items-center gap-2 rounded-full bg-gold-fill px-5 py-2.5 text-sm font-medium text-gold-on hover:bg-gold-fill-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-page focus-visible:outline-none"
                 >
                   <MapIcon size={17} />
                   {open ? t('regions.collapse') : t('regions.expand')}
@@ -252,15 +255,16 @@ export function RegionExplorer({ tours, defaultOpen = false }: RegionExplorerPro
                     {/* Desktop side panel */}
                     <div className="hidden lg:block">
                       {openedRegion ? (
-                        // The ring lives on its own layer, painted after (on top of) the clipping
-                        // box below rather than as that box's own box-shadow. Chrome mis-renders a
-                        // rounded corner's box-shadow when an `overflow-hidden` ancestor also clips
-                        // a transform-animated descendant (the tour rows animate in via framer
-                        // motion) — the composited clip and the shadow's own anti-aliasing fall out
-                        // of step and a hairline gap opens at the corner. A separate, unclipped
-                        // overlay can't be affected by whatever the scrolling/animating content
-                        // underneath is doing, so the border stays crisp regardless of browser.
-                        <div className="sticky top-24 relative rounded-2xl bg-panel shadow-[var(--shadow-lg)]">
+                        // The border lives directly on this (non-clipping) wrapper rather than as
+                        // a `ring`/box-shadow overlay. When the tour list actually scrolls (more
+                        // rows than fit `max-h-[70vh]`), Chrome promotes the scrolling
+                        // `overflow-y-auto` child to its own compositing layer, and that layer
+                        // paints over a sibling's box-shadow along the edge it scrolls against —
+                        // the right and bottom border vanished for exactly the height of the
+                        // scrolling content. A real `border` is painted as part of this element's
+                        // own box, not composited as a shadow, so it can't be occluded by a
+                        // sibling's layer regardless of what the list underneath is doing.
+                        <div className="sticky top-24 rounded-2xl border-[1.5px] border-gold-ink bg-panel shadow-[var(--shadow-lg)]">
                           <div className="flex max-h-[70vh] flex-col overflow-hidden rounded-2xl p-4">
                             <RegionPanel
                               region={openedRegion}
@@ -269,7 +273,6 @@ export function RegionExplorer({ tours, defaultOpen = false }: RegionExplorerPro
                               onRetry={() => loadRegion(openedRegion.slug)}
                             />
                           </div>
-                          <div aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-gold-line" />
                         </div>
                       ) : (
                         <div className="veil-top sticky top-24 rounded-2xl border border-dashed border-edge p-6 text-center">

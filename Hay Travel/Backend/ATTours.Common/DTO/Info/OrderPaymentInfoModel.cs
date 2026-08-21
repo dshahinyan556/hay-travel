@@ -1,12 +1,16 @@
+using ATTours.Common.Enums;
+
 namespace ATTours.Common.DTO.Info
 {
-    // Денежная часть заказа (ADR 014). Плоская проекция OrderPayment: собственный Id
-    // наружу не едет — платёж адресуется только через заказ.
+    // Одна денежная проводка заказа (ADR 019). Собственный Id едет наружу — проводка сама по
+    // себе адресуема (грид "платежи" мокапа), в отличие от старого 1:1-снапшота ADR 014.
     public class OrderPaymentInfoModel
     {
-        public decimal TourPriceSnapshot { get; set; }
-        public decimal TotalAmount { get; set; }
-        public decimal PrepaidAmount { get; set; }
-        public string Currency { get; set; }
+        public int Id { get; set; }
+        public int OrderLineId { get; set; }
+        public OrderPaymentType Type { get; set; }
+        public string Number { get; set; }
+        public decimal Amount { get; set; }
+        public DateTime CreatedAtUtc { get; set; }
     }
 }

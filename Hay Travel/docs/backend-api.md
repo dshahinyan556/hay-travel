@@ -37,6 +37,36 @@
 - **TotalPrice** — compute-on-write: Σ(TourDay.Price) при create/update.
 - **Валидация** (`TourValidationService`, на create и update): экскурсия = ровно 1 день, тур ≥ 2; цена дня ≥ 0; ≥1 точка маршрута в каждом дне. Смена типа запрещена (`TourUpdateService`).
 
+## AsSplitQuery на графе чтения тура (2026-08-16)
+
+`GetTourInfo` (публичная детальная тура) уходил за 10+ секунд на туре с большой галереей —
+причина не в размере фото, а в форме запроса. `IncludeTourGraphForClient` тянет ~8
+sibling-коллекций с одного корня одним `Include`-чейном (`TourDetails→TourDay→
+{Translations, GalleryImages, RoutePoints→...}` плюс `Translations`/`AdditionalExpenses`/
+`Notes`/`TourRegions`/`TourTags` на `Tour`) — EF Core по умолчанию собирает это в ОДИН JOIN,
+где строки перемножаются по каждой комбинации коллекций (cartesian explosion): с парой фото
+незаметно, с десятками — катастрофично. Исправлено `.AsSplitQuery()` в
+`TourClientInfo.GetClientDetailAsync` (EF Core бьёт граф на отдельные SQL-запросы по коллекции
+вместо одного JOIN) — 10-12 сек → ~0.2-0.4 сек.
+
+`AsSplitQuery()` добавлен как метод самой репозиторной абстракции
+(`IEntityQueryableRepository<T>.AsSplitQuery()`, `EntityQueryableRepository.cs`) — доступен
+любому месту, строящему `Include`-граф с несколькими sibling-коллекциями, не только этому.
+
+**Дополнено тем же днём** (Давид подтвердил: вход в админку, открытие тура на редактирование и
+сохранение тоже тормозили — та же причина на других вызывающих местах):
+- `TourInfo.GetEntityQueryableRepository()` (админский `InitUpdate` — открытие одного тура) и
+  `TourUpdateService` (загрузка tracked-копии перед сохранением) получили `.AsSplitQuery()`
+  так же, как клиентский путь выше.
+- `TourInfo.GetAllAsync()` (админский СПИСОК — дашборд, страница продуктов) пошёл дальше
+  `AsSplitQuery` и получил отдельный облегчённый граф — `IncludeTourAdminListGraph`
+  (`TourGraphQueryExtensions.cs`), по аналогии с клиентским `IncludeTourCardGraph` (D-11).
+  Список ничего не показывает из содержимого дня (только `tourDays.length`), поэтому граф
+  включает `TourDetails.TourDay` голой ссылкой (без неё маппер отдал бы `null` на каждом дне),
+  но БЕЗ `TourDay.Translations`/`GalleryImages`/`RoutePoints` — именно эта вложенность и была
+  источником cartesian explosion, здесь ещё и помноженной на количество туров в каталоге.
+  `TourInfo.InitUpdate` (открытие ОДНОГО тура) остался на полном графе — форма редактирует всё.
+
 ## Сервисы (карта)
 `TourInitializationService` (init) · `TourCreationService` (create) · `TourInfo` (read/GetAll/InitUpdate) · `TourUpdateService` (update-reconcile) · `TourActivationService` (SetActive) · `TourArchivalService` (SetArchived) · `TourFeaturedService` (SetFeatured/ReorderFeatured) · `TourDeletionService` (hard delete) · `TourValidationService` (валидация).
 
@@ -130,6 +160,46 @@
 
 **Админка**: раздел «Заказы» (`/admin/orders` — список + `/admin/orders/:id` деталь) + «Календарь» (`/admin/calendar`) — см. `admin-panel.md`.
 
+> Заметка о доке: описание выше (`OrderStatus` из 3 значений, `Order.ConfirmedAtUtc`, `PUT
+> Order/Update` без строк) — модель ДО мульти-строчного редизайна заказов (ADR 019, 2026-08-16).
+> Актуальный контракт: `OrderStatus` из 7 значений (см. `Backend/ATTours.Common/Enums/
+> OrderStatus.cs`), `Order` — заголовок над `Order.Lines[]`, деньги/предоплата/исполнитель/
+> pickup-детали — на каждой строке. Полная переработка этого раздела не входила в объём задачи
+> ниже — только точечное добавление того, что реально изменилось.
+
+### Журнал событий заказа + notify-флаг у назначения (2026-08-21)
+Чек-лист — `checklists/order-toolbar-summary-checklist-2026-08-21.txt`. Контракт спроектирован
+`backend-architect` целиком до реализации — `docs/specs/007-order-event-log-backend.md` +
+`docs/adr/020-order-event-log-outside-mutation-transaction.md` — детали ниже только сверху.
+
+- **`OrderEvent`** (`ATTours.Common`) — read-only audit-log, FK на `Order` (Cascade). Поля:
+  `OrderId`, `Type` (`OrderEventType`: `Created=1, StatusChanged=2, Updated=3, LineAdded=4,
+  LineRemoved=5, LineUpdated=6, EmployeeAssigned=7, SentToClient=8, PaymentAdded=9`),
+  `Description` (готовый русский текст, до 1000 символов — обрезается с многоточием, если длиннее;
+  в спеке лимита не было, добавлено при реализации, т.к. `RejectReason` до 2000 символов иначе мог
+  бы уронить вставку события), `ActorUserId` (`int?`, БЕЗ FK — заказ может пережить удаление
+  пользователя), `ActorFullName` (снапшот имени НА МОМЕНТ события, не резолвится заново), `CreatedAtUtc`.
+  Индекс `(OrderId, CreatedAtUtc)`. Миграция `AddOrderEvent`.
+- **Пишется вне транзакции самой мутации**, статическим `OrderEventLog` — ПОСЛЕ успешного
+  выполнения (`OrderController`, 9 точек вызова). Сбой записи лога проглатывается (try/catch), тот
+  же принцип, что у `IEmailSender.SendAsync` — история не должна ронять саму операцию.
+  Логируются ВСЕ мутирующие эндпоинты `OrderController`, КРОМЕ `Delete` (каскад всё равно снесёт
+  журнал вместе с заказом). `Create` тоже логируется (`Created`).
+- **Чтение — отдельный эндпоинт**, не поле `OrderInfoModel` (чтобы неограниченно растущий список
+  не утекал в граф «Мои заказы»/админский список/PDF/письма):
+  `GET api/Order/{id}/Events` → `OrderEventInfoModel[]` (Admin-only, сортировка `CreatedAtUtc desc`,
+  без пагинации, несуществующий заказ → `[]` + 200, не 404).
+- **`AssignEmployee` научился НЕ слать письмо.** `OrderAssignEmployeeModel.SendEmail` (`bool`,
+  default `true` — старые вызовы ведут себя как раньше). `false` — назначает молча, без генерации
+  PDF и `SendAssignmentAsync`; `EmployeeAssigned`-событие пишется в обоих случаях. Нужно для
+  попапа «Назначить исполнителя» в админке (кнопки «Назначить» vs «Назначить и отправить письмо»
+  — см. `admin-panel.md`).
+- Три сервиса получили внутренние Result-типы, чтобы отдать «было/стало» наружу для текста события
+  (по образцу уже существующего `OrderAssignEmployeeResult`): `OrderStatusService.SetStatusAsync` →
+  `OrderStatusChangeResult`, `OrderUpdateService.UpdateAsync` → `OrderUpdateResult`,
+  `OrderLineService.RemoveLineAsync` → `OrderLineRemovedResult`. HTTP-контракты этих трёх
+  эндпоинтов не изменились — это внутренние сигнатуры сервисов, не тела запроса/ответа.
+
 ## Настройки темы/палитры (`api/SiteSettings` — группа `Theme`) — 2026-08-13
 Спецификация — `docs/specs/002-design-settings-backend.md` (+ `docs/adr/013`). Новая группа `SiteSettingGroup.Theme = 7` (не `Branding` — там только логотип):
 - **`theme.activePalette`** — id активного пресета палитры сайта, тип контрола `Select` (новый `SettingValueType.Select=5`), допустимые значения — код-каталог `ThemePaletteCatalog` (не миграция): `obsidian` (дефолт, «Обсидиан + золото») и `basalt` («Базальт и медь», см. `client-site.md` — НЕ дефолт). Сервер валидирует значение против `definition.Options` (код 2013 при недопустимом).
@@ -139,5 +209,60 @@
 
 Новых сущностей/репозиториев/миграции не потребовалось — всё укладывается в уже существующий каталог-в-коде `SiteSettingCatalog` (ADR 002).
 
+## Загрузка изображений (`api/Upload`) — 2026-08-15
+Второй способ заполнить те же `ImageUrl`-строковые поля, что раньше принимали только URL руками (тур `mainImageUrl`, `Place.imageUrl`/`Place.Images[].url`, `TourDay.Gallery[].url`, настройки `hero.imageUrl`/`branding.logoUrl`/`seo.ogImageUrl`/`branding.authImageUrl`) — контракт этих полей не менялся, они по-прежнему просто строка-URL. Ни новой сущности, ни миграции: загруженный файл просто возвращает URL, который фронт кладёт в то же поле, что раньше заполнялось руками.
+
+| Метод | Route | Тело / параметры | Возврат |
+| --- | --- | --- | --- |
+| POST | `api/Upload/Image` | `multipart/form-data`, поле `file` | `{ url: string }` |
+
+- **Доступ**: `[Authorize(Roles = TourManagerOrAdmin)]` — та же граница, что у Tour/Place Create/Update (тур-менеджер должен уметь загрузить фото прямо из формы тура/точки, не только Admin).
+- **Валидация**: content-type только `image/jpeg`/`image/png`/`image/webp` (400 `UploadContentTypeNotAllowed`=2301), размер ≤ 8 МБ по умолчанию (400 `UploadFileTooLarge`=2300, плюс `[RequestSizeLimit]` на контроллере), нечитаемый файл (400 `UploadInvalidImage`=2302). Лимиты — `UploadSettings` (`appsettings.json` секция `Upload`), не хардкод.
+- **Хранение**: локальный диск (`ATTours.BusinessServices.Files.ImageUploadService`, SkiaSharp — не ImageSharp, лицензия MIT, важно для коммерческого проекта), путь — `UploadSettings.StoragePath` (по умолчанию `uploads/` рядом с приложением, в Docker — `/app/uploads`, смонтирован volume'ом, см. `server-ops.md`). Раздача — `/uploads/*`, в проде nginx отдаёт файлы с диска напрямую, минуя .NET; `UseStaticFiles` в `Startup.cs` — только для локальной разработки, где nginx нет.
+- **Что сохраняется на каждую загрузку — ДВА файла, одно имя**: оригинал (EXIF-ориентация применена, длинная сторона ≤ `MaxOriginalDimension`=4000px) под тем же расширением, что и вход, и WebP-сжатая копия (`CompressedMaxDimension`=1600px, качество `WebpQuality`=75) **рядом, тем же basename** — фронт получает в ответе только URL оригинала, WebP-парную ссылку по конвенции строит сам (`url.replace(/\.[^./]+$/, '.webp')`, `shared/lib/adaptiveImage.ts`) — это НЕ часть JSON-контракта, а голая договорённость по неймингу файлов на диске, так что схема `ImageUrl`-полей нигде не менялась ради второй ссылки.
+- **EXIF-ориентация** применяется вручную (SkiaSharp декодирует "как лежит в файле") — без этого портретные фото с телефона ложились бы на бок.
+- Бэкап/удаление осиротевших файлов при замене/удалении записи — сознательно НЕ реализовано (отложено), см. `tech-debt.md`.
+
+## Теги (`api/Tag`) — 2026-08-16, декоративные
+Мерч-теги продукта ("Хит сезона", …) — каталог отдельной сущностью `Tag` (+ `TagTranslation`, + join `TourTag`), тот же паттерн, что `ExpenseTemplate`/`TourNoteTemplate` (3.4). Фронт — `admin-panel.md#справочники-admincatalog`, `client-site.md#мерч-теги-2026-08-16-декоративные`.
+
+**`TagType`**: только `Regular=1` — `Discount` убран из enum в Фазе 3 (2026-08-16, `checklist-orders-redesign.txt`), скидка тура больше не тег, см. «Скидка тура» ниже.
+**`TagColor`**: `Gold=1`, `Wine=2`, `Success=3`, `Danger=4`, `Warning=5` — preset-токены сайтовой палитры, не свободный hex.
+
+**Правила** (`TourValidationService.ValidateTagsAsync`, работает и на create, и на update): максимум 3 тега на тур, без дублей `TagId`, все `TagId` должны существовать.
+
+`TourInfoModel.Tags`/`TourCardModel.Tags` — плоская проекция (`TourTagInfoModel { Id, TagId }`), как `Regions`: без вложенного тега, каталог (имя/цвет) фронт резолвит одним запросом к `api/Tag`. Тот же null/`[]`-контракт на `UpdateTour`, что у `Regions`.
+
+| Метод | Route | Доступ | Возврат |
+| --- | --- | --- | --- |
+| GET | `api/Tag/GetAll` | TourManagerOrAdmin | `TagInfoModel[]` |
+| POST | `api/Tag/Create` | Admin | `TagInfoModel` |
+| PUT | `api/Tag/Update` | Admin | `TagInfoModel` |
+| DELETE | `api/Tag/Delete?id=` | Admin | — (400 `CatalogEntryInUse`/2010, если назначен туру) |
+| GET | `api/Tag/GetForClient?languageCode=` | анонимный | `TagInfoModel[]` (одна локаль) |
+
+**Коды ошибок**: `TagNotFound=2023`, `TooManyTags=2024` (>3 на тур). `MultipleDiscountTags=2025` убран вместе с типом `Discount` — код переиспользован под `InvalidTourDiscount` (см. ниже).
+
+## Скидка тура — 2026-08-18
+Три поля напрямую на `Tour`, не тег: `DiscountPercent` (decimal? 1–100), `DiscountStartDate` (DateOnly?), `DiscountValidUntil` (DateOnly?) — во всех тур-DTO (`TourInfoModel`, `TourCreateModel`, `TourCardModel`), JSON-имена `discountPercent`/`discountStartDate`/`discountValidUntil` (`"YYYY-MM-DD"`).
+
+**Правило** (`TourValidationService.ValidateDiscount`): все три поля заданы или все три `null`; `DiscountStartDate <= DiscountValidUntil` (равенство разрешено). Нарушение → 400, `InvalidTourDiscount=2025`.
+
+**Резолв активности** (`TourDiscountExtensions`, статический хелпер в `ATTours.Common`): скидка активна на дату D, если `DiscountStartDate <= D <= DiscountValidUntil` включительно.
+- `IsDiscountActive(percent, start, end, onDate = null)`
+- `ResolveActiveDiscountPercent(percent, start, end, onDate = null)` / `.ResolveActiveDiscountPercent(this Tour, onDate = null)`
+- `ApplyDiscount(price, activeDiscountPercent)` — возвращает `null`, если скидка не активна (контракт «`DiscountedPrice == null` = скидки нет»; до 2026-08-18 здесь была ошибка — возвращалась исходная цена, и `DiscountedPrice` был не-null у ЛЮБОГО тура).
+
+`onDate` не передаётся → используется сегодняшняя дата (`DateTime.UtcNow`). Два разных вызова с разным `onDate`:
+- **Витрина** (`MappingProfile`, `TourInfoModel.DiscountedPrice`/`TourCardModel`) — `onDate` не передаётся, резолв на сегодня. `TourCardModel` дополнительно скрывает `DiscountStartDate`/`DiscountValidUntil`, если скидка не активна сегодня (будущая акция не анонсируется на карточке).
+- **Заказ** (`OrderCreationService`, `OrderLineService`) — `onDate` = дата САМОГО ТУРА (`tourDate`/`model.TourDate`), не дата оформления заказа. До 2026-08-18 оба места не передавали `onDate` вообще → резолвилось по дате заказа, и бронь на день вне диапазона скидки всё равно получала скидку. Исправлено.
+
+### Скидка в заказе (`OrderCreationService`/`OrderLineService`)
+Снапшот скидки живёт на `OrderLine` (не на `OrderPayment` — та схема ушла вместе с переделкой B14/multi-line заказов, `checklist-orders-redesign.txt`): `OrderLine.DiscountPercent` (`decimal?`, `null` — скидки не было), `PriceSnapshot` (исходная цена, не сниженная), `LineTotal` (итог по строке с учётом скидки и группового тарифа, discount-then-tier). Последующая правка/удаление скидки тура не меняет задним числом уже оформленную бронь. Видно в админке — карточка строки заказа, см. `admin-panel.md`.
+
+**Миграции**: `AddTagsAndOrderDiscount` (2026-08-15) — таблицы `Tag`/`TagTranslation`/`TourTag`; `TourDiscountFields` (2026-08-16) — `Tour.DiscountPercent`/`DiscountValidUntil`; `AddTourDiscountStartDate` (2026-08-18) — `Tour.DiscountStartDate`.
+
 ## Миграции
-Актуальные (в `ATTours.DataLayer/Migrations`): `InitialCreate`, `AddRoutePoint`, `AddOrganizationalDetailAndRestriction`, `ChangeTourDayChildrenToCascade`, `AddTourIsArchived`, `AddSiteSettings`, `AddRegionAndTourRegion`, `SeedArmenianRegions`, `MergeRestrictionAndOrganizationalDetailIntoTourNote`, `AddReferenceCatalogs`, `AddTourFeatured`, `SeedRegionBlurbs`, `AddExchangeRate`, `AddOrdersAndClosureRules`, `AddTourRequiresPrepayment` (2026-08-13 — `Tour.RequiresPrepayment`, `bit NOT NULL DEFAULT 1`; см. `product-model.md`), `AddClosureRuleBatchId` (2026-08-14 — `ClosureRule.BatchId`, `uniqueidentifier NULL`; см. выше). Миграции применяются автоматически при старте backend (с retry, с 2026-08-10) — отдельного ручного шага `dotnet ef database update` в проде не требуется.
+Актуальные (в `ATTours.DataLayer/Migrations`): `InitialCreate`, `AddRoutePoint`, `AddOrganizationalDetailAndRestriction`, `ChangeTourDayChildrenToCascade`, `AddTourIsArchived`, `AddSiteSettings`, `AddRegionAndTourRegion`, `SeedArmenianRegions`, `MergeRestrictionAndOrganizationalDetailIntoTourNote`, `AddReferenceCatalogs`, `AddTourFeatured`, `SeedRegionBlurbs`, `AddExchangeRate`, `AddOrdersAndClosureRules`, `AddTourRequiresPrepayment` (2026-08-13 — `Tour.RequiresPrepayment`, `bit NOT NULL DEFAULT 1`; см. `product-model.md`), `AddClosureRuleBatchId` (2026-08-14 — `ClosureRule.BatchId`, `uniqueidentifier NULL`; см. выше), `AddTagsAndOrderDiscount` (2026-08-15), `TourDiscountFields` (2026-08-16), `AddTourDiscountStartDate` (2026-08-18 — см. «Скидка тура» выше). Миграции применяются автоматически при старте backend (с retry, с 2026-08-10) — отдельного ручного шага `dotnet ef database update` в проде не требуется.
+
+**Известный пробел в этом списке**: миграции переделки B14/multi-line заказов (`checklist-orders-redesign.txt`, между 08-16 и 08-16) в список не занесены — Фаза 12 (docs) той работы была осознанно пропущена по просьбе пользователя. Список неполный между `AddOrdersAndClosureRules` и `AddTagsAndOrderDiscount`.

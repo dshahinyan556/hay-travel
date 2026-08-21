@@ -4,7 +4,7 @@ import { canManageCalendar, ensureAuthReady, getAuthState } from '@/shared/auth'
 import { getOrders } from '@/features/admin/api/adminOrders'
 import { getAllTours } from '@/features/admin/api/adminTours'
 import { OrderStatus, type OrderInfoModel } from '@/shared/types/booking'
-import { ordersCopy, ordersUnit } from './lib/ordersCopy'
+import { ordersCopy, ordersUnit, STATUS_ORDER, statusLabels } from './lib/ordersCopy'
 import { emptyOrderFilters, hasActiveFilters, matchesOrderFilters, type OrderFiltersState } from './lib/ordersModel'
 import { OrderRow } from './components/OrderRow'
 import { OrderFilters } from './components/OrderFilters'
@@ -28,25 +28,22 @@ export async function ordersLoader() {
 type StatusFilter = OrderStatus | 'all'
 
 const filterTabs: { id: StatusFilter; label: string }[] = [
-  { id: OrderStatus.PendingConfirmation, label: ordersCopy.filterPending },
-  { id: OrderStatus.Confirmed, label: ordersCopy.filterConfirmed },
-  { id: OrderStatus.Cancelled, label: ordersCopy.filterCancelled },
+  ...STATUS_ORDER.map((status) => ({ id: status as StatusFilter, label: statusLabels[status] })),
   { id: 'all', label: ordersCopy.filterAll },
 ]
 
 /**
- * Заказы (B12, 2026-08-13) — the admin's other half of the booking flow (spec 001/003). New
- * orders arrive `PendingConfirmation` (`OrderCreationService`) and stay invisible to the
- * customer as "confirmed" until an admin acts on `OrderDetailPage`.
+ * Заказы — the admin's other half of the booking flow. New orders arrive `Open` (or
+ * `PendingPayment` when a line requires prepayment) via `OrderCreationService` and stay invisible
+ * to the customer as approved until an admin acts on `OrderDetailPage`.
  *
  * A pure index: status tabs + filters narrow the already-loaded `orders` array client-side, and
- * every row is a link. No mutation lives here any more (moved to `OrderDetailPage` with the rest
- * of the B12 redesign, 2026-08-13) — this screen never revalidates, so paging through filters
- * never re-fetches.
+ * every row is a link. No mutation lives here — this screen never revalidates, so paging through
+ * filters never re-fetches.
  */
 export function OrdersPage() {
   const { orders, tours } = useLoaderData<typeof ordersLoader>()
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>(OrderStatus.PendingConfirmation)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [filters, setFilters] = useState<OrderFiltersState>(emptyOrderFilters)
 
   const counts = useMemo(() => {

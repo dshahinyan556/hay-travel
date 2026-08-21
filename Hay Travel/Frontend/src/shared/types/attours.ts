@@ -29,6 +29,8 @@ export interface GalleryImageCreateModel {
 
 export interface RoutePointCreateModel {
   sortOrder: number
+  /** Ссылка на каталог Place — null = свободная запись без каталога (F13 gap closure). */
+  placeId: number | null
   /** Route points have a single textual field, so `translations[].type` is always 0. */
   translations: TranslatableCreateModel[]
 }
@@ -59,11 +61,19 @@ export interface TourCreateModel {
   mainImageUrl: string | null
   isActive: boolean
   requiresPrepayment: boolean
+  /** Скидка тура (Фаза 7): все три поля заданы вместе или все три `null` —
+   * see `TourInfoModel.discountPercent`. */
+  discountPercent: number | null
+  /** ISO `YYYY-MM-DD` — начало акции (2026-08-18). */
+  discountStartDate: string | null
+  /** ISO `YYYY-MM-DD`. */
+  discountValidUntil: string | null
   tourDays: TourDayCreateModel[]
   translations: TranslatableCreateModel[]
   additionalExpenses: AdditionalExpenseCreateModel[]
   notes: TourNoteCreateModel[]
   regions: TourRegionCreateModel[]
+  tags: TourTagCreateModel[]
 }
 
 /** Response of `CreateTour` — the id of the freshly created tour. */
@@ -91,6 +101,8 @@ export interface GalleryImageInfoModel {
 export interface RoutePointInfoModel {
   id: number
   sortOrder: number
+  /** Ссылка на каталог Place — null = свободная запись без каталога (F13 gap closure). */
+  placeId: number | null
   translations: TranslatableInfoModel[]
 }
 
@@ -136,6 +148,18 @@ export interface TourInfoModel {
   requiresPrepayment: boolean
   /** Sum of every day's price, computed on the server. Read-only; omitted from update payloads. */
   totalPrice?: number | null
+  /** Скидка тура (Фаза 7, replaces the old Tag-based approach): raw fields the admin edits.
+   * All three set together or all three `null`/`undefined`, and `discountStartDate <=
+   * discountValidUntil` — enforced server-side (`TourValidationService`, ErrorCode 2025). */
+  discountPercent?: number | null
+  /** ISO `YYYY-MM-DD` — начало акции; скидка активна в диапазоне [start; end] (2026-08-18).
+   * `null` у старых записей = нижней границы нет. */
+  discountStartDate?: string | null
+  /** ISO `YYYY-MM-DD`. */
+  discountValidUntil?: string | null
+  /** Server-resolved price after the active discount — `null`/absent when there is no discount
+   * or it has expired. Compute nothing client-side; this is already the number to show. */
+  discountedPrice?: number | null
   mainImageUrl: string | null
   tourDays: TourDayInfoModel[]
   translations: TranslatableInfoModel[]
@@ -145,6 +169,8 @@ export interface TourInfoModel {
    * untouched; `[]` clears them all. The admin form always sends the real list now (4.4), so a
    * save always reflects exactly what's checked — never omits the field. */
   regions?: TourRegionInfoModel[]
+  /** Same null/[] contract as `regions`. Up to 3 (`TourValidationService`, backend). */
+  tags?: TourTagInfoModel[]
 }
 
 /** Public catalog card (`GET api/Tour/GetToursClient`) — a lightweight projection of
@@ -156,10 +182,19 @@ export interface TourCardModel {
   id: number
   type: number
   totalPrice: number | null
+  /** Server-resolved price after an active discount — `null` when there is none/it expired.
+   * `totalPrice` stays the "old" price for a strikethrough; this is the bold new one. */
+  discountedPrice: number | null
+  /** ISO `YYYY-MM-DD` — начало акции. Приходит непустым только у скидки, активной СЕГОДНЯ
+   * (будущая акция на карточке не анонсируется, см. `MappingProfile`). */
+  discountStartDate: string | null
+  /** ISO `YYYY-MM-DD` — only meaningful alongside a non-null `discountedPrice`. */
+  discountValidUntil: string | null
   mainImageUrl: string | null
   durationDays: number
   translations: TranslatableInfoModel[]
   regions: TourRegionInfoModel[]
+  tags: TourTagInfoModel[]
 }
 
 /* -------------------------------------------------------------------------- */
@@ -318,4 +353,38 @@ export interface TourRegionInfoModel {
 export interface TourRegionCreateModel {
   regionId: number
   sortOrder: number
+}
+
+/**
+ * A merch tag on a product card ("hit of the season" / …) — purely cosmetic. `type` — `TagType`
+ * (`features/admin/lib/enums.ts`), single-member for now. `color` — `TagColor`, one of the
+ * site's own palette tokens (not a free hex), so a new tag is guaranteed to read in both themes.
+ * A product can carry up to 3 tags (`TourValidationService`, backend). Discount is NOT a tag
+ * (Фаза 3/7) — see `TourInfoModel.discountPercent`.
+ */
+export interface TagInfoModel {
+  id: number
+  type: number
+  color: number
+  sortOrder: number
+  translations: TranslatableInfoModel[]
+}
+
+export interface TagCreateModel {
+  type: number
+  color: number
+  sortOrder: number
+  translations: TranslatableCreateModel[]
+}
+
+/** A tour's link to one of its tags — flat, no nested tag: the admin/public site gets tag
+ * definitions from `GET api/Tag/GetAll` / `GetForClient` once, not repeated inside every tour
+ * (same reasoning as `TourRegionInfoModel`). */
+export interface TourTagInfoModel {
+  id: number
+  tagId: number
+}
+
+export interface TourTagCreateModel {
+  tagId: number
 }

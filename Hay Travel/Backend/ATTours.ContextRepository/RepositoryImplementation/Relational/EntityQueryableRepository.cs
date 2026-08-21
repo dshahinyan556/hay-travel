@@ -18,6 +18,12 @@ namespace ATTours.ContextRepository.RepositoryImplementation.Relational
             return this;
         }
 
+        public IEntityQueryableRepository<TEntity> AsSplitQuery()
+        {
+            LocalEntities = LocalEntities.AsSplitQuery();
+            return this;
+        }
+
         public IIncludableQueryableRepository<TEntity, TProperty> Include<TProperty>(Expression<Func<TEntity, TProperty>> include)
         {
             return new EntityIncludableQueryableRepository<TEntity, TProperty>(LocalEntities.Include(include));

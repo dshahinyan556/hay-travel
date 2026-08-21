@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import type { TourDetail } from '@/shared/types/tour'
-import { OrderStatus, type OrderInfoModel } from '@/shared/types/booking'
+import type { OrderInfoModel } from '@/shared/types/booking'
 import { createOrder } from '@/shared/api/booking'
 import { SessionExpiredError, useAuth } from '@/shared/auth'
 import { ApiError } from '@/shared/lib/http'
@@ -9,10 +9,11 @@ import { parseISODate } from '@/shared/lib/date'
 import { withReturnTo } from '@/shared/lib/returnTo'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import type { TranslationKey } from '@/shared/i18n/translate'
-import { DatePicker } from '@/shared/ui'
+import { DatePicker, type DatePickerDiscountRange } from '@/shared/ui'
 import { CheckIcon, GuideIcon } from '@/shared/ui/icons'
 import { useTierPrice } from '../hooks/useTierPrice'
 import { getBookingWindow } from '../lib/bookingWindow'
+import { discountedPriceOn } from '../lib/tourDiscount'
 
 /**
  * Booking box — a real order form (spec 003 §4.3), backed by `POST api/Order/Create`.
@@ -31,6 +32,11 @@ import { getBookingWindow } from '../lib/bookingWindow'
  * 1–4 guests pay the base price, 5–6 pay a surcharge, and from 7 there is no displayed price at
  * all: the block becomes an invitation to request a quote. All three tiers come from
  * `useTierPrice`, which composes the single copy of the rule in `shared/currency/pricing.ts`.
+ *
+ * ── Discount by trip date (2026-08-18) ────────────────────────────────────────────────────────
+ * A tour's discount applies to a RANGE of trip dates. The calendar marks those days with a red
+ * "-N%" ribbon before anything is picked, and the total below follows the picked date rather than
+ * "today" — see `lib/tourDiscount.ts` for why the card resolves that itself.
  *
  * The 5–6 surcharge gets NO badge, no "+20%", no strikethrough: the requirement is a price, not a
  * disclosed markup, and surfacing the multiplier invites "why am I being charged more" on a page
@@ -144,7 +150,26 @@ export function BookingCard({ tour, largeGroupInvitation, closedDates }: Booking
   const [authNotice, setAuthNotice] = useState(false)
   const [order, setOrder] = useState<OrderInfoModel | null>(null)
 
-  const price = useTierPrice(tour.priceFrom, guests)
+  /* The "-N%" ribbon in the calendar (2026-08-18). Straight from the tour's raw campaign range,
+     which is why it can advertise a campaign that has not started yet — `discountedPrice` alone
+     could not. Days closed for booking never get it (see `DatePicker.discountRange`). */
+  const discountRange: DatePickerDiscountRange | null =
+    tour.discountWindow === null
+      ? null
+      : {
+          start: tour.discountWindow.startDate,
+          end: tour.discountWindow.endDate,
+          percent: tour.discountWindow.percent,
+        }
+
+  /* Before a date is picked there is nothing to resolve against, so the card keeps showing the
+     server's "today" figure — the same number the catalog card and the page header show. Once a
+     date exists, the discount follows THAT date, exactly like the order the backend will create
+     (see `lib/tourDiscount.ts`). */
+  const discountedForDate =
+    date === '' ? tour.discountedPrice : discountedPriceOn(tour.priceFrom, tour.discountWindow, date)
+
+  const price = useTierPrice(tour.priceFrom, guests, discountedForDate)
 
   /** `'idle' | 'loading'` means the session is still being resolved — that is "unknown", not
    * "anonymous", and must not produce a "sign in" prompt. */
@@ -194,21 +219,20 @@ export function BookingCard({ tour, largeGroupInvitation, closedDates }: Booking
   }
 
   if (order !== null) {
-    const confirmed = order.status === OrderStatus.Confirmed
+    // Never `Confirmed`-equivalent right after creation (ADR 019 — a fresh order starts `Open` or
+    // `PendingPayment`, both handled by an admin later), so this screen only ever shows the
+    // "submitted" copy now — there used to be a second variant for an order the server returned
+    // already confirmed, which never actually happened even under the old 3-status model.
     return (
       <div className="rounded-2xl bg-panel p-6 text-center ring-1 ring-gold-line">
         <span className="inline-flex text-gold-ink">
           <CheckIcon size={28} />
         </span>
-        <p className="mt-3 font-semibold text-xl text-ink">
-          {confirmed ? t('booking.submittedTitleConfirmed') : t('booking.submittedTitle')}
-        </p>
+        <p className="mt-3 font-semibold text-xl text-ink">{t('booking.submittedTitle')}</p>
         <p className="mt-1.5 text-xs tabular-nums text-ink-muted">
-          {t('booking.orderNumber', { id: order.id })}
+          {t('booking.orderNumber', { id: order.number })}
         </p>
-        <p className="mt-2 text-sm break-words text-ink-muted">
-          {confirmed ? t('booking.submittedBodyConfirmed') : t('booking.submittedBody')}
-        </p>
+        <p className="mt-2 text-sm break-words text-ink-muted">{t('booking.submittedBody')}</p>
         {/* No amounts from `order.payment` anywhere on this screen. The server computes
             `TourPriceSnapshot * GuestCount` and knows nothing about the 5–6 guest tiered surcharge
             in `shared/currency/pricing.ts`, so its total can legitimately differ from the "Итого"
@@ -240,7 +264,11 @@ export function BookingCard({ tour, largeGroupInvitation, closedDates }: Booking
           <p className="text-sm leading-relaxed text-ink-dim">{largeGroupInvitation}</p>
         ) : (
           <div>
-            <p className="text-[10px] tracking-wide text-ink-muted">{t('booking.total')}</p>
+            {price.originalTotal !== null ? (
+              <p className="text-xs text-ink-muted line-through">{price.originalTotal}</p>
+            ) : (
+              <p className="text-[10px] tracking-wide text-ink-muted">{t('booking.total')}</p>
+            )}
             <p className="text-3xl font-semibold tabular-nums text-gold-ink">{price.total}</p>
             {/* Приглушённый цвет и весь текст суммы, а не только подпись (B12, 2026-08-13):
                 раньше сумма предоплаты была того же золотого акцента, что и «Итого», и на
@@ -281,6 +309,7 @@ export function BookingCard({ tour, largeGroupInvitation, closedDates }: Booking
           }}
           max={bookingWindow.toISO}
           disabledDates={disabledDates}
+          discountRange={discountRange}
           required
           error={dateMissing}
           aria-labelledby={dateLabelId}

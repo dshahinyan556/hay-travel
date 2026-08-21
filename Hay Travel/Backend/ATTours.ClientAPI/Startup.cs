@@ -12,7 +12,9 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
+using QuestPDF.Infrastructure;
 using System.Security.Claims;
 using System.Text;
 
@@ -22,6 +24,10 @@ namespace ATTours.ClientAPI
     {
         public override void ConfigureServices(IServiceCollection services)
         {
+            // Обязательный вызов до первой генерации PDF (Фаза 4, checklist-orders-redesign.txt),
+            // иначе QuestPDF бросает исключение при первом Document.GeneratePdf().
+            QuestPDF.Settings.License = LicenseType.Community;
+
             base.ConfigureServices(services);
             services.AddDAL();
             services.AddServices();
@@ -48,6 +54,20 @@ namespace ATTours.ClientAPI
             app.UseForwardedHeaders(BuildForwardedHeadersOptions());
 
             app.UseMiddleware<InitializableMiddlewareBase<ATToursExceptionMaster>>();
+
+            // Раздача загруженных изображений отдельно от MVC-роутинга. В проде nginx
+            // перехватывает "/uploads/*" раньше, чем запрос вообще доходит до Kestrel (см.
+            // docs/server-ops.md) — этот middleware реально работает только в локальной
+            // разработке, где nginx нет. Держать его всё равно нужно: без него "/uploads" в
+            // dev отдавал бы 404, а не файл.
+            var uploadSettings = UploadSettings.Instance;
+            Directory.CreateDirectory(uploadSettings.StoragePath);
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(uploadSettings.StoragePath),
+                RequestPath = UploadSettings.PublicUrlPrefix,
+            });
+
             base.ConfigureFactory(app, env);
         }
 

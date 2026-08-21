@@ -19,13 +19,22 @@ import { translate } from '@/shared/i18n/translate'
 import type {
   AdditionalExpenseInfoModel,
   RoutePointInfoModel,
+  TagInfoModel,
   TourCardModel,
   TourInfoModel,
   TourNoteInfoModel,
   TourRegionInfoModel,
+  TourTagInfoModel,
   TranslatableInfoModel,
 } from '@/shared/types/attours'
-import type { ItineraryDay, Tour, TourDetail, TourKind } from '@/shared/types/tour'
+import type {
+  ItineraryDay,
+  Tour,
+  TourDetail,
+  TourDiscountWindow,
+  TourKind,
+  TourTag,
+} from '@/shared/types/tour'
 
 function currentLanguageCode(): number {
   return LANGUAGE_CODE_BY_LOCALE[getStoredLocale()]
@@ -72,7 +81,49 @@ function toRegionSlugs(regions: readonly TourRegionInfoModel[]): RegionSlug[] {
   return regions.map((r) => r.slug).filter((slug): slug is RegionSlug => slug in REGION_BY_SLUG)
 }
 
-function mapCard(card: TourCardModel): Tour {
+/** Resolves a tour's flat `TourTagInfoModel[]` (just `tagId`s) against the tag catalog fetched
+ * once per page (`getTagCatalog`) — same denormalization pattern as `toRegionSlugs`/
+ * `REGION_BY_SLUG`. Sorted by the catalog's own `sortOrder`; a `tagId` the catalog doesn't know
+ * (deleted between the two requests) is silently dropped rather than rendered blank. */
+function mapTags(tourTags: readonly TourTagInfoModel[], catalog: readonly TagInfoModel[]): TourTag[] {
+  const byId = new Map(catalog.map((tag) => [tag.id, tag]))
+  const resolved = tourTags
+    .map((tt) => byId.get(tt.tagId))
+    .filter((tag): tag is TagInfoModel => tag !== undefined)
+
+  const sorted = [...resolved].sort((a, b) => a.sortOrder - b.sortOrder)
+
+  return sorted.map((tag) => ({
+    id: tag.id,
+    color: tag.color,
+    label: pickTranslation(tag.translations, TRANSLATION_SINGLE_FIELD),
+  }))
+}
+
+/** Per-language session cache (2026-08-16, same pattern as `getContentText` in
+ * `shared/api/siteSettings.ts`) — `HomePage`'s loader alone fires this from both
+ * `getFeaturedTours` and `getToursByRegion`/`getTours` side by side, and a plain page-to-page
+ * navigation calls it again. Kept for the SPA session per language (evicted only on failure, so a
+ * transient network error doesn't wedge every tag out for the rest of the session) — the catalog
+ * changes only when an admin edits it in Справочники, a switched-tab reload is an acceptable way
+ * to pick that up. */
+const tagCatalogCache = new Map<number, Promise<TagInfoModel[]>>()
+
+/** The tag catalog (name/color/type/percent per tag), one request per page — every tour on that
+ * page resolves its `TourTagInfoModel[]` against this same list rather than each carrying its
+ * own copy. */
+export function getTagCatalog(): Promise<TagInfoModel[]> {
+  const languageCode = currentLanguageCode()
+  const cached = tagCatalogCache.get(languageCode)
+  if (cached) return cached
+
+  const promise = apiFetch<TagInfoModel[]>(`api/Tag/GetForClient?languageCode=${languageCode}`)
+  tagCatalogCache.set(languageCode, promise)
+  promise.catch(() => tagCatalogCache.delete(languageCode))
+  return promise
+}
+
+function mapCard(card: TourCardModel, tagCatalog: readonly TagInfoModel[]): Tour {
   const kind = toKind(card.type)
   return {
     id: String(card.id),
@@ -82,9 +133,32 @@ function mapCard(card: TourCardModel): Tour {
     durationDays: card.durationDays,
     durationNights: nightsFor(kind, card.durationDays),
     priceFrom: card.totalPrice ?? 0,
+    discountedPrice: card.discountedPrice,
+    discountStartDate: card.discountStartDate,
+    discountValidUntil: card.discountValidUntil,
     coverImage: card.mainImageUrl || FALLBACK_IMAGE,
     shortDescription: pickTranslation(card.translations, TRANSLATION_SHORT_DESCRIPTION),
+    tags: mapTags(card.tags, tagCatalog),
   }
+}
+
+/**
+ * The raw discount range of a tour, for the booking calendar's "-N%" ribbon (`TourDiscountWindow`).
+ *
+ * `null` unless there is a real range to draw: the backend enforces "percent + end together or
+ * neither", so a partial trio means an old row and is treated as "no discount" rather than
+ * guessed at. `discountStartDate` is the one member that may legitimately be missing on its own —
+ * rows predating the column — and that means "no lower bound", not "no discount"
+ * (`TourDiscountExtensions.IsDiscountActive`).
+ *
+ * Note this does NOT check whether the campaign is live today. That is `discountedPrice`'s job;
+ * a window starting next month is exactly what the calendar has to be able to show.
+ */
+function toDiscountWindow(info: TourInfoModel): TourDiscountWindow | null {
+  const percent = info.discountPercent
+  const endDate = info.discountValidUntil
+  if (percent == null || percent <= 0 || !endDate) return null
+  return { percent, startDate: info.discountStartDate ?? null, endDate }
 }
 
 function sortedRoutePoints(points: readonly RoutePointInfoModel[]): string[] {
@@ -109,7 +183,7 @@ function mapExpenses(expenses: readonly AdditionalExpenseInfoModel[]) {
   }))
 }
 
-function mapDetail(info: TourInfoModel): TourDetail {
+function mapDetail(info: TourInfoModel, tagCatalog: readonly TagInfoModel[]): TourDetail {
   const kind = toKind(info.type)
   const durationDays = info.tourDays.length
   const coverImage = info.mainImageUrl || FALLBACK_IMAGE
@@ -136,8 +210,13 @@ function mapDetail(info: TourInfoModel): TourDetail {
     durationDays,
     durationNights: nightsFor(kind, durationDays),
     priceFrom: info.totalPrice ?? 0,
+    discountedPrice: info.discountedPrice ?? null,
+    discountStartDate: info.discountStartDate ?? null,
+    discountValidUntil: info.discountValidUntil ?? null,
+    discountWindow: toDiscountWindow(info),
     coverImage,
     shortDescription: pickTranslation(info.translations, TRANSLATION_SHORT_DESCRIPTION),
+    tags: mapTags(info.tags ?? [], tagCatalog),
     requiresPrepayment: info.requiresPrepayment,
     gallery: gallery.length > 0 ? gallery : [coverImage],
     itinerary,
@@ -150,16 +229,22 @@ function mapDetail(info: TourInfoModel): TourDetail {
 }
 
 export async function getTours(): Promise<readonly Tour[]> {
-  const cards = await apiFetch<TourCardModel[]>(`api/Tour/GetToursClient?languageCode=${currentLanguageCode()}`)
-  return cards.map(mapCard)
+  const [cards, tagCatalog] = await Promise.all([
+    apiFetch<TourCardModel[]>(`api/Tour/GetToursClient?languageCode=${currentLanguageCode()}`),
+    getTagCatalog(),
+  ])
+  return cards.map((card) => mapCard(card, tagCatalog))
 }
 
 /** Home page showcase — tours the admin marked `IsFeatured` (at most 6, `Продукты → Избранные`),
  * in their admin-set display order. Shows exactly however many are marked, including none: no
  * "first N tours" filler when the admin hasn't picked any yet (David, 2026-08-02). */
 export async function getFeaturedTours(): Promise<readonly Tour[]> {
-  const cards = await apiFetch<TourCardModel[]>(`api/Tour/GetFeaturedToursClient?languageCode=${currentLanguageCode()}`)
-  return cards.map(mapCard)
+  const [cards, tagCatalog] = await Promise.all([
+    apiFetch<TourCardModel[]>(`api/Tour/GetFeaturedToursClient?languageCode=${currentLanguageCode()}`),
+    getTagCatalog(),
+  ])
+  return cards.map((card) => mapCard(card, tagCatalog))
 }
 
 /** `undefined` for a 404 (hidden or nonexistent id) — same contract the mock had, so
@@ -167,10 +252,13 @@ export async function getFeaturedTours(): Promise<readonly Tour[]> {
  * still throws, which the route's `errorElement` already handles. */
 export async function getTourInfo(id: string): Promise<TourDetail | undefined> {
   try {
-    const info = await apiFetch<TourInfoModel>(
-      `api/Tour/GetTourInfo?id=${encodeURIComponent(id)}&languageCode=${currentLanguageCode()}`,
-    )
-    return mapDetail(info)
+    const [info, tagCatalog] = await Promise.all([
+      apiFetch<TourInfoModel>(
+        `api/Tour/GetTourInfo?id=${encodeURIComponent(id)}&languageCode=${currentLanguageCode()}`,
+      ),
+      getTagCatalog(),
+    ])
+    return mapDetail(info, tagCatalog)
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) return undefined
     throw err
@@ -181,10 +269,13 @@ export async function getTourInfo(id: string): Promise<TourDetail | undefined> {
  * is what the real `?region=` filter on `GetToursClient` does — `RegionExplorer`'s
  * loading/error states are the ones that actually run in production, not decoration. */
 export async function getToursByRegion(region: RegionSlug): Promise<readonly Tour[]> {
-  const cards = await apiFetch<TourCardModel[]>(
-    `api/Tour/GetToursClient?languageCode=${currentLanguageCode()}&region=${encodeURIComponent(region)}`,
-  )
-  return cards.map(mapCard)
+  const [cards, tagCatalog] = await Promise.all([
+    apiFetch<TourCardModel[]>(
+      `api/Tour/GetToursClient?languageCode=${currentLanguageCode()}&region=${encodeURIComponent(region)}`,
+    ),
+    getTagCatalog(),
+  ])
+  return cards.map((card) => mapCard(card, tagCatalog))
 }
 
 /**

@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from 'react'
 import { Field, Input } from '@/shared/ui'
+import { ImageUploadButton } from './ImageUploadButton'
 
 interface ImageUrlFieldProps {
   /** Field caption, e.g. "Логотип — URL". */
@@ -22,8 +23,10 @@ const DEFAULT_HINT = 'Вставьте ссылку на изображение 
  * placeholder when the URL is empty or the image fails to load, so a broken link never leaves
  * a torn image in the form.
  *
- * There is no file upload anywhere in this project — neither in the UI nor in the backend
- * contract — so an image is always referenced by URL (ADR 004 / stage-4 architecture §6).
+ * Two ways to fill the same URL value: type/paste one, or upload a file via `ImageUploadButton`
+ * (`api/Upload/Image`, ADR 2026-08-15) — the button just calls `onChange` with the server's
+ * returned URL, same as typing. URL stays the source of truth and the only thing sent to the
+ * backend; there is nothing upload-specific in the rest of this component.
  *
  * The control id comes from `useId()`, not a literal: the settings screen renders three of
  * these on one page, and duplicated ids would break every `label`↔`input` association on it.
@@ -59,15 +62,19 @@ export function ImageUrlField({
           warning={error ? undefined : warning}
           hint={hint}
         >
-          <Input
-            id={id}
-            type="url"
-            inputMode="url"
-            placeholder="https://…"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            error={Boolean(error)}
-          />
+          <div className="flex items-start gap-2">
+            <Input
+              id={id}
+              type="url"
+              inputMode="url"
+              placeholder="https://…"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              error={Boolean(error)}
+              className="min-w-0 flex-1"
+            />
+            <ImageUploadButton onUploaded={onChange} />
+          </div>
         </Field>
       </div>
 

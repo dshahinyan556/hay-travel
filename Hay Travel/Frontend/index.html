@@ -3,6 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- PNG fallbacks: SVG favicons aren't honoured by Safari or by most social/messenger link
+         crawlers, which is why the tab/search icon looked broken even though favicon.svg itself
+         served fine. `sizes` on the 32px PNG lets browsers that support both prefer the crisper
+         SVG while still resolving a concrete rel="icon" for anything that doesn't. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <!-- `viewport-fit=cover` lets the page draw under the iOS notch/Dynamic Island/home-indicator
          instead of Safari auto-reserving that space — required for `env(safe-area-inset-*)` to
          report real values anywhere in the app (Header's top padding, MobileTabBar's bottom
@@ -36,7 +43,29 @@
          toggle — colours the Android/iOS browser chrome (address bar, task switcher card) to
          match instead of leaving it on this default. -->
     <meta name="theme-color" content="#0f0c08" />
-    <title>Hay Travel</title>
+    <title>Hay Travel — Армения за пределами путеводителей</title>
+    <!-- Static site-wide defaults for link-preview crawlers (Telegram, WhatsApp, iMessage,
+         Facebook/Twitter cards) and search snippets. These were entirely missing before
+         2026-08-16 — not even a fallback existed, so every shared link rendered with no
+         title/description/image at all. This is deliberately the FAST fix: one fixed card for
+         every URL on the site, not per-page content from the admin's SEO settings. The dynamic
+         per-page version (title/description/OG image editable per tour/excursion, previously
+         served by Netlify Edge Function `netlify/edge-functions/seo-meta.ts`) is tracked
+         separately in `docs/tech-debt.md` — it needs an nginx `sub_filter`/SSR-style piece
+         reviewed by `architect` before implementation, out of scope here. -->
+    <meta name="description" content="Hay Travel — авторские туры и экскурсии по Армении: монастыри в ущельях, чёрный туф Гюмри, вино Арени, Севан на рассвете. Небольшие группы, местные гиды." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Hay Travel" />
+    <meta property="og:title" content="Hay Travel — Армения за пределами путеводителей" />
+    <meta property="og:description" content="Авторские туры и экскурсии по Армении: монастыри в ущельях, чёрный туф Гюмри, вино Арени, Севан на рассвете. Небольшие группы, местные гиды." />
+    <meta property="og:image" content="https://haytravel.duckdns.org/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:url" content="https://haytravel.duckdns.org/" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Hay Travel — Армения за пределами путеводителей" />
+    <meta name="twitter:description" content="Авторские туры и экскурсии по Армении: монастыри в ущельях, чёрный туф Гюмри, вино Арени, Севан на рассвете." />
+    <meta name="twitter:image" content="https://haytravel.duckdns.org/og-image.jpg" />
     <script>
       // Pre-paint theme: sets `data-theme` on <html> before the first frame, straight from
       // localStorage. Without this, the app rendered dark-by-default until React mounted and
@@ -67,13 +96,6 @@
         var COLORS = {
           obsidian: { dark: '#0f0c08', light: '#f7f1e6' },
           basalt: { dark: '#0e1214', light: '#edeeec' },
-          // Временные превью-варианты золота/меди (2026-08-14) — см. palette.ts.
-          'obsidian-champagne': { dark: '#0f0c08', light: '#f7f1e6' },
-          'obsidian-brass': { dark: '#0f0c08', light: '#f7f1e6' },
-          'obsidian-rosegold': { dark: '#0f0c08', light: '#f7f1e6' },
-          'basalt-terracotta': { dark: '#0e1214', light: '#edeeec' },
-          'basalt-warmcopper': { dark: '#0e1214', light: '#edeeec' },
-          'basalt-rust': { dark: '#0e1214', light: '#edeeec' },
         }
         var root = document.documentElement
         try {

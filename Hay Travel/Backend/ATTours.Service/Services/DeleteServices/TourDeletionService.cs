@@ -31,12 +31,12 @@ namespace ATTours.BusinessServices.Services.DeleteServices
                                              .SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
                        ?? throw new ErrorModelException(GlobalErrorCode.TourNotFound, HttpStatusCode.NotFound, $"Tour with id {id} not found.");
 
-            // Order.TourId — Restrict (заказ нельзя осиротить), поэтому без этой проверки
-            // удаление тура с бронями упало бы сырым FK-нарушением через
+            // OrderLine.TourId — Restrict (строка заказа нельзя осиротить, ADR 019), поэтому
+            // без этой проверки удаление тура с бронями упало бы сырым FK-нарушением через
             // MsSqlContextExceptionHandlerChain вместо внятного кода — тот же приём, что
             // CatalogEntryInUse у каталогов. Правила закрытия (ClosureRule) уходят каскадом
             // и удалению не мешают.
-            var hasOrders = await Context.Set<Order>().AnyAsync(order => order.TourId == id, cancellationToken);
+            var hasOrders = await Context.Set<OrderLine>().AnyAsync(line => line.TourId == id, cancellationToken);
             if (hasOrders)
                 throw new ErrorModelException(GlobalErrorCode.TourHasOrders, HttpStatusCode.BadRequest,
                     $"Tour with id {id} has orders and cannot be deleted.");

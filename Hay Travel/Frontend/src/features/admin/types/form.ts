@@ -32,8 +32,24 @@ export interface LocalizedListItem {
   text: Localized
 }
 
-/** One route point of a day. A day can have many, ordered by array index. */
-export type RoutePointFormState = LocalizedListItem
+/** One route point of a day. A day can have many, ordered by array index. `placeId` is a hard
+ * link to the Place catalog (F13 gap closure, 2026-08) — set when the admin picks a catalog
+ * entry, `null` for a free-text point. The text stays editable after picking; the link persists
+ * independently of later text edits. A route point with `placeId` set makes the backend copy
+ * that Place's photos into the day's gallery automatically on save. */
+export interface RoutePointFormState extends LocalizedListItem {
+  placeId: number | null
+}
+
+/** One Place catalog entry offered as a hard link for a route point. */
+export interface PlaceOption {
+  id: number
+  name: Localized
+  /** Ordered image URLs offered for the gallery autofill when this Place is picked — `images`
+   * if the Place has any, else a single-item fallback to its legacy `imageUrl` (mirrors the
+   * backend's own fallback in `RoutePointGalleryImageCopier`). */
+  images: string[]
+}
 
 /** One additional expense of the tour. */
 export interface ExpenseFormState {
@@ -56,6 +72,14 @@ export interface TourDayFormState {
   duration: Localized
   routePoints: RoutePointFormState[]
   gallery: GalleryItemFormState[]
+  /** Which gallery items (by `key`) were auto-added because a route point (keyed the same way)
+   * is linked to a Place — session-only bookkeeping so picking a different Place for that route
+   * point (or clearing the link) can swap out exactly those images without touching ones the
+   * admin added by hand. Never sent to the backend. Days loaded from an existing tour start
+   * empty: the backend has no record of which stored gallery image came from which Place, so a
+   * route point that already had a link when the form opened is treated as "unknown origin"
+   * until the admin re-picks its Place in this session. */
+  autofilledImageKeys: Record<string, string[]>
 }
 
 /** Existing catalog entries offered as autocomplete while typing route points, organizational
@@ -63,6 +87,8 @@ export interface TourDayFormState {
  * reference data, not part of the form's own state (nothing here is submitted). */
 export interface CatalogSuggestions {
   routePoints: Localized[]
+  /** Place catalog entries a route point can be hard-linked to (F13 gap closure). */
+  placeOptions: PlaceOption[]
   orgDetails: Localized[]
   restrictions: Localized[]
   included: Localized[]
@@ -78,6 +104,14 @@ export interface TourRegionFormState {
   regionId: number
 }
 
+/** One tag checked on the tour. Same `serverId`/no-reorder-UI shape as `TourRegionFormState` —
+ * ordering on the card is derived from the tag's own `sortOrder`, so there is nothing to reorder
+ * here. */
+export interface TourTagFormState {
+  serverId?: number
+  tagId: number
+}
+
 /** The whole create/edit form. */
 export interface TourFormState {
   type: TourType
@@ -86,6 +120,16 @@ export interface TourFormState {
   /** Показывать ли блок предоплаты на публичной странице тура (B12, 2026-08-13). В отличие
    * от isActive — не игнорируется UpdateTour, редактируется прямо здесь. */
   requiresPrepayment: boolean
+  /** Скидка тура (Фаза 7). Строковый ввод, как `TourDayFormState.price` — пусто = без скидки.
+   * Все три поля (percent + start + end) обязаны быть заданы вместе или пустыми все три
+   * (validation.ts) — процент без даты окончания нарушил бы правило "скидка сама снимается
+   * по дате", а без даты начала непонятно, с какого дня она действует. */
+  discountPercent: string
+  /** ISO `YYYY-MM-DD`, `''` = не задано. Начало акции; скидка активна в диапазоне
+   * [start; end] включительно (равенство = однодневная акция). */
+  discountStartDate: string
+  /** ISO `YYYY-MM-DD`, `''` = не задано — тот же контракт, что у `DatePicker`. */
+  discountValidUntil: string
   title: Localized
   shortDescription: Localized
   description: Localized
@@ -105,4 +149,7 @@ export interface TourFormState {
   additionalExpenses: ExpenseFormState[]
   /** Regions the tour covers (4.4). Optional — a tour without a region is valid (backend D-2). */
   regions: TourRegionFormState[]
+  /** Tags shown on the card (up to 3, at most 1 discount — enforced by `toggleTag` in the
+   * reducer, mirrored server-side by `TourValidationService`). */
+  tags: TourTagFormState[]
 }

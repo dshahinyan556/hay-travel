@@ -4,62 +4,84 @@ import type { LoaderFunctionArgs } from 'react-router'
 import { UnsavedChangesModal } from '@/shared/ui'
 import { useUnsavedChangesGuard } from '@/shared/hooks'
 import { TourNoteType, TourType, tourTypeLabels } from '@/features/admin/lib/enums'
-import { initUpdate } from '@/features/admin/api/adminTours'
-import { getExpenseTemplates, getPlaces, getRegions, getTourNoteTemplates } from '@/features/admin/api/adminCatalog'
+import { getAllTours, initUpdate } from '@/features/admin/api/adminTours'
+import { getExpenseTemplates, getPlaces, getRegions, getTags, getTourNoteTemplates } from '@/features/admin/api/adminCatalog'
 import {
   expenseTemplatesToSuggestions,
   infoToForm,
   noteTemplatesToSuggestions,
+  placesToOptions,
   placesToSuggestions,
+  toursToDaySources,
 } from '@/features/admin/lib/tourMapper'
+import type { DaySource } from '@/features/admin/lib/tourMapper'
 import type { CatalogSuggestions } from '@/features/admin/types/form'
-import type { RegionInfoModel, TourInfoModel } from '@/shared/types/attours'
+import type { RegionInfoModel, TagInfoModel, TourInfoModel } from '@/shared/types/attours'
 import { useTourForm } from './hooks/useTourForm'
 import { TourForm } from './components/TourForm'
 
 /**
  * Loads the full edit model for the tour named by `:id`, plus the reference catalogs used for
- * autocomplete suggestions and the region picker (4.4). A missing/invalid id or a failed fetch
- * propagates to `AdminErrorBoundary` — the loader does not swallow it.
+ * autocomplete suggestions, the region picker (4.4), the tag picker, and the day-fill sources
+ * (F13, part 2). A missing/invalid id or a failed fetch propagates to `AdminErrorBoundary` — the
+ * loader does not swallow it.
  */
 export async function tourEditLoader({ params }: LoaderFunctionArgs) {
   const id = Number(params.id)
   if (!Number.isInteger(id) || id <= 0) {
     throw new Response('Некорректный идентификатор тура', { status: 400 })
   }
-  const [dto, places, expenseTemplates, noteTemplates, regions] = await Promise.all([
+  const [dto, places, expenseTemplates, noteTemplates, regions, tags, allTours] = await Promise.all([
     initUpdate(id),
     getPlaces(),
     getExpenseTemplates(),
     getTourNoteTemplates(),
     getRegions(),
+    getTags(),
+    getAllTours(),
   ])
   const catalogSuggestions: CatalogSuggestions = {
     routePoints: placesToSuggestions(places),
+    placeOptions: placesToOptions(places),
     orgDetails: noteTemplatesToSuggestions(noteTemplates, TourNoteType.OrganizationalDetail),
     restrictions: noteTemplatesToSuggestions(noteTemplates, TourNoteType.Restriction),
     included: noteTemplatesToSuggestions(noteTemplates, TourNoteType.Included),
     notIncluded: noteTemplatesToSuggestions(noteTemplates, TourNoteType.NotIncluded),
     expenses: expenseTemplatesToSuggestions(expenseTemplates),
   }
-  return { dto, catalogSuggestions, regions }
+  // Excludes the tour being edited — filling one of its own days from itself is meaningless.
+  const daySources = toursToDaySources(allTours, dto.id)
+  return { dto, catalogSuggestions, regions, tags, daySources }
 }
 
 export function TourEditPage() {
-  const { dto, catalogSuggestions, regions } = useLoaderData<typeof tourEditLoader>()
+  const { dto, catalogSuggestions, regions, tags, daySources } = useLoaderData<typeof tourEditLoader>()
   // Keyed by id so navigating between two edit URLs remounts the editor with fresh state
   // instead of carrying the previous tour's form over.
-  return <TourEditView key={dto.id} dto={dto} catalogSuggestions={catalogSuggestions} regions={regions} />
+  return (
+    <TourEditView
+      key={dto.id}
+      dto={dto}
+      catalogSuggestions={catalogSuggestions}
+      regions={regions}
+      tags={tags}
+      daySources={daySources}
+    />
+  )
 }
 
 function TourEditView({
   dto,
   catalogSuggestions,
   regions,
+  tags,
+  daySources,
 }: {
   dto: TourInfoModel
   catalogSuggestions: CatalogSuggestions
   regions: RegionInfoModel[]
+  tags: TagInfoModel[]
+  daySources: DaySource[]
 }) {
   const initialState = useMemo(() => infoToForm(dto), [dto])
   const { state, actions, validation, hasAttemptedSubmit, submit, isSubmitting, error, isDirty } =
@@ -96,6 +118,8 @@ function TourEditView({
         typeLocked
         catalogSuggestions={catalogSuggestions}
         regions={regions}
+        tags={tags}
+        daySources={daySources}
         onSubmit={submit}
       />
 

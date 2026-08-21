@@ -16,6 +16,9 @@ namespace ATTours.BusinessServices.Services.ValidationServices
     // проверка существования RegionId требует БД.
     internal class TourValidationService : EntityValidationContextDependentBase<Tour, ATToursContextFactory>
     {
+        // «Максимум 3 тега на карточке» (мокап тегов) — ограничение бизнес-правила, не UI.
+        private const int MaxTagsPerTour = 3;
+
         public TourValidationService(List<Tour> entities, IApplicationDbContext context)
             : base(entities, context)
         {
@@ -31,7 +34,31 @@ namespace ATTours.BusinessServices.Services.ValidationServices
                 await ValidatePlaceReferencesAsync(entity);
                 await ValidateExpenseTemplateReferencesAsync(entity);
                 await ValidateTourNoteTemplateReferencesAsync(entity);
+                await ValidateTagsAsync(entity);
+                ValidateDiscount(entity);
             }
+        }
+
+        // Скидка тура (Фаза 3, диапазон дат — checklist-discount-fix.txt): процент и обе границы
+        // задаются вместе или не задаются вовсе. "Процент без дат" нарушил бы правило ADR
+        // "скидка сама снимается по дате", а дата начала без даты окончания дала бы вечную акцию.
+        private static void ValidateDiscount(Tour tour)
+        {
+            if (tour.DiscountPercent is null && tour.DiscountStartDate is null && tour.DiscountValidUntil is null)
+                return;
+
+            if (tour.DiscountPercent is null || tour.DiscountStartDate is null || tour.DiscountValidUntil is null)
+                throw new ErrorModelException(GlobalErrorCode.InvalidTourDiscount, HttpStatusCode.BadRequest,
+                    "Tour discount requires a percent value together with both start and valid-until dates.");
+
+            if (tour.DiscountPercent <= 0 || tour.DiscountPercent > 100)
+                throw new ErrorModelException(GlobalErrorCode.InvalidTourDiscount, HttpStatusCode.BadRequest,
+                    "Tour discount percent must be between 0 and 100.");
+
+            // Диапазон включительный с обеих сторон, поэтому акция на один день (start == end) — ОК.
+            if (tour.DiscountStartDate > tour.DiscountValidUntil)
+                throw new ErrorModelException(GlobalErrorCode.InvalidTourDiscount, HttpStatusCode.BadRequest,
+                    "Tour discount start date cannot be later than the valid-until date.");
         }
 
         private void ValidateTourDaysByType(Tour tour)
@@ -166,6 +193,31 @@ namespace ATTours.BusinessServices.Services.ValidationServices
                     throw new ErrorModelException(GlobalErrorCode.InvalidEntityRelation, HttpStatusCode.BadRequest,
                         $"Tour note type {(int)note.Type} does not match template type {(int)templateType}.");
             }
+        }
+
+        // Каталог Tag: не больше MaxTagsPerTour штук, без дублей TagId, все TagId должны существовать.
+        private async Task ValidateTagsAsync(Tour tour)
+        {
+            if (tour.TourTags is null || tour.TourTags.Count == 0)
+                return;
+
+            var tagIds = tour.TourTags.Select(tt => tt.TagId).ToList();
+
+            var duplicate = tagIds.GroupBy(id => id).FirstOrDefault(group => group.Count() > 1);
+            if (duplicate is not null)
+                throw new ErrorModelException(GlobalErrorCode.InvalidEntityRelation, HttpStatusCode.BadRequest,
+                    $"Tag with id {duplicate.Key} is duplicated in the tour's tags!");
+
+            if (tagIds.Count > MaxTagsPerTour)
+                throw new ErrorModelException(GlobalErrorCode.TooManyTags, HttpStatusCode.BadRequest,
+                    $"A tour can have at most {MaxTagsPerTour} tags.");
+
+            var existingCount = await Context.Set<Tag>()
+                                    .Where(tag => tagIds.Contains(tag.Id))
+                                    .CountAsync();
+
+            if (existingCount != tagIds.Count)
+                throw new ErrorModelException(GlobalErrorCode.TagNotFound, HttpStatusCode.BadRequest, "One or more tags do not exist.");
         }
     }
 }

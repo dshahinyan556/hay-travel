@@ -19,9 +19,10 @@ import { useMemo, useReducer, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { createTour, setTourActive, updateTour } from '@/features/admin/api/adminTours'
 import { formToCreateModel, formToUpdateModel } from '@/features/admin/lib/tourMapper'
+import type { DaySourceContent } from '@/features/admin/lib/tourMapper'
 import { ApiError } from '@/shared/lib/http'
 import type { TourType } from '@/features/admin/lib/enums'
-import type { TourFormState } from '@/features/admin/types/form'
+import type { Localized, TourFormState } from '@/features/admin/types/form'
 import {
   normalizeInitialState,
   tourFormReducer,
@@ -45,6 +46,9 @@ export interface TourFormActions {
   setMainImageUrl: (value: string) => void
   setIsActive: (value: boolean) => void
   setRequiresPrepayment: (value: boolean) => void
+  setDiscountPercent: (value: string) => void
+  setDiscountStartDate: (value: string) => void
+  setDiscountValidUntil: (value: string) => void
   setLocalized: (field: TourLocalizedField, lang: LangKey, value: string) => void
   // days
   addDay: () => void
@@ -57,6 +61,18 @@ export interface TourFormActions {
   removeRoutePoint: (dayKey: string, key: string) => void
   moveRoutePoint: (dayKey: string, fromIndex: number, toIndex: number) => void
   setRoutePointText: (dayKey: string, key: string, lang: LangKey, value: string) => void
+  setRoutePointPlace: (
+    dayKey: string,
+    key: string,
+    placeId: number | null,
+    text?: Localized,
+    images?: string[],
+  ) => void
+  fillDayFromSource: (
+    dayKey: string,
+    content: DaySourceContent,
+    placeImages: Record<number, string[]>,
+  ) => void
   // gallery
   addGallery: (dayKey: string) => void
   removeGallery: (dayKey: string, key: string) => void
@@ -89,6 +105,8 @@ export interface TourFormActions {
   setExpenseDescription: (key: string, lang: LangKey, value: string) => void
   // regions
   toggleRegion: (regionId: number) => void
+  // tags
+  toggleTag: (tagId: number) => void
 }
 
 export interface UseTourFormResult {
@@ -146,6 +164,11 @@ export function useTourForm(
       setIsActive: (value) => dispatch({ kind: 'setField', field: 'isActive', value }),
       setRequiresPrepayment: (value) =>
         dispatch({ kind: 'setField', field: 'requiresPrepayment', value }),
+      setDiscountPercent: (value) => dispatch({ kind: 'setField', field: 'discountPercent', value }),
+      setDiscountStartDate: (value) =>
+        dispatch({ kind: 'setField', field: 'discountStartDate', value }),
+      setDiscountValidUntil: (value) =>
+        dispatch({ kind: 'setField', field: 'discountValidUntil', value }),
       setLocalized: (field, lang, value) => dispatch({ kind: 'setLocalized', field, lang, value }),
 
       addDay: () => dispatch({ kind: 'addDay' }),
@@ -161,6 +184,10 @@ export function useTourForm(
         dispatch({ kind: 'moveRoutePoint', dayKey, fromIndex, toIndex }),
       setRoutePointText: (dayKey, key, lang, value) =>
         dispatch({ kind: 'setRoutePointText', dayKey, key, lang, value }),
+      setRoutePointPlace: (dayKey, key, placeId, text, images) =>
+        dispatch({ kind: 'setRoutePointPlace', dayKey, key, placeId, text, images }),
+      fillDayFromSource: (dayKey, content, placeImages) =>
+        dispatch({ kind: 'fillDayFromSource', dayKey, content, placeImages }),
 
       addGallery: (dayKey) => dispatch({ kind: 'addGallery', dayKey }),
       removeGallery: (dayKey, key) => dispatch({ kind: 'removeGallery', dayKey, key }),
@@ -197,6 +224,7 @@ export function useTourForm(
         dispatch({ kind: 'setExpenseDescription', key, lang, value }),
 
       toggleRegion: (regionId) => dispatch({ kind: 'toggleRegion', regionId }),
+      toggleTag: (tagId) => dispatch({ kind: 'toggleTag', tagId }),
     }),
     [],
   )

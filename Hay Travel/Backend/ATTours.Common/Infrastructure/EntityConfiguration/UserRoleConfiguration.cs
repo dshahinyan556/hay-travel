@@ -24,10 +24,13 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
                 .OnDelete(DeleteBehavior.Restrict);
 
             // Regular/TourManager/Admin — дефолтные роли, нужны сразу как валидный RoleId для User.
+            // Employee (checklist-orders-redesign.txt, Фаза 2/9) — без этой строки роль некому
+            // назначить: ChangeRole шлёт RoleId существующей UserRole-строки, а не голый RoleType.
             builder.HasData(
                 new UserRole { Id = 1, Description = "Обычный пользователь", Type = RoleType.Regular },
                 new UserRole { Id = 2, Description = "Тур-менеджер", Type = RoleType.TourManager },
-                new UserRole { Id = 3, Description = "Администратор", Type = RoleType.Admin }
+                new UserRole { Id = 3, Description = "Администратор", Type = RoleType.Admin },
+                new UserRole { Id = 4, Description = "Исполнитель", Type = RoleType.Employee }
             );
         }
     }

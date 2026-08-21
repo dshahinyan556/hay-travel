@@ -6,12 +6,14 @@ import {
   getExpenseTemplates,
   getPlaces,
   getRegions,
+  getTags,
   getTourNoteTemplates,
 } from '@/features/admin/api/adminCatalog'
 import { PlacesTab } from './places/PlacesTab'
 import { ExpenseTemplatesTab } from './expense-templates/ExpenseTemplatesTab'
 import { NoteTemplatesTab } from './note-templates/NoteTemplatesTab'
 import { RegionsTab } from './regions/RegionsTab'
+import { TagsTab } from './tags/TagsTab'
 
 /** Loads all four catalog lists in parallel. Errors are NOT swallowed — a rejection propagates
  * to `AdminErrorBoundary`, same contract as `productsLoader`/`settingsLoader`. Revalidated as a
@@ -25,36 +27,38 @@ export async function catalogLoader() {
   await ensureAuthReady()
   if (!canManageCatalog(getAuthState().user?.role)) throw redirect('/admin')
 
-  const [places, expenseTemplates, noteTemplates, regions] = await Promise.all([
+  const [places, expenseTemplates, noteTemplates, regions, tags] = await Promise.all([
     getPlaces(),
     getExpenseTemplates(),
     getTourNoteTemplates(),
     getRegions(),
+    getTags(),
   ])
-  return { places, expenseTemplates, noteTemplates, regions }
+  return { places, expenseTemplates, noteTemplates, regions, tags }
 }
 
-type CatalogTabId = 'places' | 'expenses' | 'notes' | 'regions'
+type CatalogTabId = 'places' | 'expenses' | 'notes' | 'regions' | 'tags'
 
 const tabs: TabItem[] = [
   { id: 'places', label: 'Точки маршрута' },
   { id: 'expenses', label: 'Доп. расходы' },
   { id: 'notes', label: 'Заметки' },
   { id: 'regions', label: 'Регионы' },
+  { id: 'tags', label: 'Теги' },
 ]
 
 /**
  * Справочники (4.2): reference catalogs consumed as selectable options on the tour form (4.3,
- * not built yet). Three tabs have full CRUD (Places / Expense templates / Note templates) — the
- * backend has Create/Update/Delete for all three (3.4). "Регионы" stays name/slug/order-fixed
- * (seeded by a migration, David 2026-08-01) but its teaser text is editable since 2026-08-02
- * (`UpdateBlurb`) — see `RegionsTab`.
+ * not built yet). Four tabs have full CRUD (Places / Expense templates / Note templates / Tags,
+ * 2026-08-16) — the backend has Create/Update/Delete for all four (3.4). "Регионы" stays
+ * name/slug/order-fixed (seeded by a migration, David 2026-08-01) but its teaser text is
+ * editable since 2026-08-02 (`UpdateBlurb`) — see `RegionsTab`.
  *
- * One loader for all four lists; each tab owns its own add/edit/delete state and calls
+ * One loader for all five lists; each tab owns its own add/edit/delete state and calls
  * `revalidator.revalidate()` after a successful mutation, same contract as `ProductsPage`.
  */
 export function CatalogPage() {
-  const { places, expenseTemplates, noteTemplates, regions } = useLoaderData<typeof catalogLoader>()
+  const { places, expenseTemplates, noteTemplates, regions, tags } = useLoaderData<typeof catalogLoader>()
   const revalidator = useRevalidator()
   const [activeTab, setActiveTab] = useState<CatalogTabId>('places')
 
@@ -65,7 +69,7 @@ export function CatalogPage() {
       <header className="flex flex-col gap-1">
         <h1 className="text-xl font-bold text-neutral-900">Справочники</h1>
         <p className="text-sm text-neutral-500">
-          Общие точки маршрута, доп. расходы и заметки, которые можно подставлять в туры.
+          Общие точки маршрута, доп. расходы, заметки и теги, которые можно подставлять в туры.
         </p>
       </header>
 
@@ -89,6 +93,7 @@ export function CatalogPage() {
       )}
       {activeTab === 'notes' && <NoteTemplatesTab items={noteTemplates} onMutated={revalidate} />}
       {activeTab === 'regions' && <RegionsTab regions={regions} onMutated={revalidate} />}
+      {activeTab === 'tags' && <TagsTab items={tags} onMutated={revalidate} />}
     </div>
   )
 }

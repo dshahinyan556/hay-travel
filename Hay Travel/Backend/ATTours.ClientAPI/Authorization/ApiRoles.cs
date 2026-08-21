@@ -12,5 +12,8 @@ namespace ATTours.ClientAPI.Authorization
 
         // Ведение каталога туров и чтение справочников, из которых собирается тур.
         public const string TourManagerOrAdmin = nameof(RoleType.TourManager) + "," + nameof(RoleType.Admin);
+
+        // Read-only доступ к своим назначенным заказам (checklist-orders-redesign.txt, Фаза 2).
+        public const string Employee = nameof(RoleType.Employee);
     }
 }

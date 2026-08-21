@@ -5,6 +5,7 @@ using ATTours.Common.DTO.Init;
 using ATTours.Common.DTO.Request;
 using ATTours.Common.Entities;
 using ATTours.Common.Enums;
+using ATTours.Common.Extensions;
 using ATTours.Common.Infrastructure.SiteSettings;
 
 namespace ATTours.ClientAPI.Mapper.MappingProfile
@@ -28,6 +29,10 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.FeaturedSortOrder, opt => opt.MapFrom(src => src.FeaturedSortOrder))
                 .ForMember(dest => dest.RequiresPrepayment, opt => opt.MapFrom(src => src.RequiresPrepayment))
                 .ForMember(dest => dest.TotalPrice, opt => opt.MapFrom(src => src.TotalPrice))
+                .ForMember(dest => dest.DiscountPercent, opt => opt.MapFrom(src => src.DiscountPercent))
+                .ForMember(dest => dest.DiscountStartDate, opt => opt.MapFrom(src => src.DiscountStartDate))
+                .ForMember(dest => dest.DiscountValidUntil, opt => opt.MapFrom(src => src.DiscountValidUntil))
+                .ForMember(dest => dest.DiscountedPrice, opt => opt.Ignore())
                 .ForMember(dest => dest.MainImageUrl, opt => opt.MapFrom(src => src.MainImageUrl))
                 .ForMember(dest => dest.Translations,
                     opt => opt.MapFrom(src => src.Translations))
@@ -39,12 +44,18 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                     opt => opt.MapFrom(src => src.Notes.OrderBy(n => n.Type).ThenBy(n => n.SortOrder)))
                 .ForMember(dest => dest.Regions,
                     opt => opt.MapFrom(src => src.TourRegions.OrderBy(tr => tr.SortOrder)))
+                .ForMember(dest => dest.Tags,
+                    opt => opt.MapFrom(src => src.TourTags))
                 // TourDays собираем из TourDetails, сохраняя порядок по SortOrder
                 .ForMember(dest => dest.TourDays, opt => opt.MapFrom(src =>
                     src.TourDetails
                         .OrderBy(td => td.SortOrder)
                         .Select(td => td.TourDay)
-                        .ToList()));
+                        .ToList()))
+                // Резолв активности скидки — на бэке (Фаза 3), не в мапере per-field, т.к.
+                // нужна и цена, и процент вместе (TourDiscountExtensions).
+                .AfterMap((src, dest) => dest.DiscountedPrice =
+                    TourDiscountExtensions.ApplyDiscount(src.TotalPrice, src.ResolveActiveDiscountPercent()));
 
             // TourCreateModel -> Tour (для создания)
             CreateMap<TourCreateModel, Tour>()
@@ -52,11 +63,15 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.TotalPrice, opt => opt.Ignore())
                 .ForMember(dest => dest.IsActive, opt => opt.MapFrom(src => src.IsActive))
                 .ForMember(dest => dest.RequiresPrepayment, opt => opt.MapFrom(src => src.RequiresPrepayment))
+                .ForMember(dest => dest.DiscountPercent, opt => opt.MapFrom(src => src.DiscountPercent))
+                .ForMember(dest => dest.DiscountStartDate, opt => opt.MapFrom(src => src.DiscountStartDate))
+                .ForMember(dest => dest.DiscountValidUntil, opt => opt.MapFrom(src => src.DiscountValidUntil))
                 .ForMember(dest => dest.TourDetails, opt => opt.Ignore())
                 .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations))
                 .ForMember(dest => dest.AdditionalExpenses, opt => opt.MapFrom(src => src.AdditionalExpenses))
                 .ForMember(dest => dest.Notes, opt => opt.MapFrom(src => src.Notes))
                 .ForMember(dest => dest.TourRegions, opt => opt.MapFrom(src => src.Regions))
+                .ForMember(dest => dest.TourTags, opt => opt.MapFrom(src => src.Tags))
                 .AfterMap((src, dest, context) => BuildTourDetails(src.TourDays, dest, context.Mapper));
 
             // TourInfoModel -> Tour (для обновления)
@@ -72,11 +87,15 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.IsFeatured, opt => opt.Ignore())
                 .ForMember(dest => dest.FeaturedSortOrder, opt => opt.Ignore())
                 .ForMember(dest => dest.RequiresPrepayment, opt => opt.MapFrom(src => src.RequiresPrepayment))
+                .ForMember(dest => dest.DiscountPercent, opt => opt.MapFrom(src => src.DiscountPercent))
+                .ForMember(dest => dest.DiscountStartDate, opt => opt.MapFrom(src => src.DiscountStartDate))
+                .ForMember(dest => dest.DiscountValidUntil, opt => opt.MapFrom(src => src.DiscountValidUntil))
                 .ForMember(dest => dest.TourDetails, opt => opt.Ignore())
                 .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations))
                 .ForMember(dest => dest.AdditionalExpenses, opt => opt.MapFrom(src => src.AdditionalExpenses))
                 .ForMember(dest => dest.Notes, opt => opt.MapFrom(src => src.Notes))
                 .ForMember(dest => dest.TourRegions, opt => opt.MapFrom(src => src.Regions))
+                .ForMember(dest => dest.TourTags, opt => opt.MapFrom(src => src.Tags))
                 .AfterMap((src, dest, context) => BuildTourDetails(src.TourDays, dest, context.Mapper));
 
             // Tour -> TourCardModel (публичный список карточек, пункт 3.5 / D-11).
@@ -87,12 +106,23 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
                 .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.Type))
                 .ForMember(dest => dest.TotalPrice, opt => opt.MapFrom(src => src.TotalPrice))
+                .ForMember(dest => dest.DiscountedPrice, opt => opt.Ignore())
+                // Границы показываем только у РЕАЛЬНО активной сегодня скидки: будущая акция
+                // (start > сегодня) на карточке не анонсируется, истёкшая — не висит.
+                .ForMember(dest => dest.DiscountStartDate, opt => opt.MapFrom(src =>
+                    src.ResolveActiveDiscountPercent() != null ? src.DiscountStartDate : null))
+                .ForMember(dest => dest.DiscountValidUntil, opt => opt.MapFrom(src =>
+                    src.ResolveActiveDiscountPercent() != null ? src.DiscountValidUntil : null))
                 .ForMember(dest => dest.MainImageUrl, opt => opt.MapFrom(src => src.MainImageUrl))
                 // Длительность в днях = число TourDetails (граф дня в card-модель не грузится).
                 .ForMember(dest => dest.DurationDays, opt => opt.MapFrom(src => src.TourDetails.Count))
                 .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations))
                 .ForMember(dest => dest.Regions,
-                    opt => opt.MapFrom(src => src.TourRegions.OrderBy(tr => tr.SortOrder)));
+                    opt => opt.MapFrom(src => src.TourRegions.OrderBy(tr => tr.SortOrder)))
+                .ForMember(dest => dest.Tags,
+                    opt => opt.MapFrom(src => src.TourTags))
+                .AfterMap((src, dest) => dest.DiscountedPrice =
+                    TourDiscountExtensions.ApplyDiscount(src.TotalPrice, src.ResolveActiveDiscountPercent()));
 
             // ============= МАППИНГИ ДЛЯ TOURDAY =============
 
@@ -309,6 +339,58 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.RegionId, opt => opt.MapFrom(src => src.RegionId))
                 .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder));
 
+            // ============= Mappings for TAG =============
+            // Каталог мерч-тегов продукта (хит сезона/…, чисто декоративные). Скидка тура
+            // больше не тег (Фаза 3) — см. маппинги TOUR выше (DiscountPercent/DiscountValidUntil).
+
+            // Tag -> TagInfoModel
+            CreateMap<Tag, TagInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.Type))
+                .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+
+            // TagCreateModel -> Tag
+            CreateMap<TagCreateModel, Tag>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.TourTags, opt => opt.Ignore())
+                .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.Type))
+                .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+
+            // TagInfoModel -> Tag (для обновления)
+            CreateMap<TagInfoModel, Tag>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.TourTags, opt => opt.Ignore())
+                .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.Type))
+                .ForMember(dest => dest.Color, opt => opt.MapFrom(src => src.Color))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+
+            // ============= Mappings for TOURTAG =============
+            // Плоская проекция в граф тура (как TourRegion) — без вложенного Tag, каталог
+            // (имя/цвет/тип/процент) фронт резолвит через TagController.
+
+            CreateMap<TourTag, TourTagInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.TagId, opt => opt.MapFrom(src => src.TagId));
+
+            CreateMap<TourTagCreateModel, TourTag>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.TourId, opt => opt.Ignore())
+                .ForMember(dest => dest.Tour, opt => opt.Ignore())
+                .ForMember(dest => dest.Tag, opt => opt.Ignore())
+                .ForMember(dest => dest.TagId, opt => opt.MapFrom(src => src.TagId));
+
+            CreateMap<TourTagInfoModel, TourTag>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.TourId, opt => opt.Ignore())
+                .ForMember(dest => dest.Tour, opt => opt.Ignore())
+                .ForMember(dest => dest.Tag, opt => opt.Ignore())
+                .ForMember(dest => dest.TagId, opt => opt.MapFrom(src => src.TagId));
+
             // ============= Mappings for PLACE =============
             // Каталог точек (3.4). RegionSlug денормализуется из связанного Region (переводы
             // региона не тянутся). Override резолвится не здесь, а в Service (3.5).
@@ -428,43 +510,35 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
 
             // ============= Mappings for ORDER =============
-            // Бронирование (spec 001). Всё, что определяет владельца, деньги и статус,
-            // ставит OrderCreationService — маппер их не трогает.
+            // Бронирование (spec 001, переделка ADR 019 2026-08-16). OrderCreateModel больше
+            // НЕ маппится на Order напрямую — форма заказа (шапка+строки) отличается от формы
+            // запроса, OrderCreationService строит сущность сам (см. его EnrichAsync).
 
-            // OrderCreateModel -> Order
-            CreateMap<OrderCreateModel, Order>()
-                .ForMember(dest => dest.Id, opt => opt.Ignore())
-                // UserId приходит из токена, а не из тела запроса (иначе — бронь на чужой аккаунт).
-                .ForMember(dest => dest.UserId, opt => opt.Ignore())
-                .ForMember(dest => dest.User, opt => opt.Ignore())
-                .ForMember(dest => dest.Tour, opt => opt.Ignore())
-                .ForMember(dest => dest.Status, opt => opt.Ignore())
-                .ForMember(dest => dest.CreatedAtUtc, opt => opt.Ignore())
-                .ForMember(dest => dest.Payment, opt => opt.Ignore())
-                .ForMember(dest => dest.TourId, opt => opt.MapFrom(src => src.TourId))
-                .ForMember(dest => dest.TourDate, opt => opt.MapFrom(src => src.TourDate))
-                .ForMember(dest => dest.GuestCount, opt => opt.MapFrom(src => src.GuestCount));
-
-            // Order -> OrderInfoModel. Поля пользователя и тура денормализуются, чтобы
-            // список не тянул отдельными запросами карточку юзера и граф тура.
+            // Order -> OrderInfoModel. UserEmail/UserFullName денормализуются, чтобы список не
+            // тянул карточку юзера отдельным запросом; DiscountTotal/Total — агрегаты по строкам.
             CreateMap<Order, OrderInfoModel>()
-                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
-                .ForMember(dest => dest.UserId, opt => opt.MapFrom(src => src.UserId))
-                .ForMember(dest => dest.TourId, opt => opt.MapFrom(src => src.TourId))
-                .ForMember(dest => dest.TourDate, opt => opt.MapFrom(src => src.TourDate))
-                .ForMember(dest => dest.GuestCount, opt => opt.MapFrom(src => src.GuestCount))
-                .ForMember(dest => dest.Status, opt => opt.MapFrom(src => src.Status))
-                .ForMember(dest => dest.CreatedAtUtc, opt => opt.MapFrom(src => src.CreatedAtUtc))
-                .ForMember(dest => dest.ConfirmedAtUtc, opt => opt.MapFrom(src => src.ConfirmedAtUtc))
-                .ForMember(dest => dest.Payment, opt => opt.MapFrom(src => src.Payment))
                 .ForMember(dest => dest.UserEmail, opt => opt.Ignore())
                 .ForMember(dest => dest.UserFullName, opt => opt.Ignore())
-                .ForMember(dest => dest.TourTitle, opt => opt.Ignore())
-                .ForMember(dest => dest.TourMainImageUrl, opt => opt.Ignore())
+                .ForMember(dest => dest.DiscountTotal, opt => opt.Ignore())
+                .ForMember(dest => dest.Total, opt => opt.Ignore())
                 .AfterMap((src, dest) => ApplyOrderDenormalizedFields(src, dest));
 
-            // OrderPayment -> OrderPaymentInfoModel (плоско; свой Id наружу не едет).
+            // OrderLine -> OrderLineInfoModel. TourTitle/TourMainImageUrl/EmployeeFullName
+            // денормализуются так же, как раньше делал Order -> OrderInfoModel (D-1, 2026-08-16
+            // логика) — требует загруженных Tour.Translations и Employee (см. OrderInfo).
+            CreateMap<OrderLine, OrderLineInfoModel>()
+                .ForMember(dest => dest.TourTitle, opt => opt.Ignore())
+                .ForMember(dest => dest.TourMainImageUrl, opt => opt.Ignore())
+                .ForMember(dest => dest.EmployeeFullName, opt => opt.Ignore())
+                .AfterMap((src, dest) => ApplyOrderLineDenormalizedFields(src, dest));
+
+            // OrderPayment -> OrderPaymentInfoModel (плоско, свой Id теперь едет наружу —
+            // проводка сама по себе адресуема, в отличие от старого 1:1-снапшота ADR 014).
             CreateMap<OrderPayment, OrderPaymentInfoModel>();
+
+            // OrderEvent -> OrderEventInfoModel (spec 007). Плоско: Description — уже готовая
+            // русская строка, автор денормализован в самой записи, Order наружу не едет.
+            CreateMap<OrderEvent, OrderEventInfoModel>();
 
             // ============= Mappings for CLOSURERULE =============
             // Правила закрытия (ADR 012) — плоские 1:1, переводов нет.
@@ -601,6 +675,13 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
                 .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
 
+            CreateMap<TranslatableCreateModel, TagTranslation>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.TagId, opt => opt.Ignore())
+                .ForMember(dest => dest.Tag, opt => opt.Ignore())
+                .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
+                .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
+
             // ---- InfoModel -> Entity (обновление) ----
             // Id сохраняется, чтобы слой обновления сверял переводы по Id
 
@@ -666,6 +747,13 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
                 .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
 
+            CreateMap<TranslatableInfoModel, TagTranslation>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.TagId, opt => opt.Ignore())
+                .ForMember(dest => dest.Tag, opt => opt.Ignore())
+                .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
+                .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
+
             // ---- Entity -> InfoModel (чтение) ----
 
             CreateMap<AdditionalExpenseTranslation, TranslatableInfoModel>()
@@ -720,6 +808,12 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
                 .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
 
+            CreateMap<TagTranslation, TranslatableInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.Type, opt => opt.MapFrom(src => 0))
+                .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
+                .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
+
             // Type у настройки сайта семантически не используется -> константа 0
             CreateMap<SiteSettingTranslation, TranslatableInfoModel>()
                 .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
@@ -761,8 +855,8 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ToList();
         }
 
-        // Денормализованные поля заказа: карточка пользователя и заголовок/обложка тура.
-        // Требует загруженных User и Tour.Translations (см. OrderInfo).
+        // Денормализованные поля заказа: карточка пользователя + агрегаты по строкам
+        // (DiscountTotal/Total — мокап "summary-strip"). Требует загруженного User.
         private static void ApplyOrderDenormalizedFields(Order source, OrderInfoModel destination)
         {
             if (source.User is not null)
@@ -771,11 +865,28 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 destination.UserFullName = $"{source.User.FirstName} {source.User.LastName}".Trim();
             }
 
-            if (source.Tour is null)
+            if (source.Lines is null)
                 return;
 
-            destination.TourMainImageUrl = source.Tour.MainImageUrl;
-            destination.TourTitle = ResolveTourTitle(source.Tour);
+            destination.DiscountTotal = source.Lines.Sum(line =>
+                line.DiscountPercent is null or <= 0
+                    ? 0m
+                    : Math.Round(line.PriceSnapshot * (line.DiscountPercent.Value / 100m), 0, MidpointRounding.AwayFromZero));
+            destination.Total = source.Lines.Sum(line => line.LineTotal);
+        }
+
+        // Денормализованные поля строки заказа: заголовок/обложка тура + ФИО исполнителя.
+        // Требует загруженных Tour.Translations и Employee (см. OrderInfo).
+        private static void ApplyOrderLineDenormalizedFields(OrderLine source, OrderLineInfoModel destination)
+        {
+            if (source.Tour is not null)
+            {
+                destination.TourMainImageUrl = source.Tour.MainImageUrl;
+                destination.TourTitle = ResolveTourTitle(source.Tour);
+            }
+
+            if (source.Employee is not null)
+                destination.EmployeeFullName = $"{source.Employee.FirstName} {source.Employee.LastName}".Trim();
         }
 
         // Одно правило на оба пути чтения: русский заголовок, иначе — любой оставшийся.

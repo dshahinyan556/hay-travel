@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { useReducedMotion } from '@/shared/hooks'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import type { HeroContent } from '@/shared/api/siteSettings'
+import { adaptiveImageUrl } from '@/shared/lib/adaptiveImage'
 import { ArrowRightIcon, MapIcon } from '@/shared/ui/icons'
 
 interface HeroSectionProps {
@@ -44,7 +45,7 @@ export function HeroSection({ hero }: HeroSectionProps) {
   return (
     <section className="hero relative isolate flex min-h-[78vh] items-end overflow-hidden">
       <motion.img
-        src={hero.imageUrl}
+        src={adaptiveImageUrl(hero.imageUrl)}
         alt=""
         initial={{ scale: 1.08 }}
         animate={{ scale: reducedMotion ? 1.08 : 1 }}
@@ -115,7 +116,7 @@ export function HeroSection({ hero }: HeroSectionProps) {
           </a>
           <Link
             to="/regions"
-            className="btn-motion inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm text-gold-light ring-1 ring-gold-deep/60 hover:bg-gold-light/10 hover:ring-gold-light focus-visible:ring-2 focus-visible:ring-gold-light focus-visible:outline-none"
+            className="btn-motion btn-sheen inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm text-gold-light ring-1 ring-gold-deep/60 hover:bg-gold-light/10 hover:ring-gold-light focus-visible:ring-2 focus-visible:ring-gold-light focus-visible:outline-none"
           >
             <MapIcon size={16} />
             {t('home.hero.regionsCta')}

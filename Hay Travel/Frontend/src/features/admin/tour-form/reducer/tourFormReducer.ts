@@ -16,7 +16,14 @@
 
 import { arrayMove } from '@dnd-kit/sortable'
 import { TourType } from '@/features/admin/lib/enums'
-import { emptyDay, emptyExpense, emptyLocalizedItem, emptyGalleryItem } from '@/features/admin/lib/tourMapper'
+import {
+  emptyDay,
+  emptyExpense,
+  emptyLocalizedItem,
+  emptyGalleryItem,
+  emptyRoutePoint,
+} from '@/features/admin/lib/tourMapper'
+import type { DaySourceContent } from '@/features/admin/lib/tourMapper'
 import type {
   Localized,
   LocalizedListItem,
@@ -48,6 +55,9 @@ export type TourFormAction =
   | { kind: 'setField'; field: 'mainImageUrl'; value: string }
   | { kind: 'setField'; field: 'isActive'; value: boolean }
   | { kind: 'setField'; field: 'requiresPrepayment'; value: boolean }
+  | { kind: 'setField'; field: 'discountPercent'; value: string }
+  | { kind: 'setField'; field: 'discountStartDate'; value: string }
+  | { kind: 'setField'; field: 'discountValidUntil'; value: string }
   | { kind: 'setLocalized'; field: TourLocalizedField; lang: LangKey; value: string }
   // days
   | { kind: 'addDay' }
@@ -60,6 +70,23 @@ export type TourFormAction =
   | { kind: 'removeRoutePoint'; dayKey: string; key: string }
   | { kind: 'moveRoutePoint'; dayKey: string; fromIndex: number; toIndex: number }
   | { kind: 'setRoutePointText'; dayKey: string; key: string; lang: LangKey; value: string }
+  | {
+      kind: 'setRoutePointPlace'
+      dayKey: string
+      key: string
+      placeId: number | null
+      /** Picking a catalog Place also fills RU/EN — omitted when the admin clears the link. */
+      text?: Localized
+      /** The picked Place's own gallery images (`PlaceOption.images`) — swapped live into the
+       * day's gallery in place of whatever this route point had previously added, if anything.
+       * Omitted when the admin clears the link or the place has no images. */
+      images?: string[]
+    }
+  // "заполнить день из другого продукта" (F13 gap closure, part 2) — replaces the day's text +
+  // route points; price is untouched. The gallery IS touched now: any route point in the fill
+  // that carries a `placeId` gets that place's images live, same as picking it by hand
+  // (`placeImages` is a placeId -> image-urls lookup built by the caller from `placeOptions`).
+  | { kind: 'fillDayFromSource'; dayKey: string; content: DaySourceContent; placeImages: Record<number, string[]> }
   // gallery (of a day)
   | { kind: 'addGallery'; dayKey: string }
   | { kind: 'removeGallery'; dayKey: string; key: string }
@@ -92,6 +119,9 @@ export type TourFormAction =
   | { kind: 'setExpenseDescription'; key: string; lang: LangKey; value: string }
   // regions (tour-level, unordered checkbox set)
   | { kind: 'toggleRegion'; regionId: number }
+  // tags (tour-level, unordered checkbox set). Dumb toggle only — the max-3 rule lives in
+  // `TagPicker`, the same layering `RegionPicker` uses for its own (looser) rule.
+  | { kind: 'toggleTag'; tagId: number }
 
 /* -------------------------------------------------------------------------- */
 /*  Immutable list helpers                                                     */
@@ -120,13 +150,15 @@ const reorder = <T>(list: T[], fromIndex: number, toIndex: number): T[] => {
 /** Set one language of a `Localized` pair, leaving the other language untouched. */
 const setLoc = (loc: Localized, lang: LangKey, value: string): Localized => ({ ...loc, [lang]: value })
 
-/** Update the text of one item in a `LocalizedListItem[]`. */
-const setItemText = (
-  list: LocalizedListItem[],
+/** Update the text of one item in a `LocalizedListItem[]`. Generic over `T` (rather than fixed
+ * to `LocalizedListItem`) so it preserves extra fields on the concrete item type — route points
+ * carry `placeId` alongside `key`/`text`, which a widened `LocalizedListItem[]` return would drop. */
+const setItemText = <T extends LocalizedListItem>(
+  list: T[],
   key: string,
   lang: LangKey,
   value: string,
-): LocalizedListItem[] => updateByKey(list, key, (item) => ({ ...item, text: setLoc(item.text, lang, value) }))
+): T[] => updateByKey(list, key, (item) => ({ ...item, text: setLoc(item.text, lang, value) }))
 
 /** Apply a transform to a single day, addressed by key. */
 const updateDay = (
@@ -134,6 +166,23 @@ const updateDay = (
   dayKey: string,
   fn: (day: TourDayFormState) => TourDayFormState,
 ): TourFormState => ({ ...state, days: updateByKey(state.days, dayKey, fn) })
+
+/** Removes the gallery images tagged as auto-added for one route point (see
+ * `TourDayFormState.autofilledImageKeys`'s doc comment) and reports where they used to start, so
+ * their replacement can be inserted at the same spot. `keys` undefined means "unknown origin" —
+ * nothing is removed, and the caller's `insertAt` falls back to the end of the list. */
+const removeLinkedImages = <T extends Keyed>(
+  gallery: T[],
+  keys: string[] | undefined,
+): { gallery: T[]; insertAt: number } => {
+  if (!keys || keys.length === 0) return { gallery, insertAt: gallery.length }
+  const keySet = new Set(keys)
+  const firstIndex = gallery.findIndex((g) => keySet.has(g.key))
+  return {
+    gallery: gallery.filter((g) => !keySet.has(g.key)),
+    insertAt: firstIndex < 0 ? gallery.length : firstIndex,
+  }
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Day-count domain rule                                                      */
@@ -176,7 +225,10 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
     case 'setField':
       if (action.field === 'mainImageUrl') return { ...state, mainImageUrl: action.value }
       if (action.field === 'isActive') return { ...state, isActive: action.value }
-      return { ...state, requiresPrepayment: action.value }
+      if (action.field === 'requiresPrepayment') return { ...state, requiresPrepayment: action.value }
+      if (action.field === 'discountPercent') return { ...state, discountPercent: action.value }
+      if (action.field === 'discountStartDate') return { ...state, discountStartDate: action.value }
+      return { ...state, discountValidUntil: action.value }
 
     case 'setLocalized':
       return { ...state, [action.field]: setLoc(state[action.field], action.lang, action.value) }
@@ -207,7 +259,7 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
     case 'addRoutePoint':
       return updateDay(state, action.dayKey, (day) => ({
         ...day,
-        routePoints: [...day.routePoints, emptyLocalizedItem()],
+        routePoints: [...day.routePoints, emptyRoutePoint()],
       }))
 
     case 'removeRoutePoint':
@@ -227,6 +279,70 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
         ...day,
         routePoints: setItemText(day.routePoints, action.key, action.lang, action.value),
       }))
+
+    case 'setRoutePointPlace':
+      return updateDay(state, action.dayKey, (day) => {
+        const { [action.key]: previousKeys, ...otherLinks } = day.autofilledImageKeys
+        const { gallery, insertAt } = removeLinkedImages(day.gallery, previousKeys)
+        const newItems = (action.images ?? []).map((url) => ({ key: crypto.randomUUID(), url }))
+        return {
+          ...day,
+          routePoints: updateByKey(day.routePoints, action.key, (rp) => ({
+            ...rp,
+            placeId: action.placeId,
+            text: action.text ?? rp.text,
+          })),
+          gallery: [...gallery.slice(0, insertAt), ...newItems, ...gallery.slice(insertAt)],
+          autofilledImageKeys:
+            newItems.length > 0
+              ? { ...otherLinks, [action.key]: newItems.map((item) => item.key) }
+              : otherLinks,
+        }
+      })
+
+    case 'fillDayFromSource': {
+      const routePoints = action.content.routePoints.map((rp) => ({
+        key: crypto.randomUUID(),
+        text: rp.text,
+        placeId: rp.placeId,
+      }))
+      const withRoutePoints = updateDay(state, action.dayKey, (day) => {
+        // The whole route-point list is being replaced, so every gallery image we know we added
+        // for the OLD list is replaced too — a wholesale version of the single-point swap above.
+        const knownAutofilledKeys = new Set(Object.values(day.autofilledImageKeys).flat())
+        const gallery = day.gallery.filter((g) => !knownAutofilledKeys.has(g.key))
+        const autofilledImageKeys: Record<string, string[]> = {}
+        const addedImages: typeof day.gallery = []
+        for (const rp of routePoints) {
+          if (rp.placeId == null) continue
+          const images = action.placeImages[rp.placeId] ?? []
+          if (images.length === 0) continue
+          const items = images.map((url) => ({ key: crypto.randomUUID(), url }))
+          autofilledImageKeys[rp.key] = items.map((item) => item.key)
+          addedImages.push(...items)
+        }
+        return { ...day, routePoints, gallery: [...gallery, ...addedImages], autofilledImageKeys }
+      })
+      // An excursion's single day displays the TOUR-level text (see `dayTexts` in tourMapper —
+      // day-level text is ignored at submit time), so that's what a fill must write for the
+      // change to be visible. A multi-day tour's day keeps its own text as usual.
+      if (withRoutePoints.type === TourType.Excursion) {
+        return {
+          ...withRoutePoints,
+          title: action.content.title,
+          shortDescription: action.content.shortDescription,
+          description: action.content.description,
+          duration: action.content.duration,
+        }
+      }
+      return updateDay(withRoutePoints, action.dayKey, (day) => ({
+        ...day,
+        title: action.content.title,
+        shortDescription: action.content.shortDescription,
+        description: action.content.description,
+        duration: action.content.duration,
+      }))
+    }
 
     /* ---- gallery ---- */
     case 'addGallery':
@@ -355,6 +471,17 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
         regions: isSelected
           ? state.regions.filter((r) => r.regionId !== action.regionId)
           : [...state.regions, { regionId: action.regionId }],
+      }
+    }
+
+    /* ---- tags ---- */
+    case 'toggleTag': {
+      const isSelected = state.tags.some((tg) => tg.tagId === action.tagId)
+      return {
+        ...state,
+        tags: isSelected
+          ? state.tags.filter((tg) => tg.tagId !== action.tagId)
+          : [...state.tags, { tagId: action.tagId }],
       }
     }
   }

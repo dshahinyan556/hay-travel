@@ -31,6 +31,8 @@ import type {
   GalleryItemFormState,
   Localized,
   LocalizedListItem,
+  PlaceOption,
+  RoutePointFormState,
   TourDayFormState,
   TourFormState,
 } from '@/features/admin/types/form'
@@ -51,7 +53,12 @@ export const emptyLocalizedItem = (): LocalizedListItem => ({
   text: emptyLocalized(),
 })
 
-export const emptyRoutePoint = emptyLocalizedItem
+export const emptyRoutePoint = (): RoutePointFormState => ({
+  key: newKey(),
+  text: emptyLocalized(),
+  placeId: null,
+})
+
 export const emptyOrganizationalDetail = emptyLocalizedItem
 export const emptyRestriction = emptyLocalizedItem
 export const emptyIncluded = emptyLocalizedItem
@@ -77,6 +84,7 @@ export const emptyDay = (): TourDayFormState => ({
   duration: emptyLocalized(),
   routePoints: [],
   gallery: [],
+  autofilledImageKeys: {},
 })
 
 /* -------------------------------------------------------------------------- */
@@ -113,6 +121,24 @@ export function placesToSuggestions(places: PlaceInfoModel[]): Localized[] {
   return places.map((p) => readLocalized(p.translations, CATALOG_NAME_TYPE))
 }
 
+/** Place catalog entries offered as a hard link for a route point (F13 gap closure) — distinct
+ * from `placesToSuggestions`, which only offers the bilingual name for free-text autocomplete. */
+export function placesToOptions(places: PlaceInfoModel[]): PlaceOption[] {
+  return places.map((p) => ({
+    id: p.id,
+    name: readLocalized(p.translations, CATALOG_NAME_TYPE),
+    images: placeImageUrls(p),
+  }))
+}
+
+/** Same `images`-then-`imageUrl` fallback as the backend's `RoutePointGalleryImageCopier`, so the
+ * live gallery autofill offers exactly what a save would otherwise have copied in. */
+function placeImageUrls(place: PlaceInfoModel): string[] {
+  if (place.images.length > 0) return sortBySortOrder(place.images).map((img) => img.url)
+  const fallback = place.imageUrl.trim()
+  return fallback ? [fallback] : []
+}
+
 export function expenseTemplatesToSuggestions(templates: ExpenseTemplateInfoModel[]): Localized[] {
   return templates.map((t) => readLocalized(t.translations, CATALOG_NAME_TYPE))
 }
@@ -144,6 +170,9 @@ export function createModelToForm(dto: TourCreateModel): TourFormState {
     mainImageUrl: dto.mainImageUrl ?? '',
     isActive: dto.isActive,
     requiresPrepayment: dto.requiresPrepayment,
+    discountPercent: dto.discountPercent == null ? '' : String(dto.discountPercent),
+    discountStartDate: dto.discountStartDate ?? '',
+    discountValidUntil: dto.discountValidUntil ?? '',
     title: readLocalized(dto.translations, TourTranslationType.Title),
     shortDescription: readLocalized(dto.translations, TourTranslationType.ShortDescription),
     description: readLocalized(dto.translations, TourTranslationType.Description),
@@ -179,6 +208,7 @@ export function createModelToForm(dto: TourCreateModel): TourFormState {
       description: readLocalized(e.translations ?? [], ExpenseTranslationType.Description),
     })),
     regions: sortBySortOrder(dto.regions ?? []).map((r) => ({ regionId: r.regionId })),
+    tags: (dto.tags ?? []).map((tg) => ({ tagId: tg.tagId })),
   }
 }
 
@@ -189,6 +219,9 @@ export function infoToForm(dto: TourInfoModel): TourFormState {
     mainImageUrl: dto.mainImageUrl ?? '',
     isActive: dto.isActive,
     requiresPrepayment: dto.requiresPrepayment,
+    discountPercent: dto.discountPercent == null ? '' : String(dto.discountPercent),
+    discountStartDate: dto.discountStartDate ?? '',
+    discountValidUntil: dto.discountValidUntil ?? '',
     title: readLocalized(dto.translations, TourTranslationType.Title),
     shortDescription: readLocalized(dto.translations, TourTranslationType.ShortDescription),
     description: readLocalized(dto.translations, TourTranslationType.Description),
@@ -229,6 +262,7 @@ export function infoToForm(dto: TourInfoModel): TourFormState {
       description: readLocalized(e.translations ?? [], ExpenseTranslationType.Description),
     })),
     regions: sortBySortOrder(dto.regions ?? []).map((r) => ({ serverId: r.id, regionId: r.regionId })),
+    tags: (dto.tags ?? []).map((tg) => ({ serverId: tg.id, tagId: tg.tagId })),
   }
 }
 
@@ -243,8 +277,10 @@ function createDayToForm(day: TourDayCreateModel): TourDayFormState {
     routePoints: (day.routePoints ?? []).map((rp) => ({
       key: newKey(),
       text: readLocalized(rp.translations ?? [], ExpenseTranslationType.Description),
+      placeId: rp.placeId ?? null,
     })),
     gallery: (day.galleryImages ?? []).map((g) => ({ key: newKey(), url: g.url })),
+    autofilledImageKeys: {},
   }
 }
 
@@ -262,12 +298,14 @@ function infoDayToForm(day: TourDayInfoModel): TourDayFormState {
       key: newKey(),
       serverId: rp.id,
       text: readLocalized(rp.translations ?? [], ExpenseTranslationType.Description),
+      placeId: rp.placeId ?? null,
     })),
     gallery: byOrder(day.galleryImages ?? []).map((g) => ({
       key: newKey(),
       serverId: g.id,
       url: g.url,
     })),
+    autofilledImageKeys: {},
   }
 }
 
@@ -300,6 +338,9 @@ export function formToCreateModel(form: TourFormState): TourCreateModel {
     mainImageUrl: form.mainImageUrl.trim() === '' ? null : form.mainImageUrl.trim(),
     isActive: form.isActive,
     requiresPrepayment: form.requiresPrepayment,
+    discountPercent: form.discountPercent.trim() === '' ? null : parseDecimal(form.discountPercent),
+    discountStartDate: form.discountStartDate.trim() === '' ? null : form.discountStartDate,
+    discountValidUntil: form.discountValidUntil.trim() === '' ? null : form.discountValidUntil,
     translations: [
       ...writeLocalized(TourTranslationType.Title, form.title),
       ...writeLocalized(TourTranslationType.ShortDescription, form.shortDescription),
@@ -319,6 +360,7 @@ export function formToCreateModel(form: TourFormState): TourCreateModel {
         galleryImages: day.gallery.map((g, i) => ({ url: g.url, sortOrder: i })),
         routePoints: day.routePoints.map((rp, i) => ({
           sortOrder: i,
+          placeId: rp.placeId,
           translations: writeLocalized(ExpenseTranslationType.Description, rp.text),
         })),
       }
@@ -350,6 +392,7 @@ export function formToCreateModel(form: TourFormState): TourCreateModel {
       })),
     ],
     regions: form.regions.map((r, i) => ({ regionId: r.regionId, sortOrder: i })),
+    tags: form.tags.map((tg) => ({ tagId: tg.tagId })),
   }
 }
 
@@ -388,6 +431,9 @@ export function formToUpdateModel(form: TourFormState, tourId: number): TourInfo
     featuredSortOrder: 0,
     // NOT ignored by UpdateTour, unlike the three flags above (B12, 2026-08-13).
     requiresPrepayment: form.requiresPrepayment,
+    discountPercent: form.discountPercent.trim() === '' ? null : parseDecimal(form.discountPercent),
+    discountStartDate: form.discountStartDate.trim() === '' ? null : form.discountStartDate,
+    discountValidUntil: form.discountValidUntil.trim() === '' ? null : form.discountValidUntil,
     mainImageUrl: form.mainImageUrl.trim() === '' ? null : form.mainImageUrl.trim(),
     translations: asInfoTranslations([
       ...writeLocalized(TourTranslationType.Title, form.title),
@@ -410,6 +456,7 @@ export function formToUpdateModel(form: TourFormState, tourId: number): TourInfo
       routePoints: day.routePoints.map((rp, i) => ({
         id: rp.serverId ?? NEW,
         sortOrder: i,
+        placeId: rp.placeId,
         translations: asInfoTranslations(writeLocalized(ExpenseTranslationType.Description, rp.text)),
       })),
       }
@@ -451,6 +498,9 @@ export function formToUpdateModel(form: TourFormState, tourId: number): TourInfo
     // ignores it, matching by `RegionId`) — sent blank rather than threading the full region list
     // through just to fill a field nothing reads.
     regions: form.regions.map((r, i) => ({ id: r.serverId ?? NEW, regionId: r.regionId, slug: '', sortOrder: i })),
+    // Always the real list too (never omitted) — same "the admin form can express it, so never
+    // rely on the backend's null-means-untouched contract" reasoning as `regions` above.
+    tags: form.tags.map((tg) => ({ id: tg.serverId ?? NEW, tagId: tg.tagId })),
   }
 }
 
@@ -458,4 +508,75 @@ export function formToUpdateModel(form: TourFormState, tourId: number): TourInfo
 function parseDecimal(value: string): number {
   const n = Number(value.replace(',', '.'))
   return Number.isFinite(n) ? n : 0
+}
+
+/* -------------------------------------------------------------------------- */
+/*  "Заполнить день из другого продукта" (F13 gap closure, part 2)             */
+/* -------------------------------------------------------------------------- */
+
+/** What a day-fill actually copies: text + route points (with their Place link). Deliberately
+ * excludes price (stays the target day's own) and the gallery URLs themselves — a copied route
+ * point's images are derived live from its `placeId` by the reducer's `fillDayFromSource` case
+ * instead, the same live autofill a manual pick in `RoutePointPlaceSelect` triggers. */
+export interface DaySourceContent {
+  title: Localized
+  shortDescription: Localized
+  description: Localized
+  duration: Localized
+  routePoints: { text: Localized; placeId: number | null }[]
+}
+
+/** One pickable source in the "заполнить день из другого продукта" list — an excursion (its one
+ * day IS the product) or one day of a multi-day tour. */
+export interface DaySource {
+  id: string
+  tourTitle: Localized
+  /** e.g. "День 2" — empty for an excursion, whose single day needs no sub-label. */
+  dayLabel: string
+  content: DaySourceContent
+}
+
+/** Flattens every non-archived product's day(s) into pickable sources. `excludeTourId` drops the
+ * tour currently being edited — filling a day from itself is meaningless. */
+export function toursToDaySources(tours: TourInfoModel[], excludeTourId?: number): DaySource[] {
+  return tours
+    .filter((t) => t.id !== excludeTourId)
+    .flatMap((t) => {
+      const tourTitle = readLocalized(t.translations, TourTranslationType.Title)
+      const days = t.tourDays ?? []
+      return days.map((day, i) => ({
+        id: `${t.id}-${day.id}`,
+        tourTitle,
+        dayLabel: days.length > 1 ? `День ${i + 1}` : '',
+        content: {
+          title: readLocalized(day.translations ?? [], TourDayTranslationType.Title),
+          shortDescription: readLocalized(day.translations ?? [], TourDayTranslationType.ShortDescription),
+          description: readLocalized(day.translations ?? [], TourDayTranslationType.Description),
+          duration: readLocalized(day.translations ?? [], TourDayTranslationType.Duration),
+          routePoints: sortBySortOrder(day.routePoints ?? []).map((rp) => ({
+            text: readLocalized(rp.translations ?? [], ExpenseTranslationType.Description),
+            placeId: rp.placeId ?? null,
+          })),
+        },
+      }))
+    })
+}
+
+/** Whether a day (or, for an excursion, the tour-level fields standing in for its single day)
+ * has anything a fill would overwrite — gates the "replace content?" confirm step. */
+export function hasFillableDayContent(fields: {
+  title: Localized
+  shortDescription: Localized
+  description: Localized
+  duration: Localized
+  routePoints: unknown[]
+}): boolean {
+  const filled = (loc: Localized) => Boolean(loc.ru.trim() || loc.en.trim())
+  return (
+    fields.routePoints.length > 0 ||
+    filled(fields.title) ||
+    filled(fields.shortDescription) ||
+    filled(fields.description) ||
+    filled(fields.duration)
+  )
 }

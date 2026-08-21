@@ -35,10 +35,21 @@ namespace ATTours.BusinessServices.Services.InfoServices
 
         // Детальная одного тура: полный клиентский граф + переводы шаблонов каталога для резолва.
         // Not-found-фильтр (черновик/архив = 404) остаётся в контроллере, как и раньше.
+        //
+        // AsSplitQuery (2026-08-16): этот граф тянет ~8 sibling-коллекций с одного корня
+        // (TourDetails→TourDay→{Translations, GalleryImages, RoutePoints→...}, плюс
+        // Translations/AdditionalExpenses/Notes/TourRegions/TourTags на самом Tour). Одним
+        // JOIN-запросом (дефолт EF Core) это даёт cartesian-произведение строк по ВСЕМ
+        // коллекциям сразу — с малым числом фото в галерее дня незаметно, но с реальной
+        // загрузкой в десятки фото на тур запрос уходил за 10 секунд (замерено вживую на
+        // проде после жалобы "долго открывается тур"). AsSplitQuery меняет это на отдельный
+        // SQL-запрос по каждой коллекции — то же дерево данных, на порядки быстрее на широких
+        // графах.
         public async Task<Tour> GetClientDetailAsync(int id, CancellationToken cancellationToken = default)
         {
             return await GetEntityQueryableRepository()
                 .IncludeTourGraphForClient()
+                .AsSplitQuery()
                 .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         }
     }

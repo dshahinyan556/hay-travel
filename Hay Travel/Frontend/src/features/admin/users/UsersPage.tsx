@@ -151,7 +151,7 @@ export function UsersPage() {
       <section className="rounded-xl border border-neutral-200 bg-white px-4 py-3.5">
         <h2 className="text-sm font-semibold text-neutral-800">Что даёт роль</h2>
         <dl className="mt-2 flex flex-col gap-1.5 text-sm">
-          {[RoleType.Regular, RoleType.TourManager, RoleType.Admin].map((role) => (
+          {[RoleType.Regular, RoleType.Employee, RoleType.TourManager, RoleType.Admin].map((role) => (
             <div key={role} className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
               <dt className="font-semibold text-neutral-700 sm:w-40 sm:shrink-0">
                 {roleLabels[role]}

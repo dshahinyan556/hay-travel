@@ -104,7 +104,7 @@ export function CalendarPage() {
     () =>
       selectedISO === null
         ? []
-        : (data?.orders.filter((order) => order.tourDate === selectedISO) ?? []),
+        : (data?.orders.filter((line) => line.tourDate === selectedISO) ?? []),
     [data, selectedISO],
   )
 

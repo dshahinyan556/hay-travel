@@ -23,6 +23,42 @@ export const tourTypeLabels: Record<TourType, string> = {
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Tags                                                                       */
+/* -------------------------------------------------------------------------- */
+
+/** Purely cosmetic — mirrors backend `TagType`. Скидка тура больше не тег (Фаза 3/7,
+ * checklist-orders-redesign.txt) — она живёт прямо на туре, см. `TourFormState.discountPercent`.
+ * Single-member on purpose (kept as an object, not inlined, so a future second tag kind doesn't
+ * need every call site rewritten). */
+export const TagType = {
+  Regular: 1,
+} as const
+
+export type TagType = (typeof TagType)[keyof typeof TagType]
+
+/** One of the site's own palette tokens (`--color-gold`/`wine`/`success`/`danger`/`warning`) —
+ * never a free hex, so a new tag is guaranteed to read in both themes. Mirrors backend
+ * `TagColor`. Rendering (Tailwind classes per color) lives in `shared/ui/ProductTag.tsx`, the
+ * one place both the admin picker and the public card agree on. */
+export const TagColor = {
+  Gold: 1,
+  Wine: 2,
+  Success: 3,
+  Danger: 4,
+  Warning: 5,
+} as const
+
+export type TagColor = (typeof TagColor)[keyof typeof TagColor]
+
+export const tagColorLabels: Record<TagColor, string> = {
+  [TagColor.Gold]: 'Золотой',
+  [TagColor.Wine]: 'Бордовый',
+  [TagColor.Success]: 'Зелёный',
+  [TagColor.Danger]: 'Красный',
+  [TagColor.Warning]: 'Оранжевый',
+}
+
+/* -------------------------------------------------------------------------- */
 /*  Language                                                                   */
 /* -------------------------------------------------------------------------- */
 

@@ -26,6 +26,8 @@ ASPNETCORE_ENVIRONMENT=Development dotnet ef database update --project ATTours.D
 - [admin-panel.md](admin-panel.md) — админ-панель: роуты, каркас, сайдбар/мобильное меню, дашборд, страница «Продукты».
 - [product-model.md](product-model.md) — как устроен продукт: тур vs экскурсия, форма, цена, валидации, архив, переводы.
 - [backend-api.md](backend-api.md) — контракт бэкенда: енумы, эндпоинты, ключевые правила.
+- [tech-debt.md](tech-debt.md) — сознательно отложенные решения, проверять при новых сессиях.
+- [server-ops.md](server-ops.md) — продовый сервер (netcup): доступ, команды, деплой, секреты.
 - [CHANGELOG.md](CHANGELOG.md) — история изменений.
 
 ## Правило документации

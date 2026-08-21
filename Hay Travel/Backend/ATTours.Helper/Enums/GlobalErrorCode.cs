@@ -79,6 +79,18 @@ namespace ATTours.Helper.Enums
         OrderNotEditable = 2021,
         [Description("Date cannot be in the past.")]
         ClosureDateInPast = 2022,
+        [Description("Tag not found.")]
+        TagNotFound = 2023,
+        [Description("A tour can have at most 3 tags.")]
+        TooManyTags = 2024,
+        [Description("Tour discount percent/valid-until date are invalid or incomplete.")]
+        InvalidTourDiscount = 2025,
+        [Description("Order line not found.")]
+        OrderLineNotFound = 2026,
+        [Description("Selected user is not an employee.")]
+        UserIsNotEmployee = 2027,
+        [Description("Order must have at least one line.")]
+        OrderMustHaveAtLeastOneLine = 2028,
 
         #endregion
 
@@ -130,6 +142,15 @@ namespace ATTours.Helper.Enums
         AdminAccountImmutable = 2215,
         [Description("Only a super administrator can manage administrator accounts.")]
         SuperAdminPrivilegeRequired = 2216,
+        #endregion
+
+        #region UploadErrors
+        [Description("Uploaded file exceeds the maximum allowed size.")]
+        UploadFileTooLarge = 2300,
+        [Description("Uploaded file type is not allowed.")]
+        UploadContentTypeNotAllowed = 2301,
+        [Description("Uploaded file is not a valid image.")]
+        UploadInvalidImage = 2302,
         #endregion
 
         [Description("Endpoint not existing")]

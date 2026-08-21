@@ -1,12 +1,13 @@
-import { Card, Checkbox, Field, Input } from '@/shared/ui'
+import { Card, Checkbox, DatePicker, Field, Input } from '@/shared/ui'
 import { TourType } from '@/features/admin/lib/enums'
 import type { TourFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
 import { computeTotalPrice, formatTotalPrice } from '@/features/admin/tour-form/lib/price'
 import { ImageUrlField } from '@/features/admin/ui/ImageUrlField'
 import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
-import type { RegionInfoModel } from '@/shared/types/attours'
+import type { RegionInfoModel, TagInfoModel } from '@/shared/types/attours'
 import { RegionPicker } from './RegionPicker'
+import { TagPicker } from './TagPicker'
 import { TourTypeToggle } from './TourTypeToggle'
 
 interface TourFormHeaderProps {
@@ -16,10 +17,18 @@ interface TourFormHeaderProps {
   titleRuError?: string
   /** Negative-price error for the excursion's single-day price shown here. */
   excursionPriceError?: string
+  /** Discount percent error (bad range, or a discount date without a percent). */
+  discountPercentError?: string
+  /** Discount start-date error (missing while the rest is set, or later than the end date). */
+  discountStartDateError?: string
+  /** Discount valid-until error (missing while a percent is set). */
+  discountValidUntilError?: string
   /** When true (edit mode) the type toggle is locked — type is immutable after creation. */
   typeLocked?: boolean
   /** The fixed 11-region reference list, for the region picker (4.4). */
   regions: RegionInfoModel[]
+  /** The tag catalog, for the tag picker. */
+  tags: TagInfoModel[]
 }
 
 /**
@@ -36,8 +45,12 @@ export function TourFormHeader({
   mainImageUrlError,
   titleRuError,
   excursionPriceError,
+  discountPercentError,
+  discountStartDateError,
+  discountValidUntilError,
   typeLocked,
   regions,
+  tags,
 }: TourFormHeaderProps) {
   const isExcursion = state.type === TourType.Excursion
   const totalPrice = computeTotalPrice(state.days)
@@ -118,6 +131,8 @@ export function TourFormHeader({
 
         <RegionPicker regions={regions} selected={state.regions} onToggle={actions.toggleRegion} />
 
+        <TagPicker tags={tags} selected={state.tags} onToggle={actions.toggleTag} />
+
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-semibold text-neutral-700">Публикация</span>
           <Checkbox
@@ -134,6 +149,54 @@ export function TourFormHeader({
             checked={state.requiresPrepayment}
             onChange={(e) => actions.setRequiresPrepayment(e.target.checked)}
           />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-semibold text-neutral-700">Скидка</span>
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="w-32">
+              <Field label="Размер, %" htmlFor="tour-discount-percent" error={discountPercentError}>
+                <Input
+                  id="tour-discount-percent"
+                  type="text"
+                  inputMode="decimal"
+                  value={state.discountPercent}
+                  onChange={(e) => actions.setDiscountPercent(e.target.value)}
+                  placeholder="15"
+                  error={Boolean(discountPercentError)}
+                />
+              </Field>
+            </div>
+            <div className="w-full sm:w-52">
+              <Field label="Дата начала" htmlFor="tour-discount-start-date" error={discountStartDateError}>
+                <DatePicker
+                  id="tour-discount-start-date"
+                  value={state.discountStartDate}
+                  onChange={actions.setDiscountStartDate}
+                  surface="admin"
+                  // Прошедшая дата начала разрешена: акция может уже идти, и при
+                  // редактировании тура её начало нужно уметь выбрать заново.
+                  disablePast={false}
+                  error={Boolean(discountStartDateError)}
+                />
+              </Field>
+            </div>
+            <div className="w-full sm:w-52">
+              <Field label="Действует до" htmlFor="tour-discount-valid-until" error={discountValidUntilError}>
+                <DatePicker
+                  id="tour-discount-valid-until"
+                  value={state.discountValidUntil}
+                  onChange={actions.setDiscountValidUntil}
+                  surface="admin"
+                  error={Boolean(discountValidUntilError)}
+                />
+              </Field>
+            </div>
+          </div>
+          <p className="text-xs text-neutral-400">
+            Скидка действует с даты начала по дату окончания включительно. После даты окончания
+            она перестаёт применяться сама — снимать вручную не нужно.
+          </p>
         </div>
       </div>
     </Card>

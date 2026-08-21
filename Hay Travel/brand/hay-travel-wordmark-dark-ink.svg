@@ -1,0 +1,11 @@
+<svg viewBox="0 0 600 150" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hay Travel">
+  <!-- Wordmark, dark ink — for light/cream backgrounds. Display face matches the site's own
+       font-display token (Prata), so the mark and the live header read as the same brand. -->
+  <text x="300" y="76" text-anchor="middle"
+        font-family="Prata, 'Bodoni MT', Didot, Georgia, serif"
+        font-size="60" letter-spacing="0.5" fill="#241A10">Hay Travel</text>
+  <line x1="220" y1="98" x2="380" y2="98" stroke="#C9974B" stroke-width="1.5" />
+  <text x="300" y="124" text-anchor="middle"
+        font-family="Manrope, ui-sans-serif, system-ui, sans-serif"
+        font-size="13" font-weight="600" letter-spacing="4.5" fill="#6B5A3E">ARMENIA TRAVEL</text>
+</svg>

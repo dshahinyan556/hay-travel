@@ -1,81 +1,146 @@
-import { resolveTier } from '@/shared/currency/pricing'
-import type { OrderInfoModel } from '@/shared/types/booking'
+import { useState } from 'react'
+import { Button, Input, Select } from '@/shared/ui'
+import { OrderPaymentType, type OrderInfoModel } from '@/shared/types/booking'
 import { formatOrderMoney, ordersCopy } from '../lib/ordersCopy'
 
 export interface OrderPaymentTabProps {
   order: OrderInfoModel
+  pending: boolean
+  onAddPayment: (lineId: number, type: OrderPaymentType, amount: number) => void
+}
+
+const paymentTypeLabels: Record<OrderPaymentType, string> = {
+  [OrderPaymentType.Prepayment]: ordersCopy.paymentTypePrepayment,
+  [OrderPaymentType.Payment]: ordersCopy.paymentTypePayment,
+}
+
+const typeOptions = [
+  { value: String(OrderPaymentType.Prepayment), label: ordersCopy.paymentTypePrepayment },
+  { value: String(OrderPaymentType.Payment), label: ordersCopy.paymentTypePayment },
+]
+
+function AddPaymentForm({
+  pending,
+  onAdd,
+}: {
+  pending: boolean
+  onAdd: (type: OrderPaymentType, amount: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [type, setType] = useState(String(OrderPaymentType.Prepayment))
+  const [amount, setAmount] = useState('')
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => setOpen(true)}
+        className="min-h-9 self-start rounded-lg px-2.5 py-1 text-sm font-medium text-brand-700 transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        + {ordersCopy.addPayment}
+      </button>
+    )
+  }
+
+  const numericAmount = Number(amount)
+  const canSubmit = amount !== '' && Number.isFinite(numericAmount) && numericAmount > 0
+
+  return (
+    <div className="flex flex-wrap items-end gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+      <label className="text-xs text-neutral-500">
+        {ordersCopy.paymentTypeLabel}
+        <Select surface="admin" value={type} onChange={setType} options={typeOptions} className="mt-1 w-36" />
+      </label>
+      <label className="text-xs text-neutral-500">
+        {ordersCopy.paymentAmountLabel}
+        <Input
+          type="number"
+          min={0}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="mt-1 w-28"
+        />
+      </label>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={pending || !canSubmit}
+          onClick={() => {
+            onAdd(Number(type) as OrderPaymentType, numericAmount)
+            setOpen(false)
+            setAmount('')
+          }}
+          className="min-h-11"
+        >
+          {ordersCopy.paymentSubmit}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          disabled={pending}
+          onClick={() => setOpen(false)}
+          className="min-h-11"
+        >
+          {ordersCopy.paymentCancel}
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 /**
- * "Оплата" tab of `OrderDetailPage`. Two states:
- *  - `resolveTier(guestCount) === 'hidden'` (7+ guests): the public site never showed this
- *    visitor a price (`BookingCard`'s `largeGroupInvitation`), and `OrderCreationService` mirrors
- *    that by leaving `TotalAmount` at 0 rather than inventing a number — so this tab says "цена по
- *    запросу" instead of "0 AMD", which would read as a bug.
- *  - Otherwise: snapshot/total as plain numbers, prepayment as a filled bar instead of the old
- *    flat "не внесена" text line (B12 redesign, 2026-08-13 — replaces the plain-text prepayment
- *    row after Давид found it unclear).
+ * "Оплата" tab (checklist Фаза 10) — `OrderPayment` is now a LEDGER of transactions per line
+ * (ADR 019), not a single снапшот total: each line gets its own list of entries plus a form to add
+ * one manually (there is no payment gateway; the admin records the fact of payment themselves).
  */
-export function OrderPaymentTab({ order }: OrderPaymentTabProps) {
-  const { payment } = order
-  const quoteNeeded = resolveTier(order.guestCount) === 'hidden'
-  const prepaidRatio = payment.totalAmount > 0 ? payment.prepaidAmount / payment.totalAmount : 0
-  const prepaidPercent = Math.max(0, Math.min(100, Math.round(prepaidRatio * 100)))
-
+export function OrderPaymentTab({ order, pending, onAddPayment }: OrderPaymentTabProps) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-xl border border-neutral-200 bg-white p-4 text-sm">
-        <p className="text-xs text-neutral-500">{ordersCopy.tourPriceSnapshotLabel}</p>
-        <p className="mt-0.5 text-lg font-semibold tabular-nums text-neutral-900">
-          {formatOrderMoney(payment.tourPriceSnapshot, payment.currency)}
-        </p>
-      </div>
+      {order.lines.map((line) => (
+        <div key={line.id} className="rounded-xl border border-neutral-200 bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="font-semibold text-neutral-900">{line.tourTitle ?? `Тур #${line.tourId}`}</p>
+              <p className="text-xs text-neutral-500">{line.tourDate}</p>
+            </div>
+            <p className="text-xs text-neutral-500">
+              {line.requiresPrepayment
+                ? ordersCopy.linePrepaymentRequired(formatOrderMoney(line.prepaymentAmount, order.currency))
+                : ordersCopy.linePrepaymentNotRequired}
+            </p>
+          </div>
 
-      {quoteNeeded ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          <p className="font-semibold">{ordersCopy.quoteNeeded}</p>
-          <p className="mt-1 text-amber-700">{ordersCopy.quoteNeededHint}</p>
+          {line.payments.length === 0 ? (
+            <p className="mt-3 rounded-lg border border-dashed border-neutral-200 px-3 py-4 text-center text-sm text-neutral-500">
+              {ordersCopy.paymentsEmpty}
+            </p>
+          ) : (
+            <ul className="mt-3 flex flex-col gap-1.5">
+              {line.payments.map((payment) => (
+                <li
+                  key={payment.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-neutral-50 px-3 py-2 text-sm"
+                >
+                  <span className="text-neutral-600">
+                    {paymentTypeLabels[payment.type]} · №{payment.number} ·{' '}
+                    {new Date(payment.createdAtUtc).toLocaleString('ru-RU')}
+                  </span>
+                  <span className="font-semibold tabular-nums text-neutral-900">
+                    {formatOrderMoney(payment.amount, order.currency)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="mt-3">
+            <AddPaymentForm pending={pending} onAdd={(type, amount) => onAddPayment(line.id, type, amount)} />
+          </div>
         </div>
-      ) : (
-        <>
-          <div className="rounded-xl border border-neutral-200 bg-white p-4 text-sm">
-            <p className="text-xs text-neutral-500">{ordersCopy.totalAmountLabel}</p>
-            <p className="mt-0.5 text-lg font-semibold tabular-nums text-neutral-900">
-              {formatOrderMoney(payment.totalAmount, payment.currency)}
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-neutral-200 bg-white p-4 text-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-neutral-500">{ordersCopy.prepaidAmountLabel}</p>
-              <p className="text-xs font-semibold tabular-nums text-neutral-600">{prepaidPercent}%</p>
-            </div>
-            <div
-              role="progressbar"
-              aria-valuenow={prepaidPercent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={ordersCopy.prepaidAmountLabel}
-              className="mt-2 h-2 w-full overflow-hidden rounded-full bg-neutral-100"
-            >
-              <div
-                className={`h-full rounded-full transition-[width] ${
-                  payment.prepaidAmount > 0 ? 'bg-brand-600' : 'bg-neutral-200'
-                }`}
-                style={{ width: `${prepaidPercent}%` }}
-              />
-            </div>
-            <p className="mt-2 font-medium text-neutral-900">
-              {payment.prepaidAmount > 0
-                ? ordersCopy.prepaidOf(
-                    formatOrderMoney(payment.prepaidAmount, payment.currency),
-                    formatOrderMoney(payment.totalAmount, payment.currency),
-                  )
-                : ordersCopy.prepaidNone}
-            </p>
-          </div>
-        </>
-      )}
+      ))}
     </div>
   )
 }

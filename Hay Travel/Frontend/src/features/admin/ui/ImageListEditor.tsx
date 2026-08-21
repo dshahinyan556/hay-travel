@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { DragHandle, Input, SortableList } from '@/shared/ui'
+import { adaptiveImageUrl } from '@/shared/lib/adaptiveImage'
 import { AddButton, RemoveButton } from './RepeaterControls'
+import { ImageUploadButton } from './ImageUploadButton'
 
 /** One row of an image-list repeater — a tour day's gallery, or a catalog Place's photos.
  * `sortOrder` on the wire is derived from array index. */
@@ -44,8 +46,9 @@ function Thumb({ url }: { url: string }) {
 
   return (
     <img
-      src={trimmed}
+      src={adaptiveImageUrl(trimmed)}
       alt=""
+      loading="lazy"
       className="h-8 w-11 shrink-0 rounded-md object-cover"
       onError={() => setFailed(true)}
     />
@@ -87,6 +90,11 @@ export function ImageListEditor({ items, onAdd, onRemove, onReorder, onChangeUrl
                   aria-label={`Ссылка на картинку ${index + 1}`}
                   placeholder="https://…"
                   className="min-w-0 flex-1 text-sm"
+                />
+                <ImageUploadButton
+                  compact
+                  label={`Загрузить файл вместо картинки ${index + 1}`}
+                  onUploaded={(url) => onChangeUrl(item.key, url)}
                 />
                 <RemoveButton onClick={() => onRemove(item.key)} label="Удалить картинку" />
               </li>

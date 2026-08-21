@@ -1,0 +1,9 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hay Travel">
+  <!-- Round mark for Instagram/social avatars. Same ink pair as the wordmark (obsidian +
+       gold), reduced to the initials so it holds up at 32px in a feed. -->
+  <circle cx="256" cy="256" r="256" fill="#0F0C08" />
+  <text x="256" y="298" text-anchor="middle"
+        font-family="Prata, 'Bodoni MT', Didot, Georgia, serif"
+        font-size="200" letter-spacing="4" fill="#D9B45A">HT</text>
+  <line x1="196" y1="330" x2="316" y2="330" stroke="#D9B45A" stroke-width="3" />
+</svg>

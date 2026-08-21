@@ -53,5 +53,21 @@ namespace ATTours.BusinessServices.Email
                 settings.AdminNotificationEmail, tourTitle, tourDate, guestCount, customerName, customerEmail);
             return Task.CompletedTask;
         }
+
+        public Task SendOrderDocumentAsync(string toEmail, string toName, string orderNumber, byte[] pdfDocument,
+            CancellationToken cancellationToken = default)
+        {
+            logger.LogInformation("[DevEmailSender] Order document for {Email}: order {OrderNumber}, {Bytes} bytes",
+                toEmail, orderNumber, pdfDocument.Length);
+            return Task.CompletedTask;
+        }
+
+        public Task SendAssignmentAsync(string toEmail, string toName, string orderNumber, string assignmentDetails,
+            byte[] pdfDocument, CancellationToken cancellationToken = default)
+        {
+            logger.LogInformation("[DevEmailSender] Assignment for {Email}: order {OrderNumber}, {Bytes} bytes\n{Details}",
+                toEmail, orderNumber, pdfDocument.Length, assignmentDetails);
+            return Task.CompletedTask;
+        }
     }
 }

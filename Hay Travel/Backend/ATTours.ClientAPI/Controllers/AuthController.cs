@@ -10,7 +10,7 @@ namespace ATTours.ClientAPI.Controllers
     [ApiController]
     [Route("api/[controller]")]
     [AllowAnonymous]
-    public class AuthController(IAuthService authService) : Controller
+    public class AuthController(IAuthService authService, IWebHostEnvironment env) : Controller
     {
         // Refresh-токен живёт только в httpOnly-cookie: он недоступен JavaScript, поэтому
         // XSS не может его украсть, а Path сужает отправку до самих auth-эндпоинтов.
@@ -32,6 +32,23 @@ namespace ATTours.ClientAPI.Controllers
         public async Task<LoginResultModel> LoginAsync([FromBody] LoginModel model, CancellationToken cancellationToken)
         {
             var outcome = await authService.LoginAsync(model, BuildRequestContext(), cancellationToken);
+            SetRefreshTokenCookie(outcome.RefreshToken);
+            return outcome.Result;
+        }
+
+        // Дев-бэкдор для локального UI-тестирования без пароля (Давид, 2026-08-16,
+        // checklist-orders-redesign.txt) — 404 в любом окружении, кроме Development
+        // (Dockerfile прода всегда ставит ASPNETCORE_ENVIRONMENT=Production). НИКОГДА не
+        // должен быть достижим в проде — это единственная защита, поэтому проверка тут,
+        // а не только "полагаться" на то, что её не вызовут.
+        [HttpPost]
+        [Route("DevLogin")]
+        public async Task<ActionResult<LoginResultModel>> DevLoginAsync([FromQuery] string email, CancellationToken cancellationToken)
+        {
+            if (!env.IsDevelopment())
+                return NotFound();
+
+            var outcome = await authService.DevLoginAsync(email, BuildRequestContext(), cancellationToken);
             SetRefreshTokenCookie(outcome.RefreshToken);
             return outcome.Result;
         }
