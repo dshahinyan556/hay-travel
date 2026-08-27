@@ -4,6 +4,7 @@ using ATTours.BusinessServices.Services.InfoServices;
 using ATTours.BusinessServices.Services.InitServices;
 using ATTours.BusinessServices.Services.UpdateServices;
 using ATTours.ClientAPI.Authorization;
+using ATTours.Common.Authorization;
 using ATTours.Common.Dto.Init;
 using ATTours.Common.DTO.Info;
 using ATTours.Common.DTO.Request;
@@ -12,7 +13,6 @@ using ATTours.Common.Enums;
 using ATTours.Exceptions;
 using ATTours.Helper.Enums;
 using AutoMapper;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Linq.Expressions;
 using System.Net;
@@ -21,13 +21,16 @@ namespace ATTours.ClientAPI.Controllers
 {
     // Доступ размечен пометодно, а не на контроллере: три эндпоинта в регионе
     // ClientEndpoints обслуживают публичный сайт и обязаны остаться анонимными.
+    // Админские методы гейтятся матрицей прав по ключу "products"
+    // (architecture-flexible-roles.md §0.3, §2.5): все операции над существующим туром —
+    // включая SetActive/SetArchived/SetFeatured/ReorderFeatured — это products.Update.
     [ApiController]
     [Route("api/[controller]")]
     public class TourController(IMapper mapper) : Controller
     {
         [HttpGet]
         [Route("InitTour")]
-        [Authorize(Roles = ApiRoles.TourManagerOrAdmin)]
+        [RequiresPermission(AdminScreens.Products, PermissionAction.View)]
         public async Task<TourCreateModel> InitTourAsync(TourType type)
         {
             var initializetionService = new TourInitializationService(type);
@@ -36,7 +39,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpPost]
         [Route("CreateTour")]
-        [Authorize(Roles = ApiRoles.TourManagerOrAdmin)]
+        [RequiresPermission(AdminScreens.Products, PermissionAction.Create)]
         public async Task<TourCreatedModel> CreateTourAsync([FromBody] TourCreateModel model)
         {
             var entity = mapper.Map<Tour>(model);
@@ -47,7 +50,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpPut]
         [Route("UpdateTour")]
-        [Authorize(Roles = ApiRoles.TourManagerOrAdmin)]
+        [RequiresPermission(AdminScreens.Products, PermissionAction.Update)]
         public async Task<TourInfoModel> UpdateTourAsync([FromBody] TourInfoModel model)
         {
             var entity = mapper.Map<Tour>(model);
@@ -58,7 +61,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpPatch]
         [Route("SetActive")]
-        [Authorize(Roles = ApiRoles.TourManagerOrAdmin)]
+        [RequiresPermission(AdminScreens.Products, PermissionAction.Update)]
         public async Task SetActiveAsync([FromBody] SetTourActiveModel model)
         {
             using var activationService = new TourActivationService();
@@ -67,7 +70,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpPatch]
         [Route("SetArchived")]
-        [Authorize(Roles = ApiRoles.TourManagerOrAdmin)]
+        [RequiresPermission(AdminScreens.Products, PermissionAction.Update)]
         public async Task SetArchivedAsync([FromBody] SetTourArchivedModel model)
         {
             using var archivalService = new TourArchivalService();
@@ -75,9 +78,11 @@ namespace ATTours.ClientAPI.Controllers
         }
 
         // Отметка/снятие «избранного» (не больше 6 одновременно, TourFeaturedService).
+        // Было Admin-only, стало products.Update (§0.3): курирование избранного — та же
+        // работа с контентом тура, которую и так ведёт тур-менеджер.
         [HttpPatch]
         [Route("SetFeatured")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Products, PermissionAction.Update)]
         public async Task SetFeaturedAsync([FromBody] SetTourFeaturedModel model)
         {
             using var featuredService = new TourFeaturedService();
@@ -87,7 +92,7 @@ namespace ATTours.ClientAPI.Controllers
         // Порядок внутри избранного — полный список Id уже избранных туров в желаемом порядке.
         [HttpPatch]
         [Route("ReorderFeatured")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Products, PermissionAction.Update)]
         public async Task ReorderFeaturedAsync([FromBody] ReorderFeaturedToursModel model)
         {
             using var featuredService = new TourFeaturedService();
@@ -96,7 +101,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpDelete]
         [Route("DeleteTour")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Products, PermissionAction.Delete)]
         public async Task DeleteTourAsync([FromQuery] int id)
         {
             using var deletionService = new TourDeletionService();
@@ -105,7 +110,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpGet]
         [Route("GetAll")]
-        [Authorize(Roles = ApiRoles.TourManagerOrAdmin)]
+        [RequiresPermission(AdminScreens.Products, PermissionAction.View)]
         public async Task<List<TourInfoModel>> GetToursAsync()
         {
             using var info = new TourInfo();
@@ -116,7 +121,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpGet]
         [Route("GetArchived")]
-        [Authorize(Roles = ApiRoles.TourManagerOrAdmin)]
+        [RequiresPermission(AdminScreens.Products, PermissionAction.View)]
         public async Task<List<TourInfoModel>> GetArchivedToursAsync()
         {
             using var info = new TourInfo();
@@ -126,7 +131,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpGet]
         [Route("InitUpdate")]
-        [Authorize(Roles = ApiRoles.TourManagerOrAdmin)]
+        [RequiresPermission(AdminScreens.Products, PermissionAction.View)]
         public async Task<TourInfoModel> InitUpdate([FromQuery] int id)
         {
             using var info = new TourInfo();

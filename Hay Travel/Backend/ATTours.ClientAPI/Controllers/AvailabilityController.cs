@@ -2,19 +2,21 @@ using ATTours.BusinessServices.Services.CreateServices;
 using ATTours.BusinessServices.Services.DeleteServices;
 using ATTours.BusinessServices.Services.InfoServices;
 using ATTours.ClientAPI.Authorization;
+using ATTours.Common.Authorization;
 using ATTours.Common.DTO.Info;
 using ATTours.Common.DTO.Init;
 using ATTours.Common.Entities;
+using ATTours.Common.Enums;
 using ATTours.Common.Settings;
 using AutoMapper;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ATTours.ClientAPI.Controllers
 {
     // Занятость и правила закрытия (spec 001, ADR 012). Админ-календарь и управление
-    // правилами — только для админа; публичным остаётся единственный эндпоинт
-    // GetClosedDates, которым booking-card гасит недоступные дни.
+    // правилами — по ключу прав "calendar" (Update у него нет: правка правила это
+    // удалить + создать); публичным остаётся единственный эндпоинт GetClosedDates,
+    // которым booking-card гасит недоступные дни.
     [ApiController]
     [Route("api/[controller]")]
     public class AvailabilityController(IMapper mapper) : Controller
@@ -22,7 +24,7 @@ namespace ATTours.ClientAPI.Controllers
         // Месяц целиком: закрытия + занятость по дням. Собирается сервисом, не маппером.
         [HttpGet]
         [Route("GetCalendar")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Calendar, PermissionAction.View)]
         public async Task<CalendarMonthModel> GetCalendarAsync([FromQuery] int year, [FromQuery] int month, CancellationToken cancellationToken)
         {
             using var info = new OrderCalendarInfo(cancellationToken);
@@ -33,7 +35,7 @@ namespace ATTours.ClientAPI.Controllers
         // набора, и админке нужно видеть полную картину, а не только tour-scope строки.
         [HttpGet]
         [Route("GetRules")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Calendar, PermissionAction.View)]
         public async Task<List<ClosureRuleInfoModel>> GetRulesAsync([FromQuery] int? tourId, CancellationToken cancellationToken)
         {
             using var info = new ClosureRuleInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
@@ -51,7 +53,7 @@ namespace ATTours.ClientAPI.Controllers
         // Редактирования правил нет — изменение это удалить + создать (ADR 012).
         [HttpPost]
         [Route("CreateRules")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Calendar, PermissionAction.Create)]
         public async Task<List<ClosureRuleInfoModel>> CreateRulesAsync([FromBody] List<ClosureRuleCreateModel> models, CancellationToken cancellationToken)
         {
             var entities = mapper.Map<List<ClosureRule>>(models);
@@ -71,7 +73,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpDelete]
         [Route("DeleteRule")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Calendar, PermissionAction.Delete)]
         public async Task DeleteRuleAsync([FromQuery] int id, CancellationToken cancellationToken)
         {
             using var deletionService = new ClosureRuleDeletionService(cancellationToken);
@@ -83,7 +85,7 @@ namespace ATTours.ClientAPI.Controllers
         // какие id он собрал перед вызовом.
         [HttpDelete]
         [Route("DeleteRules")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Calendar, PermissionAction.Delete)]
         public async Task DeleteRulesAsync([FromBody] List<int> ids, CancellationToken cancellationToken)
         {
             using var deletionService = new ClosureRuleDeletionService(cancellationToken);

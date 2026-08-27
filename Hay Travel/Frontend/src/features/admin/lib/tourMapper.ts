@@ -537,8 +537,16 @@ export interface DaySource {
 }
 
 /** Flattens every non-archived product's day(s) into pickable sources. `excludeTourId` drops the
- * tour currently being edited — filling a day from itself is meaningless. */
-export function toursToDaySources(tours: TourInfoModel[], excludeTourId?: number): DaySource[] {
+ * tour currently being edited — filling a day from itself is meaningless.
+ *
+ * `dayLabel` formats the "День 2"/"Day 2" sub-label. It is a parameter rather than a literal
+ * because this function is pure and runs inside a route loader, where there is no `useCopy` —
+ * the caller passes `tourFormCopy(locale).days.label` (ADR 021). */
+export function toursToDaySources(
+  tours: TourInfoModel[],
+  dayLabel: (index: number) => string,
+  excludeTourId?: number,
+): DaySource[] {
   return tours
     .filter((t) => t.id !== excludeTourId)
     .flatMap((t) => {
@@ -547,7 +555,7 @@ export function toursToDaySources(tours: TourInfoModel[], excludeTourId?: number
       return days.map((day, i) => ({
         id: `${t.id}-${day.id}`,
         tourTitle,
-        dayLabel: days.length > 1 ? `День ${i + 1}` : '',
+        dayLabel: days.length > 1 ? dayLabel(i + 1) : '',
         content: {
           title: readLocalized(day.translations ?? [], TourDayTranslationType.Title),
           shortDescription: readLocalized(day.translations ?? [], TourDayTranslationType.ShortDescription),

@@ -87,8 +87,8 @@ namespace ATTours.BusinessServices.Services.Shared
                 var prepayment = line.RequiresPrepayment
                     ? $"требуется, {FormatAmount(line.PrepaymentAmount)}"
                     : "не требуется";
-                var pickup = string.IsNullOrWhiteSpace(line.PickupDetails) ? "не указано" : "указано";
-                var navigator = string.IsNullOrWhiteSpace(line.NavigatorLink) ? "не указан" : "указан";
+                var pickup = line.HasPickupDetails ? "указано" : "не указано";
+                var navigator = line.HasNavigatorLink ? "указан" : "не указан";
 
                 await service.WriteAsync(line.OrderId, actorUserId, OrderEventType.LineUpdated,
                     $"Изменена строка «{DescribeTour(line.TourTitle)}», {FormatDate(line.TourDate)}: " +
@@ -125,6 +125,29 @@ namespace ATTours.BusinessServices.Services.Shared
                 }
 
                 await service.WriteAsync(orderId, actorUserId, OrderEventType.EmployeeAssigned, description);
+            });
+
+        // Зеркало LogEmployeeAssignedAsync (Задача D). Имя сотрудника приходит снапшотом из
+        // OrderUnassignEmployeeService: в строке заказа его уже нет — она обнулена.
+        public static Task LogEmployeeUnassignedAsync(int orderId, int actorUserId, string employeeFullName,
+            List<int> unassignedLineIds, bool allLines, CancellationToken cancellationToken)
+            => SafeAsync(cancellationToken, async service =>
+            {
+                string description;
+
+                if (allLines)
+                {
+                    description = $"Снят исполнитель {employeeFullName} со всех строк заказа ({unassignedLineIds.Count})";
+                }
+                else
+                {
+                    var line = unassignedLineIds.Count == 0 ? null : await service.GetLineContextAsync(unassignedLineIds[0]);
+                    description = line is null
+                        ? $"Снят исполнитель {employeeFullName}"
+                        : $"Снят исполнитель {employeeFullName} со строки «{DescribeTour(line.TourTitle)}», {FormatDate(line.TourDate)}";
+                }
+
+                await service.WriteAsync(orderId, actorUserId, OrderEventType.EmployeeUnassigned, description);
             });
 
         public static Task LogSentToClientAsync(int orderId, int actorUserId, string? clientEmail, CancellationToken cancellationToken)

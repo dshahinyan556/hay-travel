@@ -15,10 +15,15 @@
  * Section-level permissions (catalog, settings, users) are NOT checked here — each of those
  * loaders checks its own, so that typing a URL for a section you may not open lands on the
  * dashboard rather than throwing a raw 403 into `AdminErrorBoundary`.
+ *
+ * This is also where the resolved permission matrix is first fetched (ADR 024). Its failure is a
+ * LOADING error, not a permission one: it propagates to `AdminErrorBoundary` («Не удалось
+ * загрузить» + «Повторить»). Silently showing an administrator "you have no rights" because of a
+ * network blip would be the worst possible reading of the situation.
  */
 
 import { redirect } from 'react-router'
-import { canOpenAdminPanel, ensureAuthReady, type AuthUser } from '@/shared/auth'
+import { ensureAuthReady, ensurePermissionsReady, hasAnyScreenAccess, type AuthUser } from '@/shared/auth'
 
 export interface AdminRootData {
   /** True → `AdminLayout` renders the access-denied screen instead of the panel shell. */
@@ -40,7 +45,9 @@ export async function adminRootLoader({ request }: { request: Request }): Promis
     throw redirect(`/auth/change-password?returnTo=${returnTo}`)
   }
 
-  if (!canOpenAdminPanel(state.user.role)) {
+  await ensurePermissionsReady()
+
+  if (!hasAnyScreenAccess()) {
     return { accessDenied: true, user: state.user }
   }
 

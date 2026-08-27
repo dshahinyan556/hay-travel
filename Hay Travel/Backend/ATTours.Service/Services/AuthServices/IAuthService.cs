@@ -1,4 +1,5 @@
 using ATTours.Common.DTO.Auth;
+using ATTours.Common.DTO.Authorization;
 
 namespace ATTours.BusinessServices.Services.AuthServices
 {
@@ -24,6 +25,23 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
         // Идемпотентен: отсутствующий/уже отозванный токен — не ошибка.
         Task LogoutAsync(string? refreshToken, CancellationToken cancellationToken = default);
+
+        // «Войти как пользователь» (spec 014 §3, ADR 028/030). Односторонняя операция:
+        // ВСЕ сессии вызывающего отзываются, его уже выданные access-токены мгновенно
+        // объявляются недействительными, а наружу уходит сессия цели. Обратного эндпоинта
+        // нет — выход = обычный logout и повторный вход.
+        //
+        // actingUserId берётся из токена, targetUserId — из маршрута (никогда из тела).
+        // Право на вызов проверяет [RequiresImpersonate] в ClientAPI; здесь проверяются
+        // эскалация привилегий и пригодность самой цели — заблокированную или с
+        // неподтверждённой почтой учётку impersonate'ить нельзя (по данным БД, не по claim'ам).
+        Task<LoginOutcome> ImpersonateAsync(int actingUserId, int targetUserId,
+            RequestContextModel requestContext, CancellationToken cancellationToken = default);
+
+        // Резолвленный (роль + персональный override) набор прав текущего пользователя —
+        // контракт гардов админки (architecture-flexible-roles.md §4.1). Всегда свежий из
+        // БД, в отличие от запечённого в access-токене.
+        Task<MyPermissionsModel> GetMyPermissionsAsync(int userId, CancellationToken cancellationToken = default);
 
         // Всегда generic-ответ, независимо от того, существует ли аккаунт.
         Task<MessageResultModel> ForgotPasswordAsync(ForgotPasswordModel model, RequestContextModel requestContext, CancellationToken cancellationToken = default);

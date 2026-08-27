@@ -33,7 +33,12 @@ namespace ATTours.Common.Settings
 
         public int AccessTokenMinutes => ReadInt(nameof(AccessTokenMinutes), 15);
 
+        // Окно remember-me == true (ADR 029): скользящее, сбрасывается на каждой ротации.
         public int RefreshTokenDays => ReadInt(nameof(RefreshTokenDays), 14);
+
+        // Окно неактивности для сессий без remember-me (ADR 029): столько минут сессия
+        // живёт без единого RefreshToken-запроса, после чего требуется повторный вход.
+        public int InactivityMinutes => ReadInt(nameof(InactivityMinutes), 60);
 
         private int ReadInt(string key, int fallback)
             => int.TryParse(Section[key], out var value) && value > 0 ? value : fallback;

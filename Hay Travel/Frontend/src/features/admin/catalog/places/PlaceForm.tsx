@@ -1,10 +1,14 @@
 import { useState } from 'react'
 import { Button, buttonClassName, Field, Input, Select, Spinner } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { adminCommonCopy } from '@/features/admin/lib/adminCommonCopy'
+import { catalogCopy } from '@/features/admin/catalog/lib/catalogCopy'
 import { ImageUrlField } from '@/features/admin/ui/ImageUrlField'
 import { ImageListEditor, type ImageListItem } from '@/features/admin/ui/ImageListEditor'
 import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
 import type { Localized } from '@/features/admin/types/localized'
 import { readLocalized } from '@/features/admin/catalog/lib/catalogMapper'
+import type { CatalogCopy } from '@/features/admin/catalog/lib/catalogCopy'
 import type { PlaceInfoModel, RegionInfoModel } from '@/shared/types/attours'
 
 const newKey = (): string => crypto.randomUUID()
@@ -54,21 +58,26 @@ interface FormErrors {
   nameEn?: string
 }
 
-function validate(values: PlaceFormValues): FormErrors {
+/** Pure — the messages come in with `copy` rather than being read from a locale here, so the
+ * function stays callable from anywhere and re-runs naturally when the interface locale changes. */
+function validate(values: PlaceFormValues, copy: CatalogCopy): FormErrors {
   const errors: FormErrors = {}
-  if (values.slug.trim() === '') errors.slug = 'Укажите слаг.'
-  if (values.regionId === '') errors.regionId = 'Выберите регион.'
+  if (values.slug.trim() === '') errors.slug = copy.places.slugError
+  if (values.regionId === '') errors.regionId = copy.places.regionError
   // Both languages are required, same reasoning as the settings screen (D4-1): the public site
   // resolves a tour's route-point text as `own(lang) ?? template(lang)` — a template with no EN
   // shows up empty for English visitors whenever the tour doesn't override it itself.
-  if (values.name.ru.trim() === '') errors.nameRu = 'Обязательное поле.'
-  if (values.name.en.trim() === '') errors.nameEn = 'Обязательное поле.'
+  if (values.name.ru.trim() === '') errors.nameRu = copy.common.requiredField
+  if (values.name.en.trim() === '') errors.nameEn = copy.common.requiredField
   return errors
 }
 
 interface PlaceFormProps {
   place: PlaceInfoModel | null
-  regions: RegionInfoModel[]
+  /** `null` — the role may edit points but not read `catalog.regions`. The picker then renders
+   * disabled with an explanation instead of as an empty dropdown (frontend roles architecture
+   * §0.8: an unexplained empty list hides a permission misconfiguration). */
+  regions: RegionInfoModel[] | null
   isSubmitting: boolean
   error: string | null
   onSubmit: (values: PlaceFormValues) => void
@@ -76,13 +85,16 @@ interface PlaceFormProps {
 }
 
 export function PlaceForm({ place, regions, isSubmitting, error, onSubmit, onCancel }: PlaceFormProps) {
+  const copy = useCopy(catalogCopy)
+  const common = useCopy(adminCommonCopy)
   const [values, setValues] = useState<PlaceFormValues>(() => initialValues(place))
   const [attempted, setAttempted] = useState(false)
 
-  const errors = validate(values)
+  const errors = validate(values, copy)
   const shown = attempted ? errors : {}
 
-  const regionOptions = regions.map((region) => ({
+  const regionsUnavailable = regions === null
+  const regionOptions = (regions ?? []).map((region) => ({
     value: String(region.id),
     label: readLocalized(region.translations).ru || region.slug,
   }))
@@ -90,7 +102,7 @@ export function PlaceForm({ place, regions, isSubmitting, error, onSubmit, onCan
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setAttempted(true)
-    if (Object.keys(validate(values)).length > 0) return
+    if (Object.keys(validate(values, copy)).length > 0) return
     onSubmit(values)
   }
 
@@ -103,7 +115,7 @@ export function PlaceForm({ place, regions, isSubmitting, error, onSubmit, onCan
       )}
 
       <TranslationGroup
-        label="Название"
+        label={copy.common.nameField}
         value={values.name}
         onChange={(lang, value) => setValues((v) => ({ ...v, name: { ...v.name, [lang]: value } }))}
         required
@@ -111,7 +123,13 @@ export function PlaceForm({ place, regions, isSubmitting, error, onSubmit, onCan
         errorEn={shown.nameEn}
       />
 
-      <Field label="Слаг" htmlFor="place-slug" required error={shown.slug} hint="Уникальный, латиницей, напр. «garni-temple».">
+      <Field
+        label={copy.places.slugLabel}
+        htmlFor="place-slug"
+        required
+        error={shown.slug}
+        hint={copy.places.slugHint}
+      >
         <Input
           id="place-slug"
           value={values.slug}
@@ -120,20 +138,27 @@ export function PlaceForm({ place, regions, isSubmitting, error, onSubmit, onCan
         />
       </Field>
 
-      <Field label="Регион" htmlFor="place-region" required error={shown.regionId}>
+      <Field
+        label={copy.places.regionLabel}
+        htmlFor="place-region"
+        required
+        error={shown.regionId}
+        hint={regionsUnavailable ? copy.places.regionsUnavailableHint : undefined}
+      >
         <Select
           id="place-region"
           surface="admin"
           value={values.regionId}
           onChange={(value) => setValues((v) => ({ ...v, regionId: value }))}
           options={regionOptions}
-          placeholder="Выберите регион"
+          placeholder={copy.places.regionPlaceholder}
+          disabled={regionsUnavailable}
           error={Boolean(shown.regionId)}
         />
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Широта" htmlFor="place-lat" hint="Необязательно.">
+        <Field label={copy.places.latitudeLabel} htmlFor="place-lat" hint={copy.places.optionalHint}>
           <Input
             id="place-lat"
             type="text"
@@ -142,7 +167,7 @@ export function PlaceForm({ place, regions, isSubmitting, error, onSubmit, onCan
             onChange={(e) => setValues((v) => ({ ...v, latitude: e.target.value }))}
           />
         </Field>
-        <Field label="Долгота" htmlFor="place-lng" hint="Необязательно.">
+        <Field label={copy.places.longitudeLabel} htmlFor="place-lng" hint={copy.places.optionalHint}>
           <Input
             id="place-lng"
             type="text"
@@ -154,18 +179,15 @@ export function PlaceForm({ place, regions, isSubmitting, error, onSubmit, onCan
       </div>
 
       <ImageUrlField
-        label="Обложка — URL"
+        label={copy.places.coverLabel}
         value={values.imageUrl}
         onChange={(value) => setValues((v) => ({ ...v, imageUrl: value }))}
-        hint="Необязательно. Используется, пока у точки нет фотографий ниже."
+        hint={copy.places.coverHint}
       />
 
       <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium text-neutral-700">Фотографии</span>
-        <p className="text-xs text-neutral-500">
-          Добавляются в галерею дня автоматически, когда эта точка выбрана из справочника в
-          маршруте (не для точек, введённых свободным текстом).
-        </p>
+        <span className="text-sm font-medium text-neutral-700">{copy.places.photosLabel}</span>
+        <p className="text-xs text-neutral-500">{copy.places.photosHint}</p>
         <ImageListEditor
           items={values.images}
           onAdd={() => setValues((v) => ({ ...v, images: [...v.images, { key: newKey(), url: '' }] }))}
@@ -194,18 +216,18 @@ export function PlaceForm({ place, regions, isSubmitting, error, onSubmit, onCan
 
       <div className="mt-2 flex justify-end gap-2.5 border-t border-neutral-200 pt-4">
         <button type="button" onClick={onCancel} disabled={isSubmitting} className={buttonClassName('ghost', 'md')}>
-          Отмена
+          {common.cancel}
         </button>
         <Button type="submit" disabled={isSubmitting} className="min-w-28">
           {isSubmitting ? (
             <span className="inline-flex items-center gap-2">
               <Spinner size="sm" />
-              Сохранение…
+              {copy.common.savingButton}
             </span>
           ) : place ? (
-            'Сохранить'
+            common.save
           ) : (
-            'Добавить'
+            common.add
           )}
         </Button>
       </div>

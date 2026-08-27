@@ -4,21 +4,33 @@
  */
 
 import { LanguageCode, TourTranslationType } from '@/features/admin/lib/enums'
+import { LANGUAGE_CODE_BY_LOCALE, type Locale } from '@/shared/lib/locale'
 import type { TourInfoModel } from '@/shared/types/attours'
 import type { OrderInfoModel } from '@/shared/types/booking'
+import type { OrdersCopy } from './ordersCopy'
 
-/** Same shape and same RU-title rule as `calendar/lib/calendarModel.ts`'s `tourTitleResolver` —
- * kept as a small, deliberate duplication rather than a cross-feature import: a feature does not
- * reach into another feature's `lib`, and this is the only other call site. */
-export function tourTitleResolver(tours: TourInfoModel[]): (tourId: number) => string {
+/** Same shape as `calendar/lib/calendarModel.ts`'s `tourTitleResolver` — kept as a small,
+ * deliberate duplication rather than a cross-feature import: a feature does not reach into another
+ * feature's `lib`, and this is the only other call site.
+ *
+ * The title follows the INTERFACE language (ADR 021, решение 5) and falls back to the Russian one
+ * when a tour has no translation in it — the content itself is not translated here, an existing
+ * string is picked. `locale`/`copy` are parameters because this is a pure module (Spec 009 §3). */
+export function tourTitleResolver(
+  tours: TourInfoModel[],
+  locale: Locale,
+  copy: OrdersCopy,
+): (tourId: number) => string {
+  const preferred = LANGUAGE_CODE_BY_LOCALE[locale]
   const titles = new Map<number, string>()
   for (const tour of tours) {
-    const title = tour.translations.find(
-      (t) => t.type === TourTranslationType.Title && t.languageCode === LanguageCode.Russian,
-    )?.value
+    const candidates = tour.translations.filter((t) => t.type === TourTranslationType.Title)
+    const title =
+      candidates.find((t) => t.languageCode === preferred)?.value?.trim() ||
+      candidates.find((t) => t.languageCode === LanguageCode.Russian)?.value?.trim()
     if (title) titles.set(tour.id, title)
   }
-  return (tourId: number) => titles.get(tourId) ?? `Тур #${tourId}`
+  return (tourId: number) => titles.get(tourId) ?? copy.tourFallback(tourId)
 }
 
 export interface OrderFiltersState {
@@ -75,10 +87,10 @@ export function matchesOrderFilters(order: OrderInfoModel, filters: OrderFilters
 /** First line's tour title, plus a "+N" suffix for every additional line — what the list row and
  * calendar-adjacent screens show as the order's headline (a multi-line order otherwise has no
  * single "the" tour). `tourTitle` is the same resolver `OrderFilters`' dropdown uses. */
-export function orderHeadline(order: OrderInfoModel): string {
+export function orderHeadline(order: OrderInfoModel, copy: OrdersCopy): string {
   const first = order.lines[0]
   if (!first) return ''
-  const title = first.tourTitle ?? `Тур #${first.tourId}`
+  const title = first.tourTitle ?? copy.tourFallback(first.tourId)
   return order.lines.length > 1 ? `${title} +${order.lines.length - 1}` : title
 }
 

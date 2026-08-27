@@ -3,8 +3,14 @@
  * `authFetch`. Backend route bases: `api/Place`, `api/ExpenseTemplate`, `api/TourNoteTemplate`,
  * `api/Region`.
  *
- * `GetAll` here is TourManager+Admin (the tour form needs to read these to fill its pickers);
- * every write is Admin-only, enforced server-side and mirrored by `canManageCatalog`.
+ * Each catalog is its OWN permission key (`catalog.places`, `catalog.expense-templates`,
+ * `catalog.note-templates`, `catalog.regions`, `catalog.tags`) — five independent keys behind one
+ * `/admin/catalog` route, by decision 7 of the roles checklist. `GetAll` needs that key's `View`,
+ * every write its `Create`/`Update`/`Delete`.
+ *
+ * Note the reach of the View flags: the TOUR FORM loads all five to fill its pickers, so a role
+ * that may create tours but cannot read the catalogs gets a 403 on the form itself. The role editor
+ * warns about that combination instead of the form degrading silently.
  *
  * Regions have no write endpoints on the backend (they are fixed, seeded reference data —
  * `docs/backend-stage3-sync.md` §3.2), so only `getRegions` exists here.

@@ -1,3 +1,4 @@
+using ATTours.Common.Enums;
 using ATTours.Common.Infrastructure.Abstractions;
 using ATTours.Common.Infrastructure.EntityConfiguration;
 using Microsoft.EntityFrameworkCore;
@@ -56,6 +57,18 @@ namespace ATTours.Common.Entities
         // пользователь получает claim'ом "is_super_admin" в access-токене.
         public bool IsSuperAdmin { get; set; }
 
+        // Рабочая специализация сотрудника по умолчанию (Задача D). Nullable: профиль может
+        // существовать без заданной роли — тогда в попапе назначения дефолта нет, но выбор
+        // роли там всё равно обязателен. Снапшот на строке заказа (OrderLine.EmployeeRole)
+        // от этого поля не зависит — это лишь дефолт для попапа.
+        public EmployeeJobRole? DefaultJobRole { get; set; }
+
+        // Язык писем этого пользователя (редизайн 2026-08-23). Non-nullable с дефолтом Russian:
+        // "языка нет" — не состояние, письмо всё равно должно на чём-то уйти, и RU это текущее
+        // фактическое поведение. Отдельного enum не заводим — переиспользуется LanguageCode,
+        // которым уже размечен весь переводимый контент сайта.
+        public LanguageCode PreferredLanguage { get; set; } = LanguageCode.Russian;
+
         public int RoleId { get; set; }
         public UserRole Role { get; set; }
 
@@ -69,5 +82,9 @@ namespace ATTours.Common.Entities
         // Единственный активный флоу смены email (B8, 2026-08-06) — 1:1 опционально,
         // апсертится по UserId в AuthService.RequestEmailChangeAsync.
         public EmailChangeRequest EmailChangeRequest { get; set; }
+
+        // Персональные права поверх роли (architecture-flexible-roles.md §1.4): по строке
+        // на экран, каждый флаг nullable (null = наследовать от роли). Обычно пусто.
+        public ICollection<UserPermissionOverride> PermissionOverrides { get; set; } = [];
     }
 }

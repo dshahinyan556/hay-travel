@@ -1,6 +1,7 @@
 import { Button, Spinner } from '@/shared/ui'
 import { ChevronDownIcon } from '@/shared/ui/icons'
-import { calendarCopy, monthLabels } from '../lib/calendarCopy'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { calendarCopy } from '../lib/calendarCopy'
 
 export interface CalendarToolbarProps {
   year: number
@@ -12,6 +13,10 @@ export interface CalendarToolbarProps {
   onPrev: () => void
   onNext: () => void
   onOpenBulk: () => void
+  /** `calendar.Create`. The button is HIDDEN rather than disabled: its only purpose is the action,
+   * and there is nothing else in it to read (the panel's own convention — a control that is pure
+   * action disappears, a control next to information gets disabled). */
+  canCreate: boolean
 }
 
 /**
@@ -32,9 +37,12 @@ export function CalendarToolbar({
   onPrev,
   onNext,
   onOpenBulk,
+  canCreate,
 }: CalendarToolbarProps) {
+  const copy = useCopy(calendarCopy)
+
   const navButtonClasses =
-    'flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent'
+    'flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent'
 
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -45,7 +53,7 @@ export function CalendarToolbar({
           type="button"
           onClick={onPrev}
           disabled={!canGoBack}
-          aria-label={calendarCopy.prevMonth}
+          aria-label={copy.prevMonth}
           className={navButtonClasses}
         >
           <ChevronDownIcon size={16} className="rotate-90" />
@@ -57,7 +65,7 @@ export function CalendarToolbar({
           className="flex min-w-0 flex-1 items-center gap-2 px-1 text-base font-bold text-neutral-900 sm:min-w-[190px] sm:flex-none"
         >
           <span className="truncate">
-            {monthLabels[month - 1]} {year}
+            {copy.months[month - 1]} {year}
           </span>
           {/* Sits NEXT TO the heading, never in place of the grid: paging onto an unloaded month
               must not blank a screen the admin is reading. */}
@@ -68,16 +76,18 @@ export function CalendarToolbar({
           type="button"
           onClick={onNext}
           disabled={!canGoForward}
-          aria-label={calendarCopy.nextMonth}
+          aria-label={copy.nextMonth}
           className={navButtonClasses}
         >
           <ChevronDownIcon size={16} className="-rotate-90" />
         </button>
       </div>
 
-      <Button type="button" size="sm" onClick={onOpenBulk} className="min-h-11 w-full sm:w-auto">
-        {calendarCopy.bulk}
-      </Button>
+      {canCreate && (
+        <Button type="button" size="sm" onClick={onOpenBulk} className="min-h-11 w-full sm:w-auto">
+          {copy.bulk}
+        </Button>
+      )}
     </div>
   )
 }

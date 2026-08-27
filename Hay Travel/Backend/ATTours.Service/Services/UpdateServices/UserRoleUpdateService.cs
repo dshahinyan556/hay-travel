@@ -1,6 +1,5 @@
 using ArmeniaTours.DataLayer;
 using ATTours.Common.Entities;
-using ATTours.Common.Enums;
 using ATTours.Common.Settings;
 using ATTours.ContextRepository;
 using ATTours.ContextRepository.RepositoryAbstraction.Relational;
@@ -61,13 +60,13 @@ namespace ATTours.BusinessServices.Services.UpdateServices
             return user;
         }
 
-        // D3/D4 (2026-08-09) вместо безусловного запрета из B6. Правило одно: всё, что
-        // касается роли Admin (и повышение до неё, и любое изменение роли действующего
-        // администратора), доступно только SuperAdmin'у. Regular <-> TourManager остаётся
-        // обычной админской операцией.
+        // D3/D4 (2026-08-09), обновлено под гибкие роли 2026-08-22: правило одно —
+        // назначение НА роль с CanManageAdmins, и любая смена роли у того, кто такую роль
+        // уже держит, доступны только SuperAdmin'у. Это больше не привязано к конкретному
+        // RoleType — CanManageAdmins может стоять у любой (в т.ч. кастомной) роли.
         private static void GuardRoleChange(User actingUser, User target, UserRole newRole)
         {
-            var touchesAdminRole = newRole.Type == RoleType.Admin || target.Role.Type == RoleType.Admin;
+            var touchesAdminRole = newRole.CanManageAdmins || target.Role.CanManageAdmins;
             if (!touchesAdminRole)
                 return;
 

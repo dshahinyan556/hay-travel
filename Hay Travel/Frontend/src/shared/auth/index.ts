@@ -13,13 +13,31 @@ export type {
   ChangeRoleRequest,
   LoginHistoryEntryModel,
   LoginRequest,
+  LoginResultModel,
   MessageResultModel,
+  MyPermissionsModel,
+  MyScreenPermissionModel,
   RegisterRequest,
+  SetUserJobRoleModel,
+  SetUserPreferredLanguageModel,
   UserDetailInfoModel,
   UserInfoModel,
 } from './types'
 
 export {
+  AccessLevel,
+  AdminScreen,
+  ALL_ACCESS_LEVELS,
+  ALL_PERMISSION_ACTIONS,
+  ALL_SCREEN_KEYS,
+  CATALOG_SCREEN_KEYS,
+  levelAllows,
+  PermissionAction,
+} from './screens'
+export type { KnownScreenKey, ScreenKey } from './screens'
+
+export {
+  adoptSession,
   applyUser,
   clearForceChangePassword,
   ensureAuthReady,
@@ -42,19 +60,25 @@ export {
   verifyEmailRequest,
 } from './authApi'
 
-// Only the PREDICATES are exported, never the raw `isSuperAdmin` field's meaning: call sites ask
-// `canManageAdmins(user)` so the SuperAdmin matrix stays in one file (ADR 011, decision 4).
+// Only the PREDICATES are exported, never the raw `isSuperAdmin`/`hasPanelAccess` fields' meaning:
+// call sites ask `canManageAdmins(user)` / `canOpenAdminPanel(user)` so those two matrices stay in
+// one file (ADR 011, decision 4; ADR 024, decision 1).
 export {
-  canArchiveTours,
-  canDeleteTours,
-  canFeatureTours,
+  can,
+  canCreate,
+  canDelete,
+  canImpersonate,
   canManageAdmins,
-  canManageCalendar,
-  canManageCatalog,
-  canManageSettings,
-  canManageTours,
-  canManageUsers,
   canOpenAdminPanel,
-  canPublishTours,
-  canViewCatalog,
+  canUpdate,
+  canView,
+  canViewAny,
+  hasAnyScreenAccess,
 } from './permissions'
+
+// `invalidatePermissions`/`clearPermissions` are deliberately NOT here: they are the private wiring
+// between `authStore` and `permissionStore`, and a feature calling them would desynchronise the
+// matrix from the session that owns it.
+export { ensurePermissionsReady, getPermissions, refreshPermissions } from './permissionStore'
+export type { PermissionSnapshot, PermissionStatus, ScreenPermission } from './permissionStore'
+export { usePermissions, useScreenPermission } from './usePermissions'

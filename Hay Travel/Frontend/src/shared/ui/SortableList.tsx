@@ -18,6 +18,12 @@ import type {
 } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
+import type { TranslationKey } from '@/shared/i18n/dictionary'
+
+/** The bound `t` of the current locale, handed to the pure announcement builders below — they run
+ * inside a `useMemo`, so they cannot call the hook themselves. */
+type Translate = (key: TranslationKey, vars?: Record<string, string | number>) => string
 
 /**
  * Mouse/touch/keyboard reorder primitive built on `@dnd-kit`. Replaces the old ▲/▼
@@ -43,7 +49,8 @@ import { CSS } from '@dnd-kit/utilities'
  *
  * Accessibility: reorder progress is announced through `DndContext`'s built-in `accessibility.
  * announcements` API (a portalled `aria-live` region dnd-kit manages itself) rather than a
- * hand-rolled live region — see `buildAnnouncements` below for the Russian copy.
+ * hand-rolled live region — see `buildAnnouncements` below, which renders the `ui.sortable.*` keys
+ * of the shared dictionary in whatever locale is active.
  */
 
 export interface SortableRowRenderProps {
@@ -79,7 +86,8 @@ export interface SortableListProps<T> {
   children: (item: T, index: number, sortable: SortableRowRenderProps) => ReactNode
   /**
    * Singular label for one row, used to build the keyboard-reorder `aria-live` announcements
-   * (e.g. "Точка маршрута", "Строка справочника"). Defaults to a generic "Элемент".
+   * (e.g. "Точка маршрута", "Строка справочника"). Already localised by the caller; defaults to
+   * the generic `t('ui.sortable.itemFallback')`.
    */
   itemLabel?: string
 }
@@ -104,14 +112,16 @@ function SortableRow({
   return children({ setNodeRef, setActivatorNodeRef, attributes, listeners, isDragging, style })
 }
 
-const RU_SCREEN_READER_INSTRUCTIONS: ScreenReaderInstructions = {
-  draggable:
-    'Чтобы взять элемент для перемещения, нажмите пробел или Enter. Пока элемент взят, ' +
-    'перемещайте его стрелками вверх и вниз, затем нажмите пробел или Enter ещё раз, чтобы ' +
-    'отпустить на новой позиции, либо Escape, чтобы отменить.',
+function buildScreenReaderInstructions(t: Translate): ScreenReaderInstructions {
+  return { draggable: t('ui.sortable.instructions') }
 }
 
-function buildAnnouncements<T>(items: T[], getId: (item: T) => string, itemLabel: string): Announcements {
+function buildAnnouncements<T>(
+  items: T[],
+  getId: (item: T) => string,
+  itemLabel: string,
+  t: Translate,
+): Announcements {
   const locate = (id: UniqueIdentifier) => {
     const index = items.findIndex((item) => getId(item) === String(id))
     return { index, total: items.length }
@@ -121,31 +131,35 @@ function buildAnnouncements<T>(items: T[], getId: (item: T) => string, itemLabel
     onDragStart({ active }) {
       const { index, total } = locate(active.id)
       if (index === -1) return undefined
-      return `Начато перемещение: «${itemLabel}», позиция ${index + 1} из ${total}.`
+      return t('ui.sortable.dragStart', { item: itemLabel, index: index + 1, total })
     },
     onDragOver({ active, over }) {
       const { total } = locate(active.id)
       const targetIndex = over ? locate(over.id).index : locate(active.id).index
       if (targetIndex === -1) return undefined
-      return `«${itemLabel}» перемещён на позицию ${targetIndex + 1} из ${total}.`
+      return t('ui.sortable.dragOver', { item: itemLabel, index: targetIndex + 1, total })
     },
     onDragEnd({ active, over }) {
       const { index, total } = locate(active.id)
       if (index === -1) return undefined
-      if (!over) return `Перемещение отменено. «${itemLabel}» остался на позиции ${index + 1} из ${total}.`
+      if (!over) return t('ui.sortable.dragCancel', { item: itemLabel, index: index + 1, total })
       const overIndex = locate(over.id).index
       if (overIndex === -1) return undefined
-      return `Перемещение завершено. «${itemLabel}» теперь на позиции ${overIndex + 1} из ${total}.`
+      return t('ui.sortable.dragEnd', { item: itemLabel, index: overIndex + 1, total })
     },
     onDragCancel({ active }) {
       const { index, total } = locate(active.id)
       if (index === -1) return undefined
-      return `Перемещение отменено. «${itemLabel}» остался на позиции ${index + 1} из ${total}.`
+      return t('ui.sortable.dragCancel', { item: itemLabel, index: index + 1, total })
     },
   }
 }
 
-export function SortableList<T>({ items, getId, onReorder, children, itemLabel = 'Элемент' }: SortableListProps<T>) {
+export function SortableList<T>({ items, getId, onReorder, children, itemLabel }: SortableListProps<T>) {
+  // Resolved in the body, not in the parameter list — a hook cannot run in a default parameter.
+  const { t } = useLocale()
+  const resolvedItemLabel = itemLabel ?? t('ui.sortable.itemFallback')
+
   const sensors = useSensors(
     // A small activation distance keeps a plain click/tap on the handle (e.g. focusing it, or a
     // mis-timed tap) from being misread as a drag start.
@@ -154,7 +168,11 @@ export function SortableList<T>({ items, getId, onReorder, children, itemLabel =
   )
 
   const ids = useMemo(() => items.map(getId), [items, getId])
-  const announcements = useMemo(() => buildAnnouncements(items, getId, itemLabel), [items, getId, itemLabel])
+  const announcements = useMemo(
+    () => buildAnnouncements(items, getId, resolvedItemLabel, t),
+    [items, getId, resolvedItemLabel, t],
+  )
+  const screenReaderInstructions = useMemo(() => buildScreenReaderInstructions(t), [t])
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
@@ -172,7 +190,7 @@ export function SortableList<T>({ items, getId, onReorder, children, itemLabel =
       onDragEnd={handleDragEnd}
       accessibility={{
         announcements,
-        screenReaderInstructions: RU_SCREEN_READER_INSTRUCTIONS,
+        screenReaderInstructions,
         // `SortableList` is meant to be dropped straight inside a `<tbody>` or `<ul>` (see file
         // header) — dnd-kit's own hidden instructions/live-region markup would otherwise land
         // there too and violate HTML content-model rules for those elements (only `<tr>`/`<li>`
@@ -194,7 +212,8 @@ export function SortableList<T>({ items, getId, onReorder, children, itemLabel =
 }
 
 export interface DragHandleProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  /** Overrides the default aria-label, e.g. to name the item being moved. */
+  /** Overrides the default aria-label (`t('ui.sortable.dragHandle')`), e.g. to name the item
+   * being moved. Already localised by the caller. */
   label?: string
   ref?: Ref<HTMLButtonElement>
 }
@@ -207,14 +226,17 @@ export interface DragHandleProps extends ButtonHTMLAttributes<HTMLButtonElement>
  * `touch-none` (`touch-action: none`) is required, not decorative — without it, touch browsers
  * intercept the pointer for native scrolling before `PointerSensor` ever sees the drag start.
  */
-export function DragHandle({ label = 'Перетащить, чтобы изменить порядок', className = '', ref, ...props }: DragHandleProps) {
+export function DragHandle({ label, className = '', ref, ...props }: DragHandleProps) {
+  const { t } = useLocale()
+  const resolvedLabel = label ?? t('ui.sortable.dragHandle')
+
   return (
     <button
       ref={ref}
       type="button"
-      aria-label={label}
-      title={label}
-      className={`flex h-7 w-7 shrink-0 touch-none cursor-grab items-center justify-center rounded-lg border border-neutral-200 bg-white text-neutral-400 transition-colors hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
+      aria-label={resolvedLabel}
+      title={resolvedLabel}
+      className={`flex h-7 w-7 shrink-0 touch-none cursor-grab items-center justify-center rounded-lg border border-neutral-200 bg-white text-neutral-400 transition-colors hover:border-neutral-400 hover:bg-neutral-100 hover:text-neutral-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/20 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
       {...props}
     >
       <svg viewBox="0 0 24 24" width={16} height={16} fill="currentColor" aria-hidden="true" focusable="false">

@@ -1,9 +1,10 @@
 /**
  * State of the bulk-closure form and its compilation into `ClosureRuleCreateModel[]`.
  *
- * Pure: no network, no React state, no copy of its own (messages come from `calendarCopy`), so the
- * panel can render a live "N rules will be created" preview by calling this on every change and
- * the same function is what the submit path sends.
+ * Pure: no network, no React state, no copy of its own — the messages come in as a `CalendarCopy`
+ * parameter (spec 009 §3: a pure module never resolves the locale itself), so the panel can render
+ * a live "N rules will be created" preview by calling this on every change and the same function is
+ * what the submit path sends.
  */
 
 import { eachDayInRange, formatISODate, parseISODate, stripTime } from '@/shared/lib/date'
@@ -13,7 +14,7 @@ import {
   type ClosureRuleCreateModel,
   type DayOfWeekCode,
 } from '@/shared/types/booking'
-import { calendarCopy } from './calendarCopy'
+import type { CalendarCopy } from './calendarCopy'
 
 export type BulkMode = 'range' | 'weekly'
 
@@ -55,10 +56,10 @@ export type BulkValidation =
   | { ok: true; models: ClosureRuleCreateModel[] }
   | { ok: false; message: string }
 
-export function compileBulkForm(form: BulkClosureForm): BulkValidation {
+export function compileBulkForm(form: BulkClosureForm, copy: CalendarCopy): BulkValidation {
   const reason = form.reason.trim()
   if (reason.length > MAX_REASON_LENGTH) {
-    return { ok: false, message: calendarCopy.bulkErrorReasonTooLong }
+    return { ok: false, message: copy.bulkErrorReasonTooLong }
   }
   const reasonValue = reason === '' ? null : reason
 
@@ -73,22 +74,22 @@ export function compileBulkForm(form: BulkClosureForm): BulkValidation {
     const from = parseISODate(form.fromISO)
     const to = parseISODate(form.toISO)
     if (from === null || to === null) {
-      return { ok: false, message: calendarCopy.bulkErrorRangeRequired }
+      return { ok: false, message: copy.bulkErrorRangeRequired }
     }
     if (from.getTime() > to.getTime()) {
-      return { ok: false, message: calendarCopy.bulkErrorRangeOrder }
+      return { ok: false, message: copy.bulkErrorRangeOrder }
     }
     // Бэкдейтинг запрещён везде (B12, 2026-08-13) — раньше это было намеренно разрешено
     // ("хозяйственный смысл"), решение Давида отменило исключение без остатка.
     if (from.getTime() < todayStart.getTime()) {
-      return { ok: false, message: calendarCopy.bulkErrorPastDate }
+      return { ok: false, message: copy.bulkErrorPastDate }
     }
     const days = eachDayInRange(from, to)
     // Counted BEFORE materializing: this runs on every keystroke for the live preview, and a
     // five-year range × twenty tours would otherwise build ~36k objects just to be rejected.
     const total = days.length * scopes.length
     if (total > MAX_BULK_RULES) {
-      return { ok: false, message: calendarCopy.bulkErrorTooMany(total, MAX_BULK_RULES) }
+      return { ok: false, message: copy.bulkErrorTooMany(total, MAX_BULK_RULES) }
     }
     for (const day of days) {
       const date = formatISODate(day)
@@ -104,16 +105,16 @@ export function compileBulkForm(form: BulkClosureForm): BulkValidation {
     }
   } else {
     if (form.weekdays.length === 0) {
-      return { ok: false, message: calendarCopy.bulkErrorWeekdaysRequired }
+      return { ok: false, message: copy.bulkErrorWeekdaysRequired }
     }
     // Both bounds are optional here; if both are given they still have to be ordered.
     const from = form.fromISO === '' ? null : parseISODate(form.fromISO)
     const to = form.toISO === '' ? null : parseISODate(form.toISO)
     if (from !== null && to !== null && from.getTime() > to.getTime()) {
-      return { ok: false, message: calendarCopy.bulkErrorRangeOrder }
+      return { ok: false, message: copy.bulkErrorRangeOrder }
     }
     if (from !== null && from.getTime() < todayStart.getTime()) {
-      return { ok: false, message: calendarCopy.bulkErrorPastDate }
+      return { ok: false, message: copy.bulkErrorPastDate }
     }
     for (const dayOfWeek of form.weekdays) {
       for (const tourId of scopes) {
@@ -133,7 +134,7 @@ export function compileBulkForm(form: BulkClosureForm): BulkValidation {
   if (models.length > MAX_BULK_RULES) {
     return {
       ok: false,
-      message: calendarCopy.bulkErrorTooMany(models.length, MAX_BULK_RULES),
+      message: copy.bulkErrorTooMany(models.length, MAX_BULK_RULES),
     }
   }
 

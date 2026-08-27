@@ -1,6 +1,5 @@
 using ArmeniaTours.DataLayer;
 using ATTours.Common.Entities;
-using ATTours.Common.Enums;
 using ATTours.Common.Settings;
 using ATTours.ContextRepository;
 using ATTours.ContextRepository.RepositoryAbstraction.Relational;
@@ -62,17 +61,19 @@ namespace ATTours.BusinessServices.Services.DeleteServices
             await EntityRepository.SaveChangesAsync(cancellationToken);
         }
 
-        // Симметрично GuardRoleChange в UserRoleUpdateService (D3, 2026-08-09): удаление
-        // Admin-аккаунта больше не запрещено безусловно — его может выполнить SuperAdmin,
-        // и только он. Self-delete проверен отдельно и раньше (строка выше).
+        // Симметрично GuardRoleChange в UserRoleUpdateService: удаление аккаунта, чья роль
+        // держит CanManageAdmins, доступно только SuperAdmin'у. Self-delete проверен
+        // отдельно и раньше (строка выше). Обновлено 2026-08-22: не привязано к конкретному
+        // RoleType — CanManageAdmins может стоять у любой (в т.ч. кастомной) роли.
         //
         // Действующий пользователь читается из БД, а не из claim'а токена: claim решает
         // только, что показать в UI, прямой запрос в обход интерфейса должен отбиваться
         // фактическим состоянием строки.
         private async Task GuardAdminAccountAsync(User target, int actingUserId)
         {
-            // Удаление не-админа привилегий не требует — лишний запрос в БД не нужен.
-            if (target.Role.Type != RoleType.Admin)
+            // Удаление аккаунта без этого флага привилегий не требует — лишний запрос в БД
+            // не нужен.
+            if (!target.Role.CanManageAdmins)
                 return;
 
             var actingUser = await EntityRepository.AsQueryable()

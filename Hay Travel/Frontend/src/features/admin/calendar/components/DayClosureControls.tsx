@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Input, Textarea } from '@/shared/ui'
 import { HelpButton } from '@/shared/ui/HelpButton'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import type { TourInfoModel } from '@/shared/types/attours'
 import {
   ClosureRuleType,
@@ -22,6 +24,12 @@ export interface DayClosureControlsProps {
   /** Бэкдейтинг запрещён везде (B12, 2026-08-13) — прошедший день виден (история заказов
    * читается), но availability-контролы полностью заблокированы, не только скрыты. */
   isPast: boolean
+  /** `calendar.Create` + `calendar.Delete` — closing a day CREATES a rule and re-opening it DELETES
+   * one, so the block is editable only with both. Treated exactly like `isPast`: the controls stay
+   * visible (they are also how the current state is READ) but are inert, with a reason on screen. */
+  canManage: boolean
+  /** Why the block is locked when `canManage` is false. */
+  readOnlyHint: string
   /** `tourIds`: `[null]` = весь день целиком; иначе один или несколько туров сразу (B12,
    * 2026-08-13 — раньше можно было закрыть только один тур за раз). `reason` — то же
    * необязательное поле, что у массовой операции: раньше одиночное закрытие дня его нигде
@@ -48,9 +56,9 @@ function ToggleChip({ label, selected, disabled, onClick }: ToggleChipProps) {
       onClick={onClick}
       disabled={disabled}
       aria-pressed={selected}
-      className={`cursor-pointer rounded-full border px-3 py-1.5 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 disabled:cursor-not-allowed disabled:opacity-50 ${
+      className={`cursor-pointer rounded-full border px-3 py-1.5 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/20 disabled:cursor-not-allowed disabled:opacity-50 ${
         selected
-          ? 'border-brand-700 bg-brand-700 text-white hover:bg-brand-800'
+          ? 'border-neutral-950 bg-neutral-950 text-white hover:bg-neutral-800'
           : 'border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100'
       }`}
     >
@@ -78,13 +86,17 @@ export function DayClosureControls({
   rules,
   pending,
   isPast,
+  canManage,
+  readOnlyHint,
   onToggle,
 }: DayClosureControlsProps) {
+  const copy = useCopy(calendarCopy)
+  const { locale } = useLocale()
   const [selectedCloseIds, setSelectedCloseIds] = useState<number[]>([])
   const [selectedOpenIds, setSelectedOpenIds] = useState<number[]>([])
   const [tourSearch, setTourSearch] = useState('')
   const [reason, setReason] = useState('')
-  const locked = pending || isPast
+  const locked = pending || isPast || !canManage
 
   // Reset every draft whenever the day or its data changes — after a successful toggle the parent
   // hands down a fresh `day`, and stale state there would invite a second, pointless action or
@@ -98,7 +110,7 @@ export function DayClosureControls({
 
   const trimmedReason = reason.trim()
 
-  const tourTitle = useMemo(() => tourTitleResolver(tours), [tours])
+  const tourTitle = useMemo(() => tourTitleResolver(tours, locale, copy), [tours, locale, copy])
 
   const closedGlobally = day?.isClosedGlobally === true
   const closedTourIds = day?.closedTourIds ?? []
@@ -120,8 +132,8 @@ export function DayClosureControls({
     return tours
       .filter((tour) => !closed.includes(tour.id))
       .filter((tour) => query === '' || tourTitle(tour.id).toLowerCase().includes(query))
-      .sort((a, b) => tourTitle(a.id).localeCompare(tourTitle(b.id), 'ru'))
-  }, [tours, day, tourSearch, tourTitle])
+      .sort((a, b) => tourTitle(a.id).localeCompare(tourTitle(b.id), locale))
+  }, [tours, day, tourSearch, tourTitle, locale])
 
   function toggleClose(id: number) {
     setSelectedCloseIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
@@ -149,32 +161,38 @@ export function DayClosureControls({
   return (
     <section className="flex flex-col gap-4">
       <div className="flex items-center gap-1.5">
-        <h3 className="text-sm font-bold text-neutral-900">{calendarCopy.availabilityTitle}</h3>
-        <HelpButton surface="admin" title={calendarCopy.availabilityTitle}>
-          {calendarCopy.availabilityHelpBody}
+        <h3 className="text-sm font-bold text-neutral-900">{copy.availabilityTitle}</h3>
+        <HelpButton surface="admin" title={copy.availabilityTitle}>
+          {copy.availabilityHelpBody}
         </HelpButton>
       </div>
 
       {isPast && (
         <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-500">
-          {calendarCopy.pastDayLockedHint}
+          {copy.pastDayLockedHint}
         </p>
+      )}
+
+      {/* Only when the day itself is still editable — two "you cannot change this" notes stacked on
+          top of each other would just be noise. */}
+      {!isPast && !canManage && (
+        <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-500">{readOnlyHint}</p>
       )}
 
       {closedByRecurringRule && (
         <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-500">
-          {calendarCopy.closedByWeeklyHint}
+          {copy.closedByWeeklyHint}
         </p>
       )}
       {closedGlobally && !closedByRecurringRule && day?.closureReason && (
         <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-500">
-          {calendarCopy.closureReasonLabel}: {day.closureReason}
+          {copy.closureReasonLabel}: {day.closureReason}
         </p>
       )}
 
-      {!isPast && (
+      {!isPast && canManage && (
         <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          {calendarCopy.bulkReasonTitle}
+          {copy.bulkReasonTitle}
           <Textarea
             value={reason}
             onChange={(event) => setReason(event.target.value)}
@@ -192,9 +210,9 @@ export function DayClosureControls({
       {closedGlobally ? (
         <div>
           <h4 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-            {calendarCopy.closedToursTitle}
+            {copy.closedToursTitle}
           </h4>
-          <p className="mt-2 text-sm text-neutral-600">{calendarCopy.wholeDayClosedNote}</p>
+          <p className="mt-2 text-sm text-neutral-600">{copy.wholeDayClosedNote}</p>
           <Button
             type="button"
             variant="secondary"
@@ -203,14 +221,14 @@ export function DayClosureControls({
             onClick={handleOpen}
             className="mt-2 min-h-11 w-full sm:w-auto"
           >
-            {calendarCopy.openWholeDay}
+            {copy.openWholeDay}
           </Button>
         </div>
       ) : (
         closedTourIds.length > 0 && (
           <div>
             <h4 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              {calendarCopy.closedToursTitle}
+              {copy.closedToursTitle}
             </h4>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {closedTourIds.map((tourId) => (
@@ -231,7 +249,7 @@ export function DayClosureControls({
               onClick={handleOpen}
               className="mt-2 min-h-11 w-full sm:w-auto"
             >
-              {calendarCopy.openTour}
+              {copy.openTour}
             </Button>
           </div>
         )
@@ -239,23 +257,23 @@ export function DayClosureControls({
 
       <div>
         <h4 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          {calendarCopy.closeTourTitle}
+          {copy.closeTourTitle}
         </h4>
         {/* A tour-level rule on top of a globally closed day changes nothing and only clutters the
             rules list, so the whole block is locked with the reason spelled out. */}
         {closedGlobally ? (
-          <p className="mt-2 text-xs text-neutral-500">{calendarCopy.dayAlreadyClosedHint}</p>
+          <p className="mt-2 text-xs text-neutral-500">{copy.dayAlreadyClosedHint}</p>
         ) : (
           <div className="mt-2 flex flex-col gap-2">
             <Input
               value={tourSearch}
               onChange={(event) => setTourSearch(event.target.value)}
-              placeholder={calendarCopy.closeTourSearch}
+              placeholder={copy.closeTourSearch}
               disabled={locked}
-              aria-label={calendarCopy.closeTourSearch}
+              aria-label={copy.closeTourSearch}
             />
             {closableTours.length === 0 ? (
-              <p className="px-1 py-2 text-sm text-neutral-500">{calendarCopy.closeTourNoResults}</p>
+              <p className="px-1 py-2 text-sm text-neutral-500">{copy.closeTourNoResults}</p>
             ) : (
               <div className="max-h-56 overflow-y-auto rounded-lg border border-neutral-200 p-2">
                 <div className="flex flex-wrap gap-1.5">
@@ -278,7 +296,7 @@ export function DayClosureControls({
               onClick={handleClose}
               className="min-h-11 w-full sm:w-auto"
             >
-              {selectedCloseIds.length > 0 ? calendarCopy.closeTourAction : calendarCopy.closeWholeDay}
+              {selectedCloseIds.length > 0 ? copy.closeTourAction : copy.closeWholeDay}
             </Button>
           </div>
         )}

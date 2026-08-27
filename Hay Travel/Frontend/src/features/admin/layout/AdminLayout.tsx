@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { Outlet, ScrollRestoration, useLoaderData, useLocation } from 'react-router'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import { AdminSidebar } from './AdminSidebar'
 import { AdminAccessDenied } from './AdminAccessDenied'
+import { AdminLanguageSwitch } from './AdminLanguageSwitch'
+import { adminLayoutCopy } from './adminLayoutCopy'
 import type { adminRootLoader } from './adminRootLoader'
 
 /**
@@ -23,6 +26,7 @@ export function AdminLayout() {
   const { accessDenied, user } = useLoaderData<typeof adminRootLoader>()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const location = useLocation()
+  const copy = useCopy(adminLayoutCopy)
 
   // Close the drawer on any navigation (covers links that keep the same pathname pattern).
   useEffect(() => {
@@ -85,23 +89,27 @@ export function AdminLayout() {
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
-          aria-label="Открыть меню"
+          aria-label={copy.openMenu}
           aria-expanded={drawerOpen}
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-200 transition-colors hover:bg-white/10"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-200 transition-colors hover:bg-white/10"
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </button>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden="true"
-            className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-brand-600 to-brand-800 text-xs font-bold text-white"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white text-xs font-bold text-neutral-950"
           >
             H
           </span>
-          <span className="text-sm font-bold">Hay Travel</span>
+          <span className="truncate text-sm font-bold">Hay Travel</span>
         </div>
+        {/* On mobile this bar IS the panel's header, so the language switch lives here rather than
+            in the drawer — `ml-auto` pins it to the right edge, `shrink-0` keeps the brand from
+            pushing it out at 360px. */}
+        <AdminLanguageSwitch className="ml-auto shrink-0" />
       </header>
 
       {/* Mobile drawer (always mounted so it can slide; inert when closed) */}
@@ -109,7 +117,7 @@ export function AdminLayout() {
         <button
           type="button"
           onClick={() => setDrawerOpen(false)}
-          aria-label="Закрыть меню"
+          aria-label={copy.closeMenu}
           tabIndex={drawerOpen ? 0 : -1}
           className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${
             drawerOpen ? 'opacity-100' : 'opacity-0'
@@ -118,7 +126,7 @@ export function AdminLayout() {
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Меню панели"
+          aria-label={copy.menuLabel}
           className="absolute inset-y-0 left-0 w-72 max-w-[82%] shadow-2xl transition-transform duration-200"
           style={{ transform: drawerOpen ? 'translateX(0)' : 'translateX(-100%)' }}
         >
@@ -126,7 +134,7 @@ export function AdminLayout() {
           <button
             type="button"
             onClick={() => setDrawerOpen(false)}
-            aria-label="Закрыть меню"
+            aria-label={copy.closeMenu}
             className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { Link, useLoaderData, useNavigate, useRevalidator } from 'react-router'
+import { Link, redirect, useLoaderData, useNavigate, useRevalidator } from 'react-router'
 import {
   deleteTour,
   getAllTours,
@@ -9,16 +9,25 @@ import {
   setTourArchived,
   setTourFeatured,
 } from '@/features/admin/api/adminTours'
-import { Button, Modal, Spinner, buttonClassName } from '@/shared/ui'
+import { Button, MaintenanceFormLayout, Modal, Spinner, buttonClassName } from '@/shared/ui'
 import { ApiError } from '@/shared/lib/http'
-import { canDeleteTours, canFeatureTours, useAuth } from '@/shared/auth'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
+import { adminCommonCopy } from '@/features/admin/lib/adminCommonCopy'
+import {
+  AdminScreen,
+  canView,
+  ensurePermissionsReady,
+  useScreenPermission,
+} from '@/shared/auth'
 import type { TourInfoModel } from '@/shared/types/attours'
-import { tourTitleRu } from '@/features/admin/ui/TourTableParts'
+import { tourTitle } from '@/features/admin/ui/TourTableParts'
 import {
   emptyFilters,
   filterProducts,
   type ProductFilters,
 } from './lib/filterProducts'
+import { productsCopy } from './lib/productsCopy'
 import { ProductsToolbar } from './components/ProductsToolbar'
 import { ProductsTable, type ProductsView } from './components/ProductsTable'
 
@@ -43,22 +52,41 @@ function featuredOf(tours: TourInfoModel[]): TourInfoModel[] {
  * Loads both the active and the archived tour lists in parallel. Errors are NOT swallowed —
  * a rejection propagates to `AdminErrorBoundary`. Revalidated automatically after every
  * mutation (archive / restore / publish / delete) so the counts and lists stay in sync.
+ *
+ * The screen used to have no guard of its own (every panel role could open it). With per-screen
+ * permissions it needs one, or a role without `products.View` typing the URL would get a raw 403.
  */
 export async function productsLoader() {
+  await ensurePermissionsReady()
+  if (!canView(AdminScreen.Products)) throw redirect('/admin')
+
   const [active, archived] = await Promise.all([getAllTours(), getArchivedTours()])
   return { active, archived }
 }
 
+/**
+ * Template B — «Форма обслуживания» (`MaintenanceFormLayout`): many equal products with no "main"
+ * one, created and deleted freely, edited one at a time. It differs from the catalogs only in
+ * WHERE a record is edited — a full screen (`/admin/tours/:id/edit`, template A) rather than a
+ * side panel — which makes this the list half of a list↔card pair, not a template of its own.
+ *
+ * «Создать продукт» is the archetype's single page-level action and therefore the only thing in
+ * the control zone; there is no page-level Save, because this screen accumulates no draft.
+ */
 export function ProductsPage() {
   const { active, archived } = useLoaderData<typeof productsLoader>()
   const navigate = useNavigate()
   const revalidator = useRevalidator()
-  const { user } = useAuth()
+  const copy = useCopy(productsCopy)
+  const common = useCopy(adminCommonCopy)
+  const { locale } = useLocale()
 
-  // Admin-only actions on the backend (`DeleteTour`, `SetFeatured`, `ReorderFeatured`). Hiding
-  // them for a TourManager is UX — the API rejects them regardless.
-  const canDelete = canDeleteTours(user?.role)
-  const canFeature = canFeatureTours(user?.role)
+  // Resolved once here and handed down as capabilities — the tables and toolbars stay
+  // presentational and never ask about permissions themselves.
+  const permission = useScreenPermission(AdminScreen.Products)
+  const canDelete = permission.canDelete
+  // Featuring and reordering are UPDATEs on the backend (§0.3), not a separate right.
+  const canFeature = permission.canUpdate
 
   const [view, setView] = useState<ProductsView>('active')
   const [filters, setFilters] = useState<ProductFilters>(emptyFilters)
@@ -81,11 +109,11 @@ export function ProductsPage() {
   function errorText(err: unknown, action: string): string {
     if (err instanceof ApiError) {
       if (errorCodeOf(err.body) === TOO_MANY_FEATURED_CODE) {
-        return `Уже отмечено ${MAX_FEATURED} туров — сначала уберите один из «Избранных».`
+        return copy.errorTooManyFeatured(MAX_FEATURED)
       }
-      return `Не удалось ${action}: сервер вернул ошибку (${err.status}).`
+      return copy.errorServer(action, err.status)
     }
-    return `Не удалось ${action}: проверьте соединение и попробуйте ещё раз.`
+    return copy.errorNetwork(action)
   }
 
   /** Run a mutation on one tour, then revalidate. Shared plumbing for all row actions. */
@@ -109,15 +137,15 @@ export function ProductsPage() {
   }
 
   const togglePublish = (tour: TourInfoModel) =>
-    runMutation(tour.id, tour.isActive ? 'снять с публикации' : 'опубликовать', () =>
+    runMutation(tour.id, tour.isActive ? copy.action.unpublish : copy.action.publish, () =>
       setTourActive(tour.id, !tour.isActive),
     )
   const archive = (tour: TourInfoModel) =>
-    runMutation(tour.id, 'архивировать', () => setTourArchived(tour.id, true))
+    runMutation(tour.id, copy.action.archive, () => setTourArchived(tour.id, true))
   const restore = (tour: TourInfoModel) =>
-    runMutation(tour.id, 'восстановить', () => setTourArchived(tour.id, false))
+    runMutation(tour.id, copy.action.restore, () => setTourArchived(tour.id, false))
   const toggleFeatured = (tour: TourInfoModel) =>
-    runMutation(tour.id, tour.isFeatured ? 'убрать из избранного' : 'добавить в избранное', () =>
+    runMutation(tour.id, tour.isFeatured ? copy.action.unfeature : copy.action.feature, () =>
       setTourFeatured(tour.id, !tour.isFeatured),
     )
 
@@ -129,7 +157,7 @@ export function ProductsPage() {
     const to = direction === 'up' ? from - 1 : from + 1
     if (from === -1 || to < 0 || to >= ids.length) return
     ;[ids[from], ids[to]] = [ids[to], ids[from]]
-    runMutation(tour.id, 'изменить порядок', () => reorderFeaturedTours(ids))
+    runMutation(tour.id, copy.action.reorder, () => reorderFeaturedTours(ids))
   }
 
   async function confirmDelete() {
@@ -142,7 +170,7 @@ export function ProductsPage() {
       setConfirmTarget(null)
       await revalidator.revalidate()
     } catch (err) {
-      setActionError(errorText(err, 'удалить окончательно'))
+      setActionError(errorText(err, copy.action.deleteForever))
     } finally {
       setPendingId(null)
     }
@@ -152,29 +180,32 @@ export function ProductsPage() {
   const emptyAfterFilter = !emptyList && visible.length === 0
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-start gap-4">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-bold text-neutral-900">Продукты</h1>
-          <p className="text-sm text-neutral-500">Все туры и экскурсии — поиск, фильтры, архив.</p>
-        </div>
-        <div className="ml-auto">
-          <Link to="/admin/tours/new" className={buttonClassName('primary', 'md')}>
-            Создать продукт
+    <MaintenanceFormLayout
+      title={copy.title}
+      subtitle={copy.subtitle}
+      /* Hidden, not disabled: the button has no informational content of its own. `ml-auto` keeps
+         it at the right end of the control zone, where this archetype always puts its one filled
+         action. Still a `Link`, not a button — it navigates, and turning it into an
+         `AdminActionButton` would cost middle-click / open-in-new-tab for no structural gain. */
+      controlZone={
+        permission.canCreate && (
+          <Link to="/admin/tours/new" className={`ml-auto ${buttonClassName('primary', 'md')}`}>
+            {copy.create}
           </Link>
-        </div>
-      </header>
-
-      {actionError && (
-        <div
-          role="alert"
-          className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
-        >
-          <span aria-hidden="true">⚠️</span>
-          <span>{actionError}</span>
-        </div>
-      )}
-
+        )
+      }
+      message={
+        actionError && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+          >
+            <span aria-hidden="true">⚠️</span>
+            <span>{actionError}</span>
+          </div>
+        )
+      }
+    >
       <ProductsToolbar
         view={view}
         onViewChange={setView}
@@ -187,10 +218,10 @@ export function ProductsPage() {
       />
 
       {emptyList ? (
-        <EmptyState view={view} />
+        <EmptyState view={view} canCreate={permission.canCreate} />
       ) : emptyAfterFilter ? (
         <p className="rounded-xl border border-dashed border-neutral-200 bg-white px-6 py-12 text-center text-sm text-neutral-500">
-          Ничего не найдено по заданным фильтрам.
+          {copy.noMatches}
         </p>
       ) : (
         <ProductsTable
@@ -201,6 +232,7 @@ export function ProductsPage() {
           canFeatureMore={canFeatureMore}
           canDelete={canDelete}
           canFeature={canFeature}
+          canUpdate={permission.canUpdate}
           onOpen={openEdit}
           onTogglePublish={togglePublish}
           onToggleFeatured={toggleFeatured}
@@ -216,16 +248,19 @@ export function ProductsPage() {
         onClose={() => {
           if (pendingId === null) setConfirmTarget(null)
         }}
-        title="Удалить окончательно?"
+        title={copy.deleteModal.title}
         initialFocusRef={cancelDeleteRef}
       >
         <p className="text-sm text-neutral-600">
           {confirmTarget && (
             <>
-              Позиция{' '}
-              <span className="font-semibold text-neutral-900">«{tourTitleRu(confirmTarget).text}»</span>{' '}
-              и все её данные (дни, переводы, изображения) будут удалены безвозвратно. Это действие
-              нельзя отменить.
+              {copy.deleteModal.lead}{' '}
+              <span className="font-semibold text-neutral-900">
+                {copy.deleteModal.quoteOpen}
+                {tourTitle(confirmTarget, locale).text}
+                {copy.deleteModal.quoteClose}
+              </span>{' '}
+              {copy.deleteModal.tail}
             </>
           )}
         </p>
@@ -237,7 +272,7 @@ export function ProductsPage() {
             disabled={pendingId !== null}
             className={`${buttonClassName('ghost', 'md')} disabled:pointer-events-none disabled:opacity-50`}
           >
-            Отмена
+            {common.cancel}
           </button>
           <Button
             type="button"
@@ -249,20 +284,22 @@ export function ProductsPage() {
             {pendingId !== null ? (
               <span className="inline-flex items-center gap-2">
                 <Spinner size="sm" />
-                Удаление…
+                {copy.deleteModal.deleting}
               </span>
             ) : (
-              'Удалить'
+              common.delete
             )}
           </Button>
         </div>
       </Modal>
-    </div>
+    </MaintenanceFormLayout>
   )
 }
 
 /** Empty-list state, differs by view (no products at all vs. empty archive vs. nothing featured). */
-function EmptyState({ view }: { view: ProductsView }) {
+function EmptyState({ view, canCreate }: { view: ProductsView; canCreate: boolean }) {
+  const copy = useCopy(productsCopy)
+
   if (view === 'featured') {
     return (
       <div className="rounded-xl border border-neutral-200 bg-white px-6 py-14 text-center">
@@ -270,11 +307,8 @@ function EmptyState({ view }: { view: ProductsView }) {
           <span aria-hidden="true" className="mb-2 text-2xl">
             ♡
           </span>
-          <h2 className="text-base font-semibold text-neutral-800">Ничего не отмечено</h2>
-          <p className="text-sm text-neutral-500">
-            Отметьте сердечком до {MAX_FEATURED} туров на вкладке «Активные» — они появятся в
-            секции «избранное» на главной странице сайта.
-          </p>
+          <h2 className="text-base font-semibold text-neutral-800">{copy.empty.featuredTitle}</h2>
+          <p className="text-sm text-neutral-500">{copy.empty.featuredText(MAX_FEATURED)}</p>
         </div>
       </div>
     )
@@ -287,11 +321,8 @@ function EmptyState({ view }: { view: ProductsView }) {
           <span aria-hidden="true" className="mb-2 text-2xl">
             🗄
           </span>
-          <h2 className="text-base font-semibold text-neutral-800">Архив пуст</h2>
-          <p className="text-sm text-neutral-500">
-            Архивированные продукты появятся здесь. Отсюда их можно восстановить или удалить
-            окончательно.
-          </p>
+          <h2 className="text-base font-semibold text-neutral-800">{copy.empty.archivedTitle}</h2>
+          <p className="text-sm text-neutral-500">{copy.empty.archivedText}</p>
         </div>
       </div>
     )
@@ -302,19 +333,19 @@ function EmptyState({ view }: { view: ProductsView }) {
       <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
         <span
           aria-hidden="true"
-          className="mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-2xl"
+          className="mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-neutral-100 text-2xl"
         >
           🧳
         </span>
-        <h2 className="text-base font-semibold text-neutral-800">Пока нет ни одной позиции</h2>
-        <p className="text-sm text-neutral-500">
-          Создайте первый тур или экскурсию — они появятся здесь и на сайте.
-        </p>
-        <div className="mt-3">
-          <Link to="/admin/tours/new" className={buttonClassName('primary', 'md')}>
-            Создать продукт
-          </Link>
-        </div>
+        <h2 className="text-base font-semibold text-neutral-800">{copy.empty.title}</h2>
+        <p className="text-sm text-neutral-500">{copy.empty.text}</p>
+        {canCreate && (
+          <div className="mt-3">
+            <Link to="/admin/tours/new" className={buttonClassName('primary', 'md')}>
+              {copy.create}
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -6,13 +6,14 @@ namespace ATTours.ClientAPI.Authorization
     // строки собраны здесь один раз, а не продублированы в каждом контроллере.
     // Значения обязаны совпадать с RoleType: именно ToString() роли кладётся в claim
     // (см. JwtTokenService.CreateAccessToken), поэтому расхождение молча закрыло бы доступ.
+    //
+    // С переходом на гибкие права (architecture-flexible-roles.md §2.7, обновлено
+    // 2026-08-22) ВСЯ админка, включая управление самими ролями и уведомлениями, гейтится
+    // матрицей ([RequiresPermission]) — ни одна роль не привязана к коду. Единственный
+    // оставшийся жёсткий гейт — Employee, read-only эндпоинт исполнителя (решение 9
+    // чек-листа), сознательно не переведённый на матрицу.
     public static class ApiRoles
     {
-        public const string Admin = nameof(RoleType.Admin);
-
-        // Ведение каталога туров и чтение справочников, из которых собирается тур.
-        public const string TourManagerOrAdmin = nameof(RoleType.TourManager) + "," + nameof(RoleType.Admin);
-
         // Read-only доступ к своим назначенным заказам (checklist-orders-redesign.txt, Фаза 2).
         public const string Employee = nameof(RoleType.Employee);
     }

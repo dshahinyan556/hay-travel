@@ -1,8 +1,10 @@
 import type { Locale } from '@/shared/lib/locale'
 import { parseISODate } from '@/shared/lib/date'
 
-/** Russian plural forms: [1, 2–4, 5+] — e.g. `['день', 'дня', 'дней']`. */
-function pluralizeRu(count: number, [one, few, many]: [string, string, string]): string {
+/** Russian plural forms: [1, 2–4, 5+] — e.g. `['день', 'дня', 'дней']`.
+ * Exported because it is the ONE plural implementation in the app: admin copy modules
+ * (`<module>Copy.ts`) call it instead of hand-rolling the same modulo rules. */
+export function pluralizeRu(count: number, [one, few, many]: [string, string, string]): string {
   const mod10 = count % 10
   const mod100 = count % 100
   if (mod10 === 1 && mod100 !== 11) return one
@@ -10,8 +12,9 @@ function pluralizeRu(count: number, [one, few, many]: [string, string, string]):
   return many
 }
 
-/** English plural forms: [singular, plural] — count === 1 is the only singular case. */
-function pluralizeEn(count: number, [one, many]: [string, string]): string {
+/** English plural forms: [singular, plural] — count === 1 is the only singular case.
+ * Exported for the same reason as `pluralizeRu` above. */
+export function pluralizeEn(count: number, [one, many]: [string, string]): string {
   return count === 1 ? one : many
 }
 

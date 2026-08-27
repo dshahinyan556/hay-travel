@@ -4,7 +4,7 @@ export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outl
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'bg-brand-700 text-white hover:bg-brand-800',
+  primary: 'bg-neutral-950 text-white hover:bg-neutral-800',
   secondary: 'bg-neutral-100 text-neutral-900 hover:bg-neutral-200',
   ghost: 'bg-transparent text-neutral-900 hover:bg-neutral-100',
   danger: 'bg-rose-600 text-white hover:bg-rose-700',

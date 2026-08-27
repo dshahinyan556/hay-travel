@@ -13,10 +13,11 @@ interface LocaleContextValue {
 const LocaleContext = createContext<LocaleContextValue | null>(null)
 
 /**
- * Mounted once at the app root (`App.tsx`), above the router, so both the public site and
- * `/admin` are technically inside it — admin just never renders `LanguageSwitch` and so never
- * moves off the default `ru`, which is exactly the "admin stays Russian-only" contract
- * (`Hay Travel/CLAUDE.md`) without needing a second provider or a route-based split.
+ * Mounted once at the app root (`App.tsx`), above the router, so both the public site and `/admin`
+ * are inside it — one provider, one stored preference, one switch semantics for the whole product
+ * (ADR 021). `/admin` renders its own `AdminLanguageSwitch` (admin chrome palette) instead of the
+ * public `LanguageSwitch`, but both write to this same state, which is deliberate: the same person
+ * uses both surfaces and there is no scenario where the panel and the site should disagree.
  *
  * State is the single source of truth for the visitor's choice; `localStorage` is only there so
  * a plain `getStoredLocale()` read (route loaders, `shared/api`) sees the same value outside
@@ -24,7 +25,9 @@ const LocaleContext = createContext<LocaleContextValue | null>(null)
  * `useEffect` — because `RootLayout`'s `useRevalidateOnLocaleChange` (a descendant, so its effects
  * run before this provider's own) reads storage the moment `locale` changes to re-run the active
  * loader; an effect-based write here would still be pending when that fires, and the loader would
- * re-fetch in the locale that is about to be replaced, not the one just chosen.
+ * re-fetch in the locale that is about to be replaced, not the one just chosen. The admin tree does
+ * NOT mount that hook and does not need to: admin loaders fetch every translation row (RU + EN) in
+ * one go, so a locale change there is a pure re-render, never a refetch.
  */
 export function LocaleProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(() => getStoredLocale())

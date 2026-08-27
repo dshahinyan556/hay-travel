@@ -1,32 +1,29 @@
 import { useId, useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import type { TourDetail } from '@/shared/types/tour'
-import type { OrderInfoModel } from '@/shared/types/booking'
-import { createOrder } from '@/shared/api/booking'
-import { SessionExpiredError, useAuth } from '@/shared/auth'
-import { ApiError } from '@/shared/lib/http'
+import { addCartItem } from '@/shared/cart'
+import { discountedPriceOn, getBookingWindow, MAX_GUESTS, MIN_GUESTS, useTierPrice } from '@/shared/booking'
 import { parseISODate } from '@/shared/lib/date'
-import { withReturnTo } from '@/shared/lib/returnTo'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
-import type { TranslationKey } from '@/shared/i18n/translate'
-import { DatePicker, type DatePickerDiscountRange } from '@/shared/ui'
+import { DatePicker, GuestStepper, type DatePickerDiscountRange } from '@/shared/ui'
 import { CheckIcon, GuideIcon } from '@/shared/ui/icons'
-import { useTierPrice } from '../hooks/useTierPrice'
-import { getBookingWindow } from '../lib/bookingWindow'
-import { discountedPriceOn } from '../lib/tourDiscount'
 
 /**
- * Booking box — a real order form (spec 003 §4.3), backed by `POST api/Order/Create`.
+ * Booking box — picks a trip date and a guest count and puts THAT choice into the cart
+ * (`shared/cart`, ADR 022). It no longer creates an order.
  *
- * Flow: pick a date and a guest count → submit → the server creates the order and answers with it
- * → the card switches to a confirmation carrying the order number and status. Days already closed
- * for this tour arrive from the loader (`closedDates`) and are struck through in the picker; the
- * server re-checks the date anyway, and a rejection (code 2014) greys that day out too.
+ * ── What changed with the cart (2026-08-22) ───────────────────────────────────────────────────
+ * This card used to call `POST api/Order/Create` itself and switch to a confirmation screen. All
+ * of that moved to `/cart`, which sends the WHOLE cart as one atomic multi-line order (ADR 025).
+ * As a result this component now makes NO network request at all and knows nothing about
+ * authentication: the entire backend contact of the public site converges on one call, on one
+ * page. Signing in is asked for there, at the moment of sending.
  *
- * Booking requires a signed-in visitor, but the card renders for everyone: an anonymous visitor
- * gets an inline "sign in to continue" block on submit, carrying their picked date and guest count
- * through `?returnTo=` so nothing is lost across the login. There is deliberately NO redirect on
- * page open — the tour page itself must stay readable anonymously.
+ * There is deliberately NO redirect to `/cart` after adding. Auto-navigating would turn the cart
+ * back into the one-step booking it replaces and make accumulating several trips awkward — so the
+ * confirmation is inline, over the button, and the form stays mounted with the picked date and
+ * guest count intact. The visitor can immediately pick another date of the same tour and add a
+ * second position.
  *
  * ── Group pricing (2026-08) ───────────────────────────────────────────────────────────────────
  * 1–4 guests pay the base price, 5–6 pay a surcharge, and from 7 there is no displayed price at
@@ -36,52 +33,18 @@ import { discountedPriceOn } from '../lib/tourDiscount'
  * ── Discount by trip date (2026-08-18) ────────────────────────────────────────────────────────
  * A tour's discount applies to a RANGE of trip dates. The calendar marks those days with a red
  * "-N%" ribbon before anything is picked, and the total below follows the picked date rather than
- * "today" — see `lib/tourDiscount.ts` for why the card resolves that itself.
+ * "today" — see `shared/booking/tourDiscount.ts` for why the card resolves that itself.
  *
  * The 5–6 surcharge gets NO badge, no "+20%", no strikethrough: the requirement is a price, not a
  * disclosed markup, and surfacing the multiplier invites "why am I being charged more" on a page
- * with no place to answer it. The 7+ branch submits the SAME real order — "a request without
- * payment" is the same action; only the copy changes.
+ * with no place to answer it. The 7+ branch adds the SAME cart position; only the copy changes.
  */
-
-const MIN_GUESTS = 1
-const MAX_GUESTS = 16
-
-/* `GlobalErrorCode` values this form can actually receive (spec 001 §7). Local numeric constants,
-   the same convention `users/lib/userCopy.ts` follows — the public site's `AuthErrorCode` covers
-   login/register only. */
-const TOUR_DATE_UNAVAILABLE = 2014
-const INVALID_GUEST_COUNT = 2015 // Unreachable from this UI: the counter is clamped to 1..16.
-const ORDER_DATE_IN_PAST = 2016
-
-type Translate = (key: TranslationKey, vars?: Record<string, string | number>) => string
-
-/** `errorCode` as the backend spells it (`ErrorModelExceptionHandler` uses camelCase, some older
- * handlers PascalCase) — same reader as `userCopy.ts`. */
-function errorCodeOf(body: unknown): number | undefined {
-  if (typeof body !== 'object' || body === null) return undefined
-  const record = body as Record<string, unknown>
-  const raw = record.errorCode ?? record.ErrorCode
-  return typeof raw === 'number' ? raw : undefined
-}
-
-function bookingErrorMessage(err: unknown, t: Translate): string {
-  if (err instanceof SessionExpiredError) return t('booking.sessionExpired')
-  if (err instanceof ApiError) {
-    const code = errorCodeOf(err.body)
-    if (code === TOUR_DATE_UNAVAILABLE) return t('booking.dateUnavailable')
-    if (code === ORDER_DATE_IN_PAST) return t('booking.datePast')
-    if (code === INVALID_GUEST_COUNT) return t('booking.submitFailed')
-    // A bodyless 401 that `authFetch` could not renew arrives here rather than as
-    // `SessionExpiredError` only when the retry itself failed differently — treat it the same.
-    if (err.status === 401) return t('booking.sessionExpired')
-  }
-  return t('booking.submitFailed')
-}
 
 /** Restores a selection the visitor made before being sent to `/auth` (§4.3 p.1). Read straight
  * from `location.search` rather than `useSearchParams`: the restore is one-shot, subscribing to
- * URL changes would only re-run it. */
+ * URL changes would only re-run it. Kept after the cart landed — the cart itself no longer needs
+ * it (it survives a login on its own), but `?date=&guests=` is still a working deep link into a
+ * tour with a pre-filled form, and deleting working code has no upside. */
 function initialDateFromQuery(closed: ReadonlySet<string>, fromISO: string, toISO: string): string {
   const raw = new URLSearchParams(location.search).get('date')
   if (!raw || parseISODate(raw) === null) return ''
@@ -116,7 +79,6 @@ export function BookingCard({ tour, largeGroupInvitation, closedDates }: Booking
   const dateLabelId = useId()
   const dateErrorId = `${dateFieldId}-error`
   const { t } = useLocale()
-  const { status } = useAuth()
 
   // Named `bookingWindow`, not `window`: this component reads the global `location`, and shadowing
   // `window` inside it is the kind of trap that only shows up at runtime.
@@ -125,30 +87,22 @@ export function BookingCard({ tour, largeGroupInvitation, closedDates }: Booking
   // cross midnight mid-session — the same snapshot assumption `DatePicker`'s `today` already makes.
   const bookingWindow = useMemo(() => getBookingWindow(), [])
 
-  /** Dates the SERVER rejected as closed after the page was loaded (§4.3 p.4). */
-  const [serverClosed, setServerClosed] = useState<readonly string[]>([])
-
   // Stable reference required by `DatePicker.disabledDates` — it feeds that component's
-  // `isDisabledDate` memo.
-  const disabledDates = useMemo(
-    () => new Set([...closedDates, ...serverClosed]),
-    [closedDates, serverClosed],
-  )
+  // `isDisabledDate` memo. There is no `serverClosed` counterpart any more: only `/cart` talks to
+  // the server, so only `/cart` can learn that a day was rejected.
+  const disabledDates = useMemo(() => new Set(closedDates), [closedDates])
 
   const [guests, setGuests] = useState(initialGuestsFromQuery)
   const [date, setDate] = useState(() =>
     // Lazy initialiser, not an effect: restoring after render would flash an empty form first.
-    // `serverClosed` is empty on the first render, so `closedDates` is the whole exclusion set.
-    initialDateFromQuery(new Set(closedDates), bookingWindow.fromISO, bookingWindow.toISO),
+    initialDateFromQuery(disabledDates, bookingWindow.fromISO, bookingWindow.toISO),
   )
   // The date field used to be an `<input type="date" required>`, where the browser blocked submit
   // on its own. `DatePicker`'s trigger is a `<button>`, which no form validation applies to, so
-  // that guard now lives here — otherwise an empty date would silently "book".
+  // that guard now lives here — otherwise an empty date would silently reach the cart.
   const [dateMissing, setDateMissing] = useState(false)
-  const [pending, setPending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [authNotice, setAuthNotice] = useState(false)
-  const [order, setOrder] = useState<OrderInfoModel | null>(null)
+  const [added, setAdded] = useState<'added' | 'updated' | null>(null)
+  const [cartFull, setCartFull] = useState(false)
 
   /* The "-N%" ribbon in the calendar (2026-08-18). Straight from the tour's raw campaign range,
      which is why it can advertise a campaign that has not started yet — `discountedPrice` alone
@@ -165,87 +119,40 @@ export function BookingCard({ tour, largeGroupInvitation, closedDates }: Booking
   /* Before a date is picked there is nothing to resolve against, so the card keeps showing the
      server's "today" figure — the same number the catalog card and the page header show. Once a
      date exists, the discount follows THAT date, exactly like the order the backend will create
-     (see `lib/tourDiscount.ts`). */
+     (see `shared/booking/tourDiscount.ts`). */
   const discountedForDate =
     date === '' ? tour.discountedPrice : discountedPriceOn(tour.priceFrom, tour.discountWindow, date)
 
   const price = useTierPrice(tour.priceFrom, guests, discountedForDate)
 
-  /** `'idle' | 'loading'` means the session is still being resolved — that is "unknown", not
-   * "anonymous", and must not produce a "sign in" prompt. */
-  const isAuthKnown = status === 'authenticated' || status === 'anonymous'
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (pending) return
 
     if (date === '') {
-      // One problem at a time: an anonymous visitor with no date sees the date error first, not
-      // both the date error and the sign-in block.
       setDateMissing(true)
       return
     }
-    if (!isAuthKnown) return
-    if (status === 'anonymous') {
-      setAuthNotice(true)
+
+    setCartFull(false)
+    const result = addCartItem({
+      tourId: Number(tour.id),
+      tourDate: date,
+      guestCount: guests,
+      snapshot: {
+        title: tour.title,
+        coverImage: tour.coverImage,
+        kind: tour.kind,
+        durationDays: tour.durationDays,
+        durationNights: tour.durationNights,
+      },
+    })
+
+    if (result === 'full') {
+      // The button stays enabled: removing a position elsewhere makes the same press work.
+      setCartFull(true)
       return
     }
-
-    setPending(true)
-    setError(null)
-    try {
-      const created = await createOrder({
-        tourId: Number(tour.id),
-        tourDate: date,
-        guestCount: guests,
-      })
-      setOrder(created)
-      setAuthNotice(false)
-    } catch (err) {
-      setError(bookingErrorMessage(err, t))
-      const code = err instanceof ApiError ? errorCodeOf(err.body) : undefined
-      if (code === TOUR_DATE_UNAVAILABLE || code === ORDER_DATE_IN_PAST) {
-        // Grey the day out and clear the field, so pressing the button again with the same
-        // rejected date is not even possible.
-        setServerClosed((prev) => (prev.includes(date) ? prev : [...prev, date]))
-        setDate('')
-      }
-      if (err instanceof SessionExpiredError || (err instanceof ApiError && err.status === 401)) {
-        setAuthNotice(true)
-      }
-    } finally {
-      setPending(false)
-    }
-  }
-
-  if (order !== null) {
-    // Never `Confirmed`-equivalent right after creation (ADR 019 — a fresh order starts `Open` or
-    // `PendingPayment`, both handled by an admin later), so this screen only ever shows the
-    // "submitted" copy now — there used to be a second variant for an order the server returned
-    // already confirmed, which never actually happened even under the old 3-status model.
-    return (
-      <div className="rounded-2xl bg-panel p-6 text-center ring-1 ring-gold-line">
-        <span className="inline-flex text-gold-ink">
-          <CheckIcon size={28} />
-        </span>
-        <p className="mt-3 font-semibold text-xl text-ink">{t('booking.submittedTitle')}</p>
-        <p className="mt-1.5 text-xs tabular-nums text-ink-muted">
-          {t('booking.orderNumber', { id: order.number })}
-        </p>
-        <p className="mt-2 text-sm break-words text-ink-muted">{t('booking.submittedBody')}</p>
-        {/* No amounts from `order.payment` anywhere on this screen. The server computes
-            `TourPriceSnapshot * GuestCount` and knows nothing about the 5–6 guest tiered surcharge
-            in `shared/currency/pricing.ts`, so its total can legitimately differ from the "Итого"
-            shown a second ago. Money on this flow is the manager's conversation, not the card's. */}
-        <button
-          type="button"
-          onClick={() => setOrder(null)}
-          className="mt-4 min-h-11 text-sm text-gold-ink transition-colors hover:text-accent-strong"
-        >
-          {t('booking.editSubmission')}
-        </button>
-      </div>
-    )
+    setAdded(result)
   }
 
   return (
@@ -305,7 +212,10 @@ export function BookingCard({ tour, largeGroupInvitation, closedDates }: Booking
           onChange={(value) => {
             setDate(value)
             setDateMissing(false)
-            setError(null)
+            // A new date is a different cart position, so the confirmation for the previous one
+            // must not stay on screen claiming this one was added.
+            setAdded(null)
+            setCartFull(false)
           }}
           max={bookingWindow.toISO}
           disabledDates={disabledDates}
@@ -327,78 +237,64 @@ export function BookingCard({ tour, largeGroupInvitation, closedDates }: Booking
           down to 6 and see a price again. */}
       <div className="mt-3">
         <span className="text-xs text-ink-muted">{t('booking.guests')}</span>
-        <div className="mt-1.5 flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setGuests((g) => Math.max(MIN_GUESTS, g - 1))}
-            aria-label={t('booking.guestsFewer')}
-            className="h-9 w-9 rounded-full text-lg text-gold-ink ring-1 ring-edge-strong transition-colors hover:bg-accent-soft"
-          >
-            −
-          </button>
-          <span className="min-w-8 text-center font-semibold text-xl tabular-nums text-ink">{guests}</span>
-          <button
-            type="button"
-            onClick={() => setGuests((g) => Math.min(MAX_GUESTS, g + 1))}
-            aria-label={t('booking.guestsMore')}
-            className="h-9 w-9 rounded-full text-lg text-gold-ink ring-1 ring-edge-strong transition-colors hover:bg-accent-soft"
-          >
-            +
-          </button>
+        <div className="mt-1.5">
+          <GuestStepper
+            value={guests}
+            onChange={setGuests}
+            labelFewer={t('booking.guestsFewer')}
+            labelMore={t('booking.guestsMore')}
+          />
         </div>
       </div>
 
-      {/* Kept and ENABLED at 7+, only the copy changes: disabling it would delete the only path to
-          the action the invitation text just asked for. `!isAuthKnown` disables it only for the
-          moment the session is still bootstrapping — an anonymous visitor must be able to press it
-          and reach the sign-in hint. The pending label is plain text on the same line (no icon) so
-          the card's height cannot change under the cursor. */}
-      <button
-        type="submit"
-        disabled={pending || !isAuthKnown}
-        // `btn-sheen` only while enabled — a shimmering DISABLED button reads as "still live",
-        // which contradicts the dimmed/`cursor-not-allowed` state right next to it.
-        className={`mt-5 w-full rounded-full bg-gold-fill px-5 py-3 text-sm font-medium text-gold-on transition-colors hover:bg-gold-fill-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-panel focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 ${pending || !isAuthKnown ? '' : 'btn-sheen'}`}
-      >
-        {pending
-          ? t('booking.submitting')
-          : price.hidden
-            ? t('booking.submitLargeGroup')
-            : t('booking.submit')}
-      </button>
-
-      {/* Stays directly under the button so the default state of the card is unchanged. */}
-      <p className="mt-2.5 text-center text-xs text-ink-muted">
-        {price.hidden ? t('booking.submitHintLargeGroup') : t('booking.submitHint')}
-      </p>
-
-      {error !== null && (
-        <p role="alert" className="mt-2.5 text-sm break-words text-danger">
-          {error}
-        </p>
-      )}
-
-      {authNotice && (
-        <div
-          role="status"
-          className="mt-3 rounded-xl bg-panel-raised p-3.5 ring-1 ring-edge-strong"
-        >
-          <p className="text-sm font-medium text-ink">{t('booking.authTitle')}</p>
-          <p className="mt-1 text-sm break-words text-ink-muted">{t('booking.authBody')}</p>
-          {/* Secondary action, not a second gold CTA — there is already one primary button above.
-              The picked date and guest count ride along so the card can restore them on return. */}
-          <Link
-            to={withReturnTo(
-              '/auth',
-              `${location.pathname}?${new URLSearchParams({
-                ...(date === '' ? {} : { date }),
-                guests: String(guests),
-              })}`,
-            )}
-            className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-full px-4 py-2 text-sm font-medium text-gold-ink ring-1 ring-gold-line transition-colors hover:bg-accent-soft focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none sm:w-auto"
+      {added === null ? (
+        <>
+          {/* Kept and ENABLED at 7+, and the label no longer changes with the tier either: the
+              action is now "put this in the cart", which is the same action regardless of group
+              size. */}
+          <button
+            type="submit"
+            className="btn-sheen mt-5 w-full rounded-full bg-gold-fill px-5 py-3 text-sm font-medium text-gold-on transition-colors hover:bg-gold-fill-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-panel focus-visible:outline-none"
           >
-            {t('booking.authAction')}
+            {t('cart.addToCart')}
+          </button>
+
+          {/* Stays directly under the button so the default state of the card is unchanged. */}
+          <p className="mt-2.5 text-center text-xs text-ink-muted">
+            {price.hidden ? t('booking.submitHintLargeGroup') : t('booking.submitHint')}
+          </p>
+
+          {cartFull && (
+            <p role="alert" className="mt-2.5 text-sm break-words text-danger">
+              {t('cart.error.full')}
+            </p>
+          )}
+        </>
+      ) : (
+        /* Takes the place of the button rather than appearing under it, so the card does not grow
+           downward under the cursor at the moment of the click. */
+        <div role="status" className="mt-5 rounded-xl bg-panel-raised p-3.5 ring-1 ring-gold-line">
+          <p className="flex items-center gap-2 text-sm font-medium text-ink">
+            <span className="shrink-0 text-gold-ink">
+              <CheckIcon size={17} />
+            </span>
+            {added === 'updated' ? t('cart.added.titleUpdated') : t('cart.added.title')}
+          </p>
+          <Link
+            to="/cart"
+            className="mt-3 flex min-h-11 w-full items-center justify-center rounded-full bg-gold-fill px-5 py-2.5 text-sm font-medium text-gold-on transition-colors hover:bg-gold-fill-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-panel-raised focus-visible:outline-none"
+          >
+            {t('cart.added.goToCart')}
           </Link>
+          {/* Returns the form so a second date of the SAME tour can be added right away — that is
+              the whole point of not auto-navigating. */}
+          <button
+            type="button"
+            onClick={() => setAdded(null)}
+            className="mt-1 min-h-11 w-full text-[13.5px] font-medium text-gold-ink transition-colors hover:text-accent-strong focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
+          >
+            {t('cart.added.continue')}
+          </button>
         </div>
       )}
     </form>

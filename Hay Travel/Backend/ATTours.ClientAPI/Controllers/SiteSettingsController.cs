@@ -1,12 +1,12 @@
 using ATTours.BusinessServices.Services.InfoServices;
 using ATTours.BusinessServices.Services.UpdateServices;
 using ATTours.ClientAPI.Authorization;
+using ATTours.Common.Authorization;
 using ATTours.Common.DTO.Info;
 using ATTours.Common.DTO.Request;
 using ATTours.Common.Entities;
 using ATTours.Common.Enums;
 using AutoMapper;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ATTours.ClientAPI.Controllers
@@ -22,7 +22,7 @@ namespace ATTours.ClientAPI.Controllers
         // не нужны: в редакторе тура они не участвуют. Публичный срез — в GetPublic.
         [HttpGet]
         [Route("GetAll")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Settings, PermissionAction.View)]
         public async Task<List<SiteSettingInfoModel>> GetAllAsync()
         {
             using var info = new SiteSettingsInfo();
@@ -34,7 +34,7 @@ namespace ATTours.ClientAPI.Controllers
         // (состав ключей задаёт каталог в коде, ADR 002).
         [HttpPut]
         [Route("Update")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Settings, PermissionAction.Update)]
         public async Task<List<SiteSettingInfoModel>> UpdateAsync([FromBody] List<SiteSettingUpdateModel> models)
         {
             var entities = mapper.Map<List<SiteSetting>>(models);

@@ -57,6 +57,9 @@ export function LoginForm({ onSubmit, error, status, forgotPasswordHref }: Login
           onSubmit({
             usernameOrEmail: String(data.get('usernameOrEmail') ?? '').trim(),
             password: String(data.get('password') ?? ''),
+            // An unchecked box is absent from `FormData` entirely — which is exactly the
+            // backend's own default (`LoginModel.RememberMe = false`).
+            rememberMe: data.get('rememberMe') !== null,
           })
         }}
       >
@@ -91,14 +94,31 @@ export function LoginForm({ onSubmit, error, status, forgotPasswordHref }: Login
               />
             </div>
 
-            <p className="reveal-item text-right">
+            {/* One row, both ends: the session-length choice on the left, the recovery link on
+                the right. They are the two "before you press Войти" secondary decisions, and
+                stacking them would push the submit button below the fold on a short phone. */}
+            <div className="reveal-item flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-ink-muted transition-colors hover:text-ink">
+                <input
+                  type="checkbox"
+                  name="rememberMe"
+                  // Unchecked by default, matching `LoginModel.RememberMe`'s own default: a longer
+                  // session is something the visitor opts into, never something we assume.
+                  // `accent-color` (not a custom-drawn box) so the native control keeps its own
+                  // platform affordances and just takes the theme's gold — the same
+                  // `--color-gold-ink` token `text-gold-ink` resolves to, so it flips with the
+                  // light/dark skin for free.
+                  className="h-4 w-4 shrink-0 cursor-pointer rounded border-edge-strong bg-panel-raised accent-[var(--color-gold-ink)] focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
+                />
+                {t('auth.rememberMe')}
+              </label>
               <Link
                 to={forgotPasswordHref}
                 className="link-underline text-xs text-gold-ink hover:text-accent-strong"
               >
                 {t('auth.forgotPassword')}
               </Link>
-            </p>
+            </div>
           </fieldset>
         </div>
 

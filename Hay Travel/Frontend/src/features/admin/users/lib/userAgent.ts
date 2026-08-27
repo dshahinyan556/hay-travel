@@ -11,7 +11,9 @@
  */
 
 const BROWSERS: [RegExp, string][] = [
-  [/YaBrowser\//, 'Яндекс.Браузер'],
+  // Brand names, not copy: they read the same in both interface languages, so this table stays a
+  // plain constant instead of moving into `userCopy`.
+  [/YaBrowser\//, 'Yandex Browser'],
   [/Edg[A-Z]?\//, 'Edge'],
   [/OPR\/|Opera/, 'Opera'],
   [/SamsungBrowser\//, 'Samsung Internet'],

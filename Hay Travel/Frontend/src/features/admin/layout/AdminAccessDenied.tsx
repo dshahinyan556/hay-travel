@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { logout, type AuthUser } from '@/shared/auth'
 import { Button, buttonClassName } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { adminLayoutCopy } from './adminLayoutCopy'
 
 interface AdminAccessDeniedProps {
   user: AuthUser
@@ -17,6 +19,7 @@ interface AdminAccessDeniedProps {
  */
 export function AdminAccessDenied({ user }: AdminAccessDeniedProps) {
   const navigate = useNavigate()
+  const copy = useCopy(adminLayoutCopy)
   const [isLeaving, setIsLeaving] = useState(false)
 
   async function handleLogout() {
@@ -34,24 +37,24 @@ export function AdminAccessDenied({ user }: AdminAccessDeniedProps) {
       <div className="flex w-full max-w-md flex-col items-center gap-4 text-center">
         <span
           aria-hidden="true"
-          className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-2xl text-amber-700"
+          className="flex h-14 w-14 items-center justify-center rounded-2xl bg-neutral-100 text-2xl text-neutral-700"
         >
           🔒
         </span>
         <div className="flex flex-col gap-1.5">
-          <h1 className="text-lg font-bold text-neutral-900">Недостаточно прав</h1>
+          <h1 className="text-lg font-bold text-neutral-900">{copy.accessDenied.title}</h1>
           <p className="text-sm text-neutral-600">
-            Аккаунт{' '}
-            <span className="font-semibold text-neutral-900 break-all">{user.email}</span> не имеет
-            доступа к панели администратора.
+            {copy.accessDenied.messageBefore}
+            <span className="font-semibold text-neutral-900 break-all">{user.email}</span>
+            {copy.accessDenied.messageAfter}
           </p>
         </div>
         <div className="mt-1 flex w-full flex-col gap-2.5 sm:w-auto sm:flex-row">
           <Link to="/" className={buttonClassName('primary', 'md')}>
-            На сайт
+            {copy.backToSite}
           </Link>
           <Button type="button" variant="ghost" onClick={handleLogout} disabled={isLeaving}>
-            {isLeaving ? 'Выходим…' : 'Выйти'}
+            {isLeaving ? copy.logoutPending : copy.logout}
           </Button>
         </div>
       </div>

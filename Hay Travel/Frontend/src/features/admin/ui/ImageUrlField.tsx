@@ -1,13 +1,16 @@
 import { useEffect, useId, useState } from 'react'
 import { Field, Input } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import { ImageUploadButton } from './ImageUploadButton'
+import { adminUiCopy } from './adminUiCopy'
 
 interface ImageUrlFieldProps {
   /** Field caption, e.g. "Логотип — URL". */
   label: string
   value: string
   onChange: (value: string) => void
-  /** Explanation surfaced through the label's `HelpButton` (via `Field`). */
+  /** Explanation surfaced through the label's `HelpButton` (via `Field`). Defaults to the
+   * localised "вставьте ссылку на изображение" hint. */
   hint?: string
   /** Non-blocking, always-visible notice (e.g. "this URL looks incomplete"). Suppressed while
    * `error` is set. */
@@ -15,8 +18,6 @@ interface ImageUrlFieldProps {
   required?: boolean
   error?: string
 }
-
-const DEFAULT_HINT = 'Вставьте ссылку на изображение — превью обновится справа.'
 
 /**
  * URL input for an image with a live preview beside it. The preview falls back to a neutral
@@ -35,11 +36,12 @@ export function ImageUrlField({
   label,
   value,
   onChange,
-  hint = DEFAULT_HINT,
+  hint,
   warning,
   required = false,
   error,
 }: ImageUrlFieldProps) {
+  const copy = useCopy(adminUiCopy).images
   const id = useId()
   const trimmed = value.trim()
   const [failed, setFailed] = useState(false)
@@ -60,7 +62,7 @@ export function ImageUrlField({
           required={required}
           error={error}
           warning={error ? undefined : warning}
-          hint={hint}
+          hint={hint ?? copy.urlHint}
         >
           <div className="flex items-start gap-2">
             <Input
@@ -82,13 +84,13 @@ export function ImageUrlField({
         {showImage ? (
           <img
             src={trimmed}
-            alt={`Превью: ${label}`}
+            alt={copy.previewAlt(label)}
             className="h-full w-full object-cover"
             onError={() => setFailed(true)}
           />
         ) : (
           <span className="flex h-full w-full items-center justify-center px-2 text-center text-[11px] text-neutral-400">
-            превью по URL
+            {copy.previewEmpty}
           </span>
         )}
       </div>

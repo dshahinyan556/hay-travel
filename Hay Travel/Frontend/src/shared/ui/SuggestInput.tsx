@@ -101,7 +101,7 @@ export function SuggestInput({
               onMouseEnter={() => setHighlighted(index)}
               onClick={() => pick(label)}
               className={`block cursor-pointer truncate px-3 py-2 text-left text-sm transition-colors ${
-                index === activeIndex ? 'bg-brand-50 text-brand-800' : 'text-neutral-900'
+                index === activeIndex ? 'bg-neutral-100 text-neutral-900' : 'text-neutral-900'
               }`}
             >
               {label}

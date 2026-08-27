@@ -1,5 +1,6 @@
 using ATTours.Common.DTO.Info;
 using ATTours.Common.Enums;
+using ATTours.Common.Extensions;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -21,13 +22,19 @@ namespace ATTours.BusinessServices.Services.PdfServices
 
         // Только указанные строки (обычно одна) — вложение к письму исполнителю при
         // "Назначить и отправить" (Фаза 5.2), плюс "Детали для выполнения" по каждой строке.
-        public static byte[] GenerateAssignmentDocument(OrderInfoModel order, IReadOnlyCollection<int> lineIds)
+        //
+        // employeeId != null -> персональное "Задание исполнителю": в блок деталей попадает
+        // ТОЛЬКО его карточка. Без этого водитель видел бы в своём PDF место встречи гида
+        // (редизайн 2026-08-23, исполнителей на строке теперь несколько).
+        public static byte[] GenerateAssignmentDocument(OrderInfoModel order, IReadOnlyCollection<int> lineIds,
+            int? employeeId = null)
         {
             var lines = order.Lines.Where(line => lineIds.Contains(line.Id)).ToList();
-            return Build(order, lines, isAssignment: true);
+            return Build(order, lines, isAssignment: true, employeeId);
         }
 
-        private static byte[] Build(OrderInfoModel order, IReadOnlyCollection<OrderLineInfoModel> lines, bool isAssignment)
+        private static byte[] Build(OrderInfoModel order, IReadOnlyCollection<OrderLineInfoModel> lines,
+            bool isAssignment, int? employeeId = null)
         {
             var document = Document.Create(container =>
             {
@@ -50,7 +57,7 @@ namespace ATTours.BusinessServices.Services.PdfServices
                         column.Item().Element(c => ComposeMeta(c, order));
 
                         foreach (var line in lines)
-                            column.Item().Element(c => ComposeLine(c, line, order.Currency, isAssignment));
+                            column.Item().Element(c => ComposeLine(c, line, order.Currency, isAssignment, employeeId));
 
                         if (!isAssignment)
                             column.Item().Element(c => ComposeTotals(c, order));
@@ -81,7 +88,8 @@ namespace ATTours.BusinessServices.Services.PdfServices
             });
         }
 
-        private static void ComposeLine(IContainer container, OrderLineInfoModel line, string currency, bool isAssignment)
+        private static void ComposeLine(IContainer container, OrderLineInfoModel line, string currency,
+            bool isAssignment, int? employeeId)
         {
             container.Border(1).BorderColor(Colors.Grey.Lighten2).Padding(8).Column(column =>
             {
@@ -91,10 +99,26 @@ namespace ATTours.BusinessServices.Services.PdfServices
 
                 if (isAssignment)
                 {
-                    if (!string.IsNullOrWhiteSpace(line.PickupDetails))
-                        column.Item().Text($"Место встречи: {line.PickupDetails}");
-                    if (!string.IsNullOrWhiteSpace(line.NavigatorLink))
-                        column.Item().Text($"Навигатор: {line.NavigatorLink}");
+                    // Карточка на каждого исполнителя строки; у персонального задания —
+                    // только своя. Пустое поле не печатается вовсе (правило «незаполненное
+                    // не появляется нигде», 2026-08-23) — заглушек «не указано» здесь нет.
+                    var assignments = line.Employees
+                                          .Where(assignment => employeeId is null || assignment.EmployeeId == employeeId)
+                                          .ToList();
+
+                    foreach (var assignment in assignments)
+                    {
+                        column.Item().Text($"{assignment.EmployeeFullName} — {assignment.EmployeeRole.ToRussianLabel()}").SemiBold();
+
+                        if (!string.IsNullOrWhiteSpace(assignment.PickupDetails))
+                            column.Item().Text($"Место встречи: {assignment.PickupDetails}");
+                        if (!string.IsNullOrWhiteSpace(assignment.NavigatorLink))
+                            column.Item().Text($"Навигатор: {assignment.NavigatorLink}");
+                        // CommentEn в PDF не используется: документ остаётся русским,
+                        // локализация PDF вне скоупа.
+                        if (!string.IsNullOrWhiteSpace(assignment.Comment))
+                            column.Item().Text($"Комментарий: {assignment.Comment}");
+                    }
                 }
                 else
                 {
@@ -110,8 +134,14 @@ namespace ATTours.BusinessServices.Services.PdfServices
                     if (line.RequiresPrepayment)
                         column.Item().Text($"Предоплата: {FormatAmount(line.PrepaymentAmount, currency)}");
 
-                    if (!string.IsNullOrWhiteSpace(line.EmployeeFullName))
-                        column.Item().Text($"Исполнитель: {line.EmployeeFullName}");
+                    // Исполнителей на строке может быть несколько — перечисляем через запятую;
+                    // пустой список строку не печатает.
+                    var performers = line.Employees
+                                         .Select(assignment => $"{assignment.EmployeeFullName} ({assignment.EmployeeRole.ToRussianLabel()})")
+                                         .ToList();
+
+                    if (performers.Count > 0)
+                        column.Item().Text($"Исполнители: {string.Join(", ", performers)}");
                 }
             });
         }

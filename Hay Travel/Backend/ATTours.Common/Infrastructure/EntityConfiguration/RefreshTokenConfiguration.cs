@@ -30,6 +30,17 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
             builder.Property(x => x.ReplacedByTokenHash)
                 .HasMaxLength(128);
 
+            // Выбор «запомнить меня» этой сессии (ADR 029): определяет длину скользящего
+            // окна ExpiresAtUtc и переносится на ротированный токен.
+            builder.Property(x => x.RememberMe)
+                .IsRequired()
+                .HasDefaultValue(false);
+
+            // Аудит-указатель без FK/навигации (spec 014 §3.2): полный аудит лежит в
+            // ImpersonationEvent, здесь — только пометка сессии, чтобы claim imp_by
+            // переживал ротацию.
+            builder.Property(x => x.ImpersonatedByUserId);
+
             // Не unique: у пользователя несколько живых сессий одновременно.
             builder.HasIndex(x => x.UserId);
         }

@@ -1,3 +1,5 @@
+import { useLocale } from '@/shared/i18n/LocaleProvider'
+
 export type SpinnerSize = 'sm' | 'md' | 'lg'
 
 export interface SpinnerProps {
@@ -17,10 +19,12 @@ const sizeClasses: Record<SpinnerSize, string> = {
  * dependency — plain CSS animation via Tailwind's `animate-spin`.
  */
 export function Spinner({ size = 'md', className = '' }: SpinnerProps) {
+  const { t } = useLocale()
+
   return (
     <span
       role="status"
-      aria-label="Загрузка"
+      aria-label={t('ui.spinner.loading')}
       className={`inline-block animate-spin rounded-full border-current/30 border-t-current ${sizeClasses[size]} ${className}`}
     />
   )

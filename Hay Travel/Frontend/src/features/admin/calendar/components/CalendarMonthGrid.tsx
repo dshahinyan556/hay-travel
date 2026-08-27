@@ -1,4 +1,5 @@
-import { weekdayLabels, weekdayOrder } from '../lib/calendarCopy'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { calendarCopy, weekdayOrder } from '../lib/calendarCopy'
 import type { CalendarGridDay } from '../lib/calendarModel'
 import { CalendarDayCell } from './CalendarDayCell'
 
@@ -41,6 +42,8 @@ export function CalendarMonthGrid({
   onSelectDay,
   isSkeleton,
 }: CalendarMonthGridProps) {
+  const copy = useCopy(calendarCopy)
+
   return (
     <div className="mx-auto w-full max-w-[440px] lg:max-w-[720px] xl:max-w-[960px]">
       {/* `aria-hidden`: each cell's own label already spells the weekday out, so announcing this
@@ -50,7 +53,7 @@ export function CalendarMonthGrid({
         className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase tracking-wide text-neutral-400 lg:mx-auto lg:w-[516px] lg:gap-4 xl:w-[564px] xl:gap-6"
       >
         {weekdayOrder.map((code) => (
-          <span key={code}>{weekdayLabels[code]}</span>
+          <span key={code}>{copy.weekdayShort[code]}</span>
         ))}
       </div>
 

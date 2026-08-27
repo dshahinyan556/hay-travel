@@ -12,5 +12,10 @@ namespace ATTours.Common.DTO.Auth
         [Required]
         [MaxLength(128)]
         public string Password { get; set; }
+
+        // «Запомнить меня» (ADR 029). Выбор ПОСЕССИОННЫЙ, на аккаунте не хранится:
+        // false (по умолчанию) -> окно неактивности Jwt:InactivityMinutes (1ч) + session-cookie,
+        // true -> Jwt:RefreshTokenDays (14д) + постоянная cookie.
+        public bool RememberMe { get; set; }
     }
 }

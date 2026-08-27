@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { Button, buttonClassName } from './Button'
 import { Modal } from './Modal'
 
@@ -8,8 +9,11 @@ export interface UnsavedChangesModalProps {
   onCancel: () => void
   /** Proceed with whatever the admin was trying to do. */
   onConfirm: () => void
+  /** Defaults to `t('ui.unsaved.title')` in the current locale. */
   title?: string
+  /** Defaults to `t('ui.unsaved.message')`. */
   message?: string
+  /** Defaults to `t('ui.unsaved.confirm')`. */
   confirmLabel?: string
 }
 
@@ -23,15 +27,20 @@ export function UnsavedChangesModal({
   open,
   onCancel,
   onConfirm,
-  title = 'Уйти без сохранения?',
-  message = 'Изменения ещё не сохранены. Если уйти со страницы сейчас, они будут потеряны.',
-  confirmLabel = 'Уйти',
+  title,
+  message,
+  confirmLabel,
 }: UnsavedChangesModalProps) {
   const stayButtonRef = useRef<HTMLButtonElement>(null)
+  // Resolved in the body, not in the parameter list — a hook cannot run in a default parameter.
+  const { t } = useLocale()
+  const resolvedTitle = title ?? t('ui.unsaved.title')
+  const resolvedMessage = message ?? t('ui.unsaved.message')
+  const resolvedConfirmLabel = confirmLabel ?? t('ui.unsaved.confirm')
 
   return (
-    <Modal open={open} onClose={onCancel} title={title} initialFocusRef={stayButtonRef}>
-      <p className="text-sm text-neutral-600">{message}</p>
+    <Modal open={open} onClose={onCancel} title={resolvedTitle} initialFocusRef={stayButtonRef}>
+      <p className="text-sm text-neutral-600">{resolvedMessage}</p>
       <div className="mt-5 flex justify-end gap-2.5">
         <button
           ref={stayButtonRef}
@@ -39,10 +48,10 @@ export function UnsavedChangesModal({
           onClick={onCancel}
           className={buttonClassName('ghost', 'md')}
         >
-          Остаться
+          {t('ui.unsaved.stay')}
         </button>
         <Button type="button" variant="danger" onClick={onConfirm} className="min-w-28">
-          {confirmLabel}
+          {resolvedConfirmLabel}
         </Button>
       </div>
     </Modal>

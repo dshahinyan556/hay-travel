@@ -94,6 +94,14 @@ export const router = createBrowserRouter([
         lazy: () =>
           import('@/features/auth').then((m) => ({ Component: m.AccountPage, loader: m.accountLoader })),
       },
+      // The cart (ADR 022). Deliberately UNGUARDED: an anonymous visitor accumulates trips just
+      // like a signed-in one, and is only asked to sign in when they press "Отправить заявку".
+      // Its loader reads the cart out of the module store, before anything renders.
+      {
+        path: 'cart',
+        lazy: () =>
+          import('@/features/cart').then((m) => ({ Component: m.CartPage, loader: m.cartLoader })),
+      },
       {
         path: 'auth/check-email',
         lazy: () => import('@/features/auth').then((m) => ({ Component: m.CheckEmailPage })),
@@ -212,6 +220,35 @@ export const router = createBrowserRouter([
         path: 'settings',
         lazy: () =>
           import('@/features/admin').then((m) => ({ Component: m.SettingsPage, loader: m.settingsLoader })),
+      },
+      {
+        path: 'notifications',
+        lazy: () =>
+          import('@/features/admin').then((m) => ({
+            Component: m.NotificationsPage,
+            loader: m.notificationsLoader,
+          })),
+      },
+      {
+        path: 'notifications/:eventKey',
+        lazy: () =>
+          import('@/features/admin').then((m) => ({
+            Component: m.NotificationEventPage,
+            loader: m.notificationEventLoader,
+          })),
+      },
+      {
+        path: 'roles',
+        lazy: () =>
+          import('@/features/admin').then((m) => ({ Component: m.RolesPage, loader: m.rolesLoader })),
+      },
+      {
+        path: 'roles/:id',
+        lazy: () =>
+          import('@/features/admin').then((m) => ({
+            Component: m.RoleDetailPage,
+            loader: m.roleDetailLoader,
+          })),
       },
       {
         path: 'tours/new',

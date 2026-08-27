@@ -1,4 +1,5 @@
-import { calendarCopy, guestsUnit, monthLabelsGenitive, ordersUnit } from '../lib/calendarCopy'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { calendarCopy } from '../lib/calendarCopy'
 import { closureLevelOf, type CalendarGridDay } from '../lib/calendarModel'
 
 export interface CalendarDayCellProps {
@@ -22,28 +23,29 @@ export interface CalendarDayCellProps {
  * of that is information for a screen reader (or for a colour-blind admin).
  */
 export function CalendarDayCell({ day, selected, tourTitle, onSelect }: CalendarDayCellProps) {
+  const copy = useCopy(calendarCopy)
   const level = closureLevelOf(day.day)
   const orders = day.day?.totalOrders ?? 0
   const guests = day.day?.ordersByTour.reduce((sum, row) => sum + row.guestCount, 0) ?? 0
   const closedTourIds = day.day?.closedTourIds ?? []
 
-  const parts = [`${day.date.getDate()} ${monthLabelsGenitive[day.date.getMonth()]}`]
-  if (orders > 0) parts.push(ordersUnit(orders), guestsUnit(guests))
+  const parts = [`${day.date.getDate()} ${copy.monthsGenitive[day.date.getMonth()]}`]
+  if (orders > 0) parts.push(copy.ordersUnit(orders), copy.guestsUnit(guests))
   if (level === 'closed') {
-    parts.push(calendarCopy.closedLabel)
+    parts.push(copy.closedLabel)
   } else if (level === 'partial') {
     // Naming the tours matters here: the amber dot alone says "something is closed" without
     // saying what. Capped so the label stays a sentence, not a list.
     parts.push(
       closedTourIds.length <= 2
-        ? `${calendarCopy.partialLabel}: ${closedTourIds.map(tourTitle).join(', ')}`
-        : `${calendarCopy.partialLabel}: ${closedTourIds.length}`,
+        ? `${copy.partialLabel}: ${closedTourIds.map(tourTitle).join(', ')}`
+        : `${copy.partialLabel}: ${closedTourIds.length}`,
     )
   }
   const description = parts.join(', ')
 
   const stateClasses = selected
-    ? 'ring-2 ring-brand-600'
+    ? 'ring-2 ring-neutral-900'
     : level === 'closed'
       ? 'ring-1 ring-neutral-200'
       : 'ring-1 ring-neutral-200 hover:bg-neutral-50'
@@ -56,7 +58,7 @@ export function CalendarDayCell({ day, selected, tourTitle, onSelect }: Calendar
       aria-pressed={selected}
       aria-current={day.isToday ? 'date' : undefined}
       title={description}
-      className={`relative flex aspect-square min-h-11 w-full min-w-0 cursor-pointer flex-col items-start justify-between overflow-hidden rounded-lg p-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${stateClasses} ${
+      className={`relative flex aspect-square min-h-11 w-full min-w-0 cursor-pointer flex-col items-start justify-between overflow-hidden rounded-lg p-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30 ${stateClasses} ${
         level === 'closed'
           ? // Diagonal hatch as an arbitrary background-IMAGE (the `bg-neutral-100` next to it is
             // the background-COLOR, so the two compose rather than fight). Kept inline instead of
@@ -68,7 +70,7 @@ export function CalendarDayCell({ day, selected, tourTitle, onSelect }: Calendar
       } ${day.inMonth ? '' : 'opacity-40'}`}
     >
       <span
-        className={`text-xs tabular-nums ${day.isToday ? 'font-bold text-brand-700' : 'font-medium'}`}
+        className={`text-xs tabular-nums ${day.isToday ? 'font-bold text-neutral-900' : 'font-medium'}`}
       >
         {day.date.getDate()}
       </span>
@@ -78,12 +80,12 @@ export function CalendarDayCell({ day, selected, tourTitle, onSelect }: Calendar
       {level === 'partial' && (
         <span
           aria-hidden="true"
-          className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-amber-500"
+          className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-neutral-900"
         />
       )}
 
       {orders > 0 && (
-        <span className="max-w-full truncate rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-brand-700">
+        <span className="max-w-full truncate rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-neutral-700">
           {orders}
         </span>
       )}

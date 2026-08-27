@@ -1,7 +1,10 @@
-/** Turns a thrown catalog-API error into a Russian message. Shared by all three CRUD tabs
- * (Places / Expense templates / Note templates) — same error codes, same wording. */
+/** Turns a thrown catalog-API error into a message in the current interface locale. Shared by all
+ * four CRUD tabs (Places / Expense templates / Note templates / Tags) — same error codes, same
+ * wording. Pure: the caller resolves `catalogCopy` (it is a component or a hook, it has the
+ * locale) and passes both the copy and an already-localised `action` verb phrase in. */
 
 import { ApiError } from '@/shared/lib/http'
+import type { CatalogCopy } from './catalogCopy'
 
 /** `GlobalErrorCode.CatalogEntryInUse` — delete blocked, a tour still references this entry. */
 const CATALOG_ENTRY_IN_USE = 2010
@@ -16,16 +19,13 @@ function errorCodeOf(body: unknown): number | undefined {
   return typeof raw === 'number' ? raw : undefined
 }
 
-export function catalogErrorMessage(err: unknown, action: string): string {
+export function catalogErrorMessage(copy: CatalogCopy, err: unknown, action: string): string {
+  const errors = copy.common.errors
   if (err instanceof ApiError) {
     const code = errorCodeOf(err.body)
-    if (code === CATALOG_ENTRY_IN_USE) {
-      return 'Эта запись используется в турах — сначала уберите её оттуда, затем удалите.'
-    }
-    if (code === INVALID_ENTITY_RELATION) {
-      return `Не удалось ${action}: проверьте введённые данные (например, уникальность значения).`
-    }
-    return `Не удалось ${action}: сервер вернул ошибку (${err.status}).`
+    if (code === CATALOG_ENTRY_IN_USE) return errors.inUse
+    if (code === INVALID_ENTITY_RELATION) return errors.invalidData(action)
+    return errors.server(action, err.status)
   }
-  return `Не удалось ${action}: проверьте соединение и попробуйте ещё раз.`
+  return errors.network(action)
 }

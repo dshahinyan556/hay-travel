@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { Button, buttonClassName, Field, Select, Spinner } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { adminCommonCopy } from '@/features/admin/lib/adminCommonCopy'
 import { TourNoteType } from '@/features/admin/lib/enums'
 import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
 import type { Localized } from '@/features/admin/types/localized'
 import { readLocalized } from '@/features/admin/catalog/lib/catalogMapper'
+import { catalogCopy, type CatalogCopy } from '@/features/admin/catalog/lib/catalogCopy'
 import type { TourNoteTemplateInfoModel } from '@/shared/types/attours'
 
 /** No `sortOrder` on purpose: position is set by dragging rows in the list (see
@@ -13,12 +16,13 @@ export interface NoteTemplateFormValues {
   name: Localized
 }
 
-const typeOptions = [
-  { value: String(TourNoteType.OrganizationalDetail), label: 'Организационная деталь' },
-  { value: String(TourNoteType.Restriction), label: 'Ограничение' },
-  { value: String(TourNoteType.Included), label: 'Включено' },
-  { value: String(TourNoteType.NotIncluded), label: 'Не включено' },
-]
+const typeOptions = (copy: CatalogCopy) =>
+  [
+    TourNoteType.OrganizationalDetail,
+    TourNoteType.Restriction,
+    TourNoteType.Included,
+    TourNoteType.NotIncluded,
+  ].map((type) => ({ value: String(type), label: copy.noteTemplates.typeLabels[type] }))
 
 function initialValues(item: TourNoteTemplateInfoModel | null, defaultType: TourNoteType): NoteTemplateFormValues {
   if (!item) {
@@ -35,10 +39,10 @@ interface FormErrors {
   nameEn?: string
 }
 
-function validate(values: NoteTemplateFormValues): FormErrors {
+function validate(values: NoteTemplateFormValues, copy: CatalogCopy): FormErrors {
   const errors: FormErrors = {}
-  if (values.name.ru.trim() === '') errors.nameRu = 'Обязательное поле.'
-  if (values.name.en.trim() === '') errors.nameEn = 'Обязательное поле.'
+  if (values.name.ru.trim() === '') errors.nameRu = copy.common.requiredField
+  if (values.name.en.trim() === '') errors.nameEn = copy.common.requiredField
   return errors
 }
 
@@ -55,16 +59,18 @@ interface NoteTemplateFormProps {
 }
 
 export function NoteTemplateForm({ item, defaultType, isSubmitting, error, onSubmit, onCancel }: NoteTemplateFormProps) {
+  const copy = useCopy(catalogCopy)
+  const common = useCopy(adminCommonCopy)
   const [values, setValues] = useState<NoteTemplateFormValues>(() => initialValues(item, defaultType))
   const [attempted, setAttempted] = useState(false)
 
-  const errors = validate(values)
+  const errors = validate(values, copy)
   const shown = attempted ? errors : {}
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setAttempted(true)
-    if (Object.keys(validate(values)).length > 0) return
+    if (Object.keys(validate(values, copy)).length > 0) return
     onSubmit(values)
   }
 
@@ -76,18 +82,18 @@ export function NoteTemplateForm({ item, defaultType, isSubmitting, error, onSub
         </div>
       )}
 
-      <Field label="Тип" htmlFor="note-type" required>
+      <Field label={copy.noteTemplates.typeField} htmlFor="note-type" required>
         <Select
           id="note-type"
           surface="admin"
           value={values.type}
           onChange={(value) => setValues((v) => ({ ...v, type: value }))}
-          options={typeOptions}
+          options={typeOptions(copy)}
         />
       </Field>
 
       <TranslationGroup
-        label="Название"
+        label={copy.common.nameField}
         value={values.name}
         onChange={(lang, value) => setValues((v) => ({ ...v, name: { ...v.name, [lang]: value } }))}
         required
@@ -97,18 +103,18 @@ export function NoteTemplateForm({ item, defaultType, isSubmitting, error, onSub
 
       <div className="mt-2 flex justify-end gap-2.5 border-t border-neutral-200 pt-4">
         <button type="button" onClick={onCancel} disabled={isSubmitting} className={buttonClassName('ghost', 'md')}>
-          Отмена
+          {common.cancel}
         </button>
         <Button type="submit" disabled={isSubmitting} className="min-w-28">
           {isSubmitting ? (
             <span className="inline-flex items-center gap-2">
               <Spinner size="sm" />
-              Сохранение…
+              {copy.common.savingButton}
             </span>
           ) : item ? (
-            'Сохранить'
+            common.save
           ) : (
-            'Добавить'
+            common.add
           )}
         </Button>
       </div>

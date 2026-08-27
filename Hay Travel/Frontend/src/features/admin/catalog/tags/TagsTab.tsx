@@ -3,11 +3,16 @@ import type { CSSProperties } from 'react'
 import { Button, buttonClassName, Card, DragHandle, Modal, SortableList, Spinner } from '@/shared/ui'
 import type { SortableRowRenderProps } from '@/shared/ui'
 import { TAG_COLOR_HEX } from '@/shared/ui/ProductTag'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { adminCommonCopy } from '@/features/admin/lib/adminCommonCopy'
+import { adminEnumsCopy } from '@/features/admin/lib/adminEnumsCopy'
 import { SidePanel } from '@/features/admin/ui/SidePanel'
+import type { ScreenPermission } from '@/shared/auth'
 import { createTag, deleteTag, updateTag } from '@/features/admin/api/adminCatalog'
 import type { TagInfoModel } from '@/shared/types/attours'
-import { TagType, tagColorLabels } from '@/features/admin/lib/enums'
+import { TagType, type TagColor } from '@/features/admin/lib/enums'
 import { readLocalized, writeLocalized, writeLocalizedForUpdate } from '@/features/admin/catalog/lib/catalogMapper'
+import { catalogCopy } from '@/features/admin/catalog/lib/catalogCopy'
 import { catalogErrorMessage } from '@/features/admin/catalog/lib/catalogErrors'
 import { catalogRowId, nextSortOrder, useCatalogReorder } from '@/features/admin/catalog/lib/useCatalogReorder'
 import { useCatalogSearch } from '@/features/admin/catalog/lib/useCatalogSearch'
@@ -16,6 +21,8 @@ import { TagForm, type TagFormValues } from './TagForm'
 
 interface TagsTabProps {
   items: TagInfoModel[]
+  /** The four flags of this tab's own permission key, resolved once by `CatalogPage`. */
+  permission: ScreenPermission
   onMutated: () => void
 }
 
@@ -25,7 +32,10 @@ type PanelState = { mode: 'create' } | { mode: 'edit'; item: TagInfoModel } | nu
  * `TagPicker`, not here: this screen manages the tag *definitions*, not which tour has which).
  * Purely decorative — discount lives on the tour itself (Фаза 3/7), not on a tag. Same
  * CRUD/drag-reorder shell as `ExpenseTemplatesTab`. */
-export function TagsTab({ items, onMutated }: TagsTabProps) {
+export function TagsTab({ items, permission, onMutated }: TagsTabProps) {
+  const copy = useCopy(catalogCopy)
+  const common = useCopy(adminCommonCopy)
+  const enums = useCopy(adminEnumsCopy)
   const [panel, setPanel] = useState<PanelState>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -37,7 +47,7 @@ export function TagsTab({ items, onMutated }: TagsTabProps) {
     items,
     update: updateTag,
     onMutated,
-    errorAction: 'изменить порядок тегов',
+    errorAction: copy.tags.actions.reorder,
   })
   const search = useCatalogSearch(order.rows, (item) => {
     const name = readLocalized(item.translations)
@@ -68,7 +78,9 @@ export function TagsTab({ items, onMutated }: TagsTabProps) {
       setPanel(null)
       onMutated()
     } catch (err) {
-      setFormError(catalogErrorMessage(err, panel?.mode === 'edit' ? 'сохранить тег' : 'добавить тег'))
+      setFormError(
+        catalogErrorMessage(copy, err, panel?.mode === 'edit' ? copy.tags.actions.save : copy.tags.actions.add),
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -83,7 +95,7 @@ export function TagsTab({ items, onMutated }: TagsTabProps) {
       setConfirmTarget(null)
       onMutated()
     } catch (err) {
-      setListError(catalogErrorMessage(err, 'удалить тег'))
+      setListError(catalogErrorMessage(copy, err, copy.tags.actions.delete))
     } finally {
       setPendingDeleteId(null)
     }
@@ -97,15 +109,16 @@ export function TagsTab({ items, onMutated }: TagsTabProps) {
         ref={sortable?.setNodeRef}
         style={sortable?.style as CSSProperties | undefined}
         className={`border-b border-neutral-100 last:border-0 ${
-          sortable?.isDragging ? 'relative z-10 bg-brand-50/60' : ''
+          sortable?.isDragging ? 'relative z-10 bg-neutral-100/60' : ''
         }`}
       >
         <td className="w-10 px-2 py-2.5">
           {sortable && (
             <DragHandle
               ref={sortable.setActivatorNodeRef}
-              disabled={order.isSaving}
-              label={`Перетащить «${name || `тег №${item.id}`}», чтобы изменить порядок`}
+              // Reordering PERSISTS server-side — it is an edit, not a view preference.
+              disabled={order.isSaving || !permission.canUpdate}
+              label={copy.common.dragToReorder(name || copy.tags.rowFallback(item.id))}
               {...sortable.attributes}
               {...sortable.listeners}
             />
@@ -117,30 +130,34 @@ export function TagsTab({ items, onMutated }: TagsTabProps) {
               aria-hidden="true"
               className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
               style={{ background: TAG_COLOR_HEX[item.color] }}
-              title={tagColorLabels[item.color as 1 | 2 | 3 | 4 | 5]}
+              title={enums.tagColor[item.color as TagColor]}
             />
             <span className="font-medium text-neutral-900">
-              {name || <span className="text-neutral-400">—</span>}
+              {name || <span className="text-neutral-400">{copy.common.emptyValue}</span>}
             </span>
           </span>
         </td>
         <td className="px-3 py-2.5">
           <div className="flex justify-end gap-1.5">
+            {permission.canUpdate && (
             <button
               type="button"
               onClick={() => setPanel({ mode: 'edit', item })}
-              className="rounded-lg px-2.5 py-1 text-sm font-medium text-brand-700 transition-colors hover:bg-brand-50"
+              className="rounded-lg px-2.5 py-1 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100"
             >
-              Изменить
+              {common.edit}
             </button>
+            )}
+            {permission.canDelete && (
             <button
               type="button"
               onClick={() => setConfirmTarget(item)}
               disabled={pendingDeleteId === item.id}
               className="rounded-lg px-2.5 py-1 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-50 disabled:pointer-events-none disabled:opacity-50"
             >
-              Удалить
+              {common.delete}
             </button>
+            )}
           </div>
         </td>
       </tr>
@@ -150,8 +167,14 @@ export function TagsTab({ items, onMutated }: TagsTabProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <CatalogSearchInput value={search.query} onChange={search.setQuery} placeholder="Поиск по названию…" />
-        <Button onClick={() => setPanel({ mode: 'create' })}>Добавить тег</Button>
+        <CatalogSearchInput
+          value={search.query}
+          onChange={search.setQuery}
+          placeholder={copy.common.searchByName}
+        />
+        {permission.canCreate && (
+          <Button onClick={() => setPanel({ mode: 'create' })}>{copy.tags.addButton}</Button>
+        )}
       </div>
 
       {(listError ?? order.error) && (
@@ -161,21 +184,23 @@ export function TagsTab({ items, onMutated }: TagsTabProps) {
       )}
 
       {items.length === 0 ? (
-        <Card className="text-center text-sm text-neutral-500">Тегов пока нет.</Card>
+        <Card className="text-center text-sm text-neutral-500">{copy.tags.empty}</Card>
       ) : search.isFiltering && search.filtered.length === 0 ? (
-        <Card className="text-center text-sm text-neutral-500">Ничего не найдено по «{search.query.trim()}».</Card>
+        <Card className="text-center text-sm text-neutral-500">
+          {copy.common.nothingFoundFor(search.query.trim())}
+        </Card>
       ) : (
         <Card padding="sm" className="overflow-x-auto">
           {search.isFiltering && (
-            <p className="px-1 pb-2 text-xs text-neutral-400">Изменение порядка недоступно во время поиска — очистите поле.</p>
+            <p className="px-1 pb-2 text-xs text-neutral-400">{copy.common.reorderDisabledBySearch}</p>
           )}
           <table className="w-full min-w-[520px] text-left text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-xs font-semibold uppercase tracking-wide text-neutral-500">
                 <th className="w-10 px-2 py-2.5">
-                  <span className="sr-only">Порядок</span>
+                  <span className="sr-only">{copy.common.colOrder}</span>
                 </th>
-                <th className="px-3 py-2.5">Название</th>
+                <th className="px-3 py-2.5">{copy.common.colName}</th>
                 <th className="px-3 py-2.5" />
               </tr>
             </thead>
@@ -187,7 +212,7 @@ export function TagsTab({ items, onMutated }: TagsTabProps) {
                   items={order.rows}
                   getId={catalogRowId}
                   onReorder={order.reorder}
-                  itemLabel="Тег"
+                  itemLabel={copy.tags.sortableItem}
                 >
                   {(item, _index, sortable) => renderRow(item, sortable)}
                 </SortableList>
@@ -200,7 +225,7 @@ export function TagsTab({ items, onMutated }: TagsTabProps) {
       <SidePanel
         open={panel !== null}
         onClose={() => setPanel(null)}
-        title={panel?.mode === 'edit' ? 'Тег' : 'Новый тег'}
+        title={panel?.mode === 'edit' ? copy.tags.panelEdit : copy.tags.panelCreate}
       >
         <TagForm
           key={panel?.mode === 'edit' ? panel.item.id : 'create'}
@@ -217,14 +242,15 @@ export function TagsTab({ items, onMutated }: TagsTabProps) {
         onClose={() => {
           if (pendingDeleteId === null) setConfirmTarget(null)
         }}
-        title="Удалить тег?"
+        title={copy.tags.deleteTitle}
         initialFocusRef={cancelDeleteRef}
       >
         <p className="text-sm text-neutral-600">
           {confirmTarget && (
             <>
-              Тег «<span className="font-semibold text-neutral-900">{readLocalized(confirmTarget.translations).ru}</span>»
-              будет удалён безвозвратно. Если он назначен турам, сначала уберите его оттуда.
+              {copy.tags.deleteBefore}
+              <span className="font-semibold text-neutral-900">{readLocalized(confirmTarget.translations).ru}</span>
+              {copy.tags.deleteAfter}
             </>
           )}
         </p>
@@ -236,16 +262,16 @@ export function TagsTab({ items, onMutated }: TagsTabProps) {
             disabled={pendingDeleteId !== null}
             className={`${buttonClassName('ghost', 'md')} disabled:pointer-events-none disabled:opacity-50`}
           >
-            Отмена
+            {common.cancel}
           </button>
           <Button type="button" variant="danger" onClick={confirmDelete} disabled={pendingDeleteId !== null} className="min-w-28">
             {pendingDeleteId !== null ? (
               <span className="inline-flex items-center gap-2">
                 <Spinner size="sm" />
-                Удаление…
+                {copy.common.deletingButton}
               </span>
             ) : (
-              'Удалить'
+              common.delete
             )}
           </Button>
         </div>

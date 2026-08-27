@@ -48,7 +48,7 @@ export function ActionsMenu({ items, label, disabled = false }: ActionsMenuProps
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={label}
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <MoreIcon size={20} />
       </button>

@@ -1,26 +1,18 @@
 import { Input, Select, type SelectOption } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import { TourType } from '@/features/admin/lib/enums'
 import type { ProductFilters, StatusFilter, TypeFilter } from '@/features/admin/products/lib/filterProducts'
+import { productsCopy } from '@/features/admin/products/lib/productsCopy'
 import type { ProductsView } from './ProductsTable'
 
 /**
  * `Select` speaks strings, while `TypeFilter` is `'all' | TourType` and `TourType` is numeric.
- * The option values below are therefore the stringified enum members, and the two parsers map
- * back — exhaustively over the options each list actually offers, so no cast is involved and an
+ * The option values are therefore the stringified enum members, and the two parsers map back —
+ * exhaustively over the options each list actually offers, so no cast is involved and an
  * unexpected value degrades to the harmless `'all'` instead of being asserted into the type.
+ * The lists themselves are built per render (below) because their captions follow the interface
+ * language; only the parsers stay module-level, since values never change.
  */
-const TYPE_OPTIONS: SelectOption[] = [
-  { value: 'all', label: 'Все типы' },
-  { value: String(TourType.Tour), label: 'Только туры' },
-  { value: String(TourType.Excursion), label: 'Только экскурсии' },
-]
-
-const STATUS_OPTIONS: SelectOption[] = [
-  { value: 'all', label: 'Все статусы' },
-  { value: 'published', label: 'На сайте' },
-  { value: 'hidden', label: 'Скрыт' },
-]
-
 function parseTypeFilter(value: string): TypeFilter {
   if (value === String(TourType.Tour)) return TourType.Tour
   if (value === String(TourType.Excursion)) return TourType.Excursion
@@ -62,13 +54,13 @@ function ViewTab({
       aria-pressed={selected}
       onClick={onClick}
       className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors ${
-        selected ? 'bg-white text-brand-800 shadow-sm' : 'text-neutral-600 hover:text-neutral-800'
+        selected ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-600 hover:text-neutral-800'
       }`}
     >
       {label}
       <span
         className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-          selected ? 'bg-brand-100 text-brand-800' : 'bg-neutral-200 text-neutral-500'
+          selected ? 'bg-neutral-900 text-white' : 'bg-neutral-200 text-neutral-500'
         }`}
       >
         {count}
@@ -92,6 +84,20 @@ export function ProductsToolbar({
   filters,
   onFiltersChange,
 }: ProductsToolbarProps) {
+  const copy = useCopy(productsCopy).toolbar
+
+  const typeOptions: SelectOption[] = [
+    { value: 'all', label: copy.typeAll },
+    { value: String(TourType.Tour), label: copy.typeToursOnly },
+    { value: String(TourType.Excursion), label: copy.typeExcursionsOnly },
+  ]
+
+  const statusOptions: SelectOption[] = [
+    { value: 'all', label: copy.statusAll },
+    { value: 'published', label: copy.statusPublished },
+    { value: 'hidden', label: copy.statusHidden },
+  ]
+
   return (
     <div className="flex flex-col gap-3">
       {/* Pinned below the mobile hamburger bar (60px) on phones, flush to the viewport top on
@@ -101,21 +107,21 @@ export function ProductsToolbar({
         <div className="inline-flex w-fit rounded-xl border border-neutral-200 bg-neutral-100 p-1">
           <ViewTab
             selected={view === 'active'}
-            label="Активные"
+            label={copy.tabActive}
             count={activeCount}
             onClick={() => onViewChange('active')}
           />
           {canFeature && (
             <ViewTab
               selected={view === 'featured'}
-              label="Избранные"
+              label={copy.tabFeatured}
               count={featuredCount}
               onClick={() => onViewChange('featured')}
             />
           )}
           <ViewTab
             selected={view === 'archived'}
-            label="Архив"
+            label={copy.tabArchived}
             count={archivedCount}
             onClick={() => onViewChange('archived')}
           />
@@ -134,8 +140,8 @@ export function ProductsToolbar({
             type="search"
             value={filters.search}
             onChange={(e) => onFiltersChange({ search: e.target.value })}
-            placeholder="Поиск по заголовку (RU/EN)…"
-            aria-label="Поиск по заголовку"
+            placeholder={copy.searchPlaceholder}
+            aria-label={copy.searchLabel}
             className="pl-9"
           />
         </div>
@@ -145,8 +151,8 @@ export function ProductsToolbar({
             surface="admin"
             value={String(filters.type)}
             onChange={(value) => onFiltersChange({ type: parseTypeFilter(value) })}
-            options={TYPE_OPTIONS}
-            aria-label="Фильтр по типу"
+            options={typeOptions}
+            aria-label={copy.typeFilterLabel}
           />
         </div>
 
@@ -156,8 +162,8 @@ export function ProductsToolbar({
               surface="admin"
               value={filters.status}
               onChange={(value) => onFiltersChange({ status: parseStatusFilter(value) })}
-              options={STATUS_OPTIONS}
-              aria-label="Фильтр по публикации"
+              options={statusOptions}
+              aria-label={copy.statusFilterLabel}
             />
           </div>
         )}

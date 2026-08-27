@@ -6,8 +6,10 @@
  */
 
 import { formatISODate, getMonthGrid, isSameDay, stripTime } from '@/shared/lib/date'
+import type { Locale } from '@/shared/lib/locale'
 import { LanguageCode, TourTranslationType } from '@/features/admin/lib/enums'
 import type { TourInfoModel } from '@/shared/types/attours'
+import type { CalendarCopy } from './calendarCopy'
 import {
   ClosureRuleType,
   OrderStatus,
@@ -79,23 +81,35 @@ export function closureLevelOf(day: CalendarDayModel | null): DayClosureLevel {
 /**
  * Tour title by id, for cells and lists.
  *
- * An unknown id falls back to `Тур #42` instead of blanking: a tour can be archived while its
+ * Follows the INTERFACE locale with a fallback to Russian (ADR 021, decision 5): the content itself
+ * is not translated here — the tour already carries both languages — but an English panel in which
+ * every tour is captioned in Russian reads like a half-finished translation. A tour with no title
+ * in the current locale keeps its Russian one rather than blanking.
+ *
+ * An unknown id falls back to `Тур #42` instead of blanking too: a tour can be archived while its
  * orders live on, and a calendar that renders an empty name for those is a calendar that looks
  * broken.
  *
- * The Russian title is picked out of `translations` the same way `filterProducts`' private
- * `titleHaystack` does — the SELECTION is repeated, not the function: that one concatenates RU+EN
- * into one lowercase search string, which is not a title.
+ * The title is picked out of `translations` the same way `filterProducts`' private `titleHaystack`
+ * does — the SELECTION is repeated, not the function: that one concatenates RU+EN into one
+ * lowercase search string, which is not a title.
  */
-export function tourTitleResolver(tours: TourInfoModel[]): (tourId: number) => string {
+export function tourTitleResolver(
+  tours: TourInfoModel[],
+  locale: Locale,
+  copy: CalendarCopy,
+): (tourId: number) => string {
+  const preferred = locale === 'en' ? LanguageCode.English : LanguageCode.Russian
   const titles = new Map<number, string>()
   for (const tour of tours) {
-    const title = tour.translations.find(
-      (t) => t.type === TourTranslationType.Title && t.languageCode === LanguageCode.Russian,
-    )?.value
+    const titleOf = (languageCode: LanguageCode): string | null | undefined =>
+      tour.translations.find(
+        (t) => t.type === TourTranslationType.Title && t.languageCode === languageCode,
+      )?.value
+    const title = titleOf(preferred) || titleOf(LanguageCode.Russian)
     if (title) titles.set(tour.id, title)
   }
-  return (tourId: number) => titles.get(tourId) ?? `Тур #${tourId}`
+  return (tourId: number) => titles.get(tourId) ?? copy.tourFallback(tourId)
 }
 
 /**
@@ -150,10 +164,11 @@ export function compareClosureRules(
   a: ClosureRuleInfoModel,
   b: ClosureRuleInfoModel,
   tourTitle: (tourId: number) => string,
+  locale: Locale,
 ): number {
   if ((a.tourId === null) !== (b.tourId === null)) return a.tourId === null ? -1 : 1
   if (a.tourId !== null && b.tourId !== null && a.tourId !== b.tourId) {
-    return tourTitle(a.tourId).localeCompare(tourTitle(b.tourId), 'ru')
+    return tourTitle(a.tourId).localeCompare(tourTitle(b.tourId), locale)
   }
   if (a.type !== b.type) return a.type === ClosureRuleType.SpecificDate ? -1 : 1
   if (a.type === ClosureRuleType.SpecificDate) return (a.date ?? '').localeCompare(b.date ?? '')
@@ -182,6 +197,7 @@ export interface ClosureRuleGroup {
 export function groupClosureRules(
   rules: ClosureRuleInfoModel[],
   tourTitle: (tourId: number) => string,
+  locale: Locale,
 ): ClosureRuleGroup[] {
   const byBatch = new Map<string, ClosureRuleGroup>()
   const groups: ClosureRuleGroup[] = []
@@ -201,7 +217,7 @@ export function groupClosureRules(
     }
   }
 
-  for (const group of groups) group.rules.sort((a, b) => compareClosureRules(a, b, tourTitle))
-  groups.sort((a, b) => compareClosureRules(a.rules[0], b.rules[0], tourTitle))
+  for (const group of groups) group.rules.sort((a, b) => compareClosureRules(a, b, tourTitle, locale))
+  groups.sort((a, b) => compareClosureRules(a.rules[0], b.rules[0], tourTitle, locale))
   return groups
 }

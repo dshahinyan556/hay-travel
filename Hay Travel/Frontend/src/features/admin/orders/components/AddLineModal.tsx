@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Button, Checkbox, DatePicker, Field, Input, Modal, Select } from '@/shared/ui'
 import type { TourInfoModel } from '@/shared/types/attours'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { ordersCopy } from '../lib/ordersCopy'
 import { tourTitleResolver } from '../lib/ordersModel'
 
@@ -27,7 +29,9 @@ const MAX_GUESTS = 99
  * it needs a tour picker, a date, a guest count and an optional prepayment amount, which is more
  * fields than a grid row has room for without pushing every column around while it's open. */
 export function AddLineModal({ open, tours, pending, onClose, onSubmit }: AddLineModalProps) {
-  const tourTitle = tourTitleResolver(tours)
+  const copy = useCopy(ordersCopy)
+  const { locale } = useLocale()
+  const tourTitle = tourTitleResolver(tours, locale, copy)
   const [tourId, setTourId] = useState('')
   const [tourDate, setTourDate] = useState('')
   const [guestCount, setGuestCount] = useState(2)
@@ -57,25 +61,25 @@ export function AddLineModal({ open, tours, pending, onClose, onSubmit }: AddLin
   }
 
   return (
-    <Modal open={open} onClose={() => { reset(); onClose() }} title={ordersCopy.addLineTitle}>
+    <Modal open={open} onClose={() => { reset(); onClose() }} title={copy.addLineTitle}>
       <div className="flex flex-col gap-3">
-        <Field label={ordersCopy.fieldTour} htmlFor="new-line-tour">
+        <Field label={copy.fieldTour} htmlFor="new-line-tour">
           <Select
             id="new-line-tour"
             surface="admin"
             value={tourId}
             onChange={setTourId}
             options={tours.map((tour) => ({ value: String(tour.id), label: tourTitle(tour.id) }))}
-            placeholder={ordersCopy.fieldTourPlaceholder}
+            placeholder={copy.fieldTourPlaceholder}
             searchable
           />
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label={ordersCopy.fieldDate}>
+          <Field label={copy.fieldDate}>
             <DatePicker value={tourDate} onChange={setTourDate} surface="admin" />
           </Field>
-          <Field label={ordersCopy.fieldGuests} htmlFor="new-line-guests">
+          <Field label={copy.fieldGuests} htmlFor="new-line-guests">
             <Input
               id="new-line-guests"
               type="number"
@@ -88,13 +92,13 @@ export function AddLineModal({ open, tours, pending, onClose, onSubmit }: AddLin
         </div>
 
         <Checkbox
-          label={ordersCopy.fieldRequiresPrepayment}
+          label={copy.fieldRequiresPrepayment}
           checked={requiresPrepayment}
           onChange={(e) => setRequiresPrepayment(e.target.checked)}
         />
 
         {requiresPrepayment && (
-          <Field label={ordersCopy.fieldPrepaymentAmount} htmlFor="new-line-prepayment">
+          <Field label={copy.fieldPrepaymentAmount} htmlFor="new-line-prepayment">
             <Input
               id="new-line-prepayment"
               type="number"
@@ -113,7 +117,7 @@ export function AddLineModal({ open, tours, pending, onClose, onSubmit }: AddLin
             onClick={() => { reset(); onClose() }}
             className="min-h-11 w-full sm:w-auto"
           >
-            {ordersCopy.addLineCancel}
+            {copy.addLineCancel}
           </Button>
           <Button
             type="button"
@@ -121,7 +125,7 @@ export function AddLineModal({ open, tours, pending, onClose, onSubmit }: AddLin
             onClick={submit}
             className="min-h-11 w-full sm:w-auto"
           >
-            {pending ? ordersCopy.saving : ordersCopy.addLineSubmit}
+            {pending ? copy.saving : copy.addLineSubmit}
           </Button>
         </div>
       </div>

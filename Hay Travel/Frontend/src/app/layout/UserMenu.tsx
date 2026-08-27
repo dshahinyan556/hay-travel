@@ -101,7 +101,7 @@ export function UserMenu({ variant = 'pill' }: UserMenuProps) {
           <div className="truncate px-3 py-2 text-xs text-ink-muted" title={user.email}>
             {user.email}
           </div>
-          {canOpenAdminPanel(user.role) && (
+          {canOpenAdminPanel(user) && (
             <MenuLink to="/admin" onClick={() => setOpen(false)} label={t('auth.goToPanel')} />
           )}
           {/* One entry, not three: `/account` is where email, phone and password all live now. */}

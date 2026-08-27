@@ -1,27 +1,30 @@
 import { Input, Select, type SelectOption } from '@/shared/ui'
-import { RoleType } from '@/shared/auth'
-import { roleLabels } from '../lib/userCopy'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import type { RoleInfoModel } from '@/features/admin/types/roles'
+import { userCopy, type UserCopy } from '../lib/userCopy'
 import type { RoleFilter, UserFilters, UserStatusFilter } from '../lib/filterUsers'
 
-const ROLE_OPTIONS: SelectOption[] = [
-  { value: 'all', label: 'Все роли' },
-  { value: String(RoleType.Regular), label: roleLabels[RoleType.Regular] },
-  { value: String(RoleType.TourManager), label: roleLabels[RoleType.TourManager] },
-  { value: String(RoleType.Admin), label: roleLabels[RoleType.Admin] },
-]
+/** Options come from the loaded roles, not from a hard-coded tier list: a filter that cannot select
+ * a user-created role would silently hide half the accounts it claims to cover. */
+function roleOptions(copy: UserCopy, roles: RoleInfoModel[]): SelectOption[] {
+  return [
+    { value: 'all', label: copy.toolbar.allRoles },
+    ...roles.map((role) => ({ value: String(role.id), label: role.name })),
+  ]
+}
 
-const STATUS_OPTIONS: SelectOption[] = [
-  { value: 'all', label: 'Все статусы' },
-  { value: 'verified', label: 'Подтверждён' },
-  { value: 'unverified', label: 'Не подтверждён' },
-  { value: 'locked', label: 'Заблокирован' },
-]
+function statusOptions(copy: UserCopy): SelectOption[] {
+  return [
+    { value: 'all', label: copy.toolbar.allStatuses },
+    { value: 'verified', label: copy.status.verified },
+    { value: 'unverified', label: copy.status.unverified },
+    { value: 'locked', label: copy.status.locked },
+  ]
+}
 
-function parseRoleFilter(value: string): RoleFilter {
-  if (value === String(RoleType.Regular)) return RoleType.Regular
-  if (value === String(RoleType.TourManager)) return RoleType.TourManager
-  if (value === String(RoleType.Admin)) return RoleType.Admin
-  return 'all'
+function parseRoleFilter(value: string, roles: RoleInfoModel[]): RoleFilter {
+  const id = Number(value)
+  return roles.some((role) => role.id === id) ? id : 'all'
 }
 
 function parseStatusFilter(value: string): UserStatusFilter {
@@ -31,11 +34,16 @@ function parseStatusFilter(value: string): UserStatusFilter {
 interface UsersToolbarProps {
   filters: UserFilters
   onFiltersChange: (patch: Partial<UserFilters>) => void
+  /** Every role, from `GET api/Roles`. `null` (not a system Admin) hides the role filter entirely —
+   * an empty dropdown would be worse than no dropdown. */
+  roles: RoleInfoModel[] | null
 }
 
 /** Search + role/status dropdowns for the users list. Stateless — the page owns the values and
  * does the filtering, same contract as `ProductsToolbar`. */
-export function UsersToolbar({ filters, onFiltersChange }: UsersToolbarProps) {
+export function UsersToolbar({ filters, onFiltersChange, roles }: UsersToolbarProps) {
+  const copy = useCopy(userCopy)
+
   return (
     <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
       <div className="relative flex-1">
@@ -49,29 +57,31 @@ export function UsersToolbar({ filters, onFiltersChange }: UsersToolbarProps) {
           type="search"
           value={filters.search}
           onChange={(e) => onFiltersChange({ search: e.target.value })}
-          placeholder="Поиск по имени, логину, email или телефону…"
-          aria-label="Поиск пользователей"
+          placeholder={copy.toolbar.searchPlaceholder}
+          aria-label={copy.toolbar.searchAria}
           className="pl-9"
         />
       </div>
 
-      <div className="w-full sm:w-48">
-        <Select
-          surface="admin"
-          value={String(filters.role)}
-          onChange={(value) => onFiltersChange({ role: parseRoleFilter(value) })}
-          options={ROLE_OPTIONS}
-          aria-label="Фильтр по роли"
-        />
-      </div>
+      {roles !== null && (
+        <div className="w-full sm:w-48">
+          <Select
+            surface="admin"
+            value={String(filters.role)}
+            onChange={(value) => onFiltersChange({ role: parseRoleFilter(value, roles) })}
+            options={roleOptions(copy, roles)}
+            aria-label={copy.toolbar.roleFilterAria}
+          />
+        </div>
+      )}
 
       <div className="w-full sm:w-48">
         <Select
           surface="admin"
           value={filters.status}
           onChange={(value) => onFiltersChange({ status: parseStatusFilter(value) })}
-          options={STATUS_OPTIONS}
-          aria-label="Фильтр по статусу"
+          options={statusOptions(copy)}
+          aria-label={copy.toolbar.statusFilterAria}
         />
       </div>
     </div>

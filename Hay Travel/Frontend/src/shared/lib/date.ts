@@ -14,6 +14,8 @@
  * them. `DatePicker`'s behaviour is unchanged — only where the functions live.
  */
 
+import type { Locale } from '@/shared/lib/locale'
+
 const ISO_RE = /^(\d{4})-(\d{2})-(\d{2})$/
 
 /**
@@ -95,6 +97,41 @@ export function getMonthGrid(viewMonth: Date): Date[] {
   const first = startOfMonth(viewMonth)
   const gridStart = addDays(first, -mondayFirstWeekday(first))
   return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i))
+}
+
+/* ── Month and weekday names ────────────────────────────────────────────────────────────────── */
+
+/*
+ * Written out rather than taken from `Intl.DateTimeFormat`: the Russian calendar needs BOTH the
+ * nominative ("Август 2026") and the genitive ("12 августа 2026") form of a month name, and `Intl`
+ * gives only one of them per locale. They live here, next to the grid helpers, because two screens
+ * need the same lists — `shared/ui/DatePicker` and the admin availability calendar — and two
+ * hand-kept copies of twelve month names is how one of them ends up a month behind the other.
+ *
+ * Weekday lists are MONDAY-FIRST, matching `mondayFirstWeekday`/`getMonthGrid` above. A caller
+ * that keys by `System.DayOfWeek` (Sunday = 0) converts with `(code + 6) % 7`.
+ */
+
+export const MONTHS_NOMINATIVE: Record<Locale, string[]> = {
+  ru: ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'],
+  en: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+}
+
+/** Genitive case for `ru` — "27 июля", not "27 Июль". English has no genitive case, so `en`
+ * reuses the nominative list. */
+export const MONTHS_GENITIVE: Record<Locale, string[]> = {
+  ru: ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'],
+  en: MONTHS_NOMINATIVE.en,
+}
+
+export const WEEKDAYS_SHORT: Record<Locale, string[]> = {
+  ru: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+  en: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
+}
+
+export const WEEKDAYS_FULL: Record<Locale, string[]> = {
+  ru: ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'],
+  en: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
 }
 
 /** Every day of the inclusive range, ascending. `from > to` yields `[]` rather than throwing —

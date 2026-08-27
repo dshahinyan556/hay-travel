@@ -1,16 +1,17 @@
 import { useCallback, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useIsCompactViewport } from '@/shared/hooks'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { Popover } from './Popover'
 import { Sheet, SHEET_SINGLE_DETENT } from './Sheet'
 import { CloseIcon } from './icons'
 
 export interface HelpPanelProps {
   title: string
-  /** RU-text (or the caller's locale) — owned by the calling page/feature, not by this
-   * component (mirrors `settingsCopy.ts`/`userCopy.ts`: each feature keeps its own copy). */
+  /** Already-localised text — owned by the calling page/feature, not by this component (mirrors
+   * `settingsCopy.ts`/`userCopy.ts`: each feature keeps its own copy module). */
   children: ReactNode
-  /** Accessible name of the trigger button. Defaults to `Справка: ${title}`. */
+  /** Accessible name of the trigger button. Defaults to `t('ui.help.trigger', { title })`. */
   triggerLabel?: string
   /**
    * Which palette to render in — same contract and same reasoning as `Select`'s own `surface`
@@ -48,12 +49,14 @@ export function HelpButton({ title, children, triggerLabel, surface = 'public' }
   const isCompact = useIsCompactViewport()
   const titleId = useId()
 
+  const { t } = useLocale()
+
   const close = useCallback(() => setOpen(false), [])
-  const label = triggerLabel ?? `Справка: ${title}`
+  const label = triggerLabel ?? t('ui.help.trigger', { title })
 
   const triggerClasses =
     surface === 'admin'
-      ? 'bg-white text-neutral-600 ring-1 ring-neutral-300 hover:bg-neutral-100 hover:ring-neutral-400 focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:outline-none'
+      ? 'bg-white text-neutral-600 ring-1 ring-neutral-300 hover:bg-neutral-100 hover:ring-neutral-400 focus-visible:ring-2 focus-visible:ring-neutral-900/30 focus-visible:outline-none'
       : 'bg-panel-raised text-gold-ink ring-1 ring-edge-strong hover:bg-gold-soft hover:ring-gold-line focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none'
   const panelClasses =
     surface === 'admin'
@@ -62,7 +65,7 @@ export function HelpButton({ title, children, triggerLabel, surface = 'public' }
   const titleClasses = surface === 'admin' ? 'text-sm font-semibold text-neutral-900' : 'text-sm font-semibold text-ink'
   const closeClasses =
     surface === 'admin'
-      ? 'icon-press -m-1 flex shrink-0 items-center justify-center rounded-full p-1 text-neutral-400 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-brand-600/40 focus-visible:outline-none'
+      ? 'icon-press -m-1 flex shrink-0 items-center justify-center rounded-full p-1 text-neutral-400 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-neutral-900/30 focus-visible:outline-none'
       : 'icon-press -m-1 flex shrink-0 items-center justify-center rounded-full p-1 text-ink-muted hover:text-gold-ink focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none'
   const bodyClasses = surface === 'admin' ? 'text-neutral-600' : 'text-ink-dim'
 
@@ -72,7 +75,7 @@ export function HelpButton({ title, children, triggerLabel, surface = 'public' }
         <h2 id={titleId} className={titleClasses}>
           {title}
         </h2>
-        <button type="button" onClick={close} aria-label="Закрыть" className={closeClasses}>
+        <button type="button" onClick={close} aria-label={t('ui.help.close')} className={closeClasses}>
           <CloseIcon size={14} />
         </button>
       </div>
