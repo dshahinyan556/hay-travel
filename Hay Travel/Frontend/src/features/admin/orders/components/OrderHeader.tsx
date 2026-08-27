@@ -1,7 +1,9 @@
 import { Link } from 'react-router'
 import { OrderStatusBadge, Textarea } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { OrderStatus, type OrderInfoModel } from '@/shared/types/booking'
-import { ordersCopy, statusBadgeTone, statusLabels } from '../lib/ordersCopy'
+import { formatOrderDateTime, ordersCopy, statusBadgeTone } from '../lib/ordersCopy'
 
 export interface OrderHeaderProps {
   /** Already draft-applied (checklist §2) — `rejectReason` here may be an unsaved edit, everything
@@ -22,44 +24,47 @@ export interface OrderHeaderProps {
  * (see `OrderDetailPage`), not inside it — this component is just the record's own identity card.
  */
 export function OrderHeader({ order, pending, onRejectReasonChange }: OrderHeaderProps) {
+  const copy = useCopy(ordersCopy)
+  const { locale } = useLocale()
+
   return (
     <header className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-5">
-      <nav className="text-xs text-neutral-500" aria-label="Хлебные крошки">
+      <nav className="text-xs text-neutral-500" aria-label={copy.breadcrumbsLabel}>
         <Link to="/admin/orders" className="transition-colors hover:text-neutral-800">
-          {ordersCopy.backToList}
+          {copy.backToList}
         </Link>
         <span aria-hidden="true"> · </span>
-        <span className="font-semibold text-neutral-800">{ordersCopy.orderTitle(order.number)}</span>
+        <span className="font-semibold text-neutral-800">{copy.orderTitle(order.number)}</span>
       </nav>
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-lg font-bold text-neutral-900">{ordersCopy.orderTitle(order.number)}</h1>
+          <h1 className="text-lg font-bold text-neutral-900">{copy.orderTitle(order.number)}</h1>
           <Link
             to={`/admin/users/${order.userId}`}
             target="_blank"
-            className="font-semibold break-words text-brand-700 hover:underline"
+            className="font-semibold break-words text-neutral-900 hover:underline"
           >
             {order.userFullName.trim() || order.userEmail}
           </Link>
           <p className="mt-0.5 text-sm text-neutral-500">
-            {ordersCopy.createdLabel}: {new Date(order.createdAtUtc).toLocaleString('ru-RU')}
+            {copy.createdLabel}: {formatOrderDateTime(order.createdAtUtc, locale)}
             {' · '}
-            {ordersCopy.approvedLabel}:{' '}
-            {order.approvedAtUtc ? new Date(order.approvedAtUtc).toLocaleString('ru-RU') : ordersCopy.notApprovedYet}
+            {copy.approvedLabel}:{' '}
+            {order.approvedAtUtc ? formatOrderDateTime(order.approvedAtUtc, locale) : copy.notApprovedYet}
           </p>
         </div>
 
-        <OrderStatusBadge label={statusLabels[order.status]} tone={statusBadgeTone[order.status]} />
+        <OrderStatusBadge label={copy.statusLabels[order.status]} tone={statusBadgeTone[order.status]} />
       </div>
 
       {order.status === OrderStatus.Rejected && (
         <label className="text-xs text-neutral-500">
-          {ordersCopy.rejectReasonLabel}
+          {copy.rejectReasonLabel}
           <Textarea
             value={order.rejectReason ?? ''}
             disabled={pending}
-            placeholder={ordersCopy.rejectReasonPlaceholder}
+            placeholder={copy.rejectReasonPlaceholder}
             onChange={(e) => onRejectReasonChange(e.target.value)}
             className="mt-1"
             rows={2}

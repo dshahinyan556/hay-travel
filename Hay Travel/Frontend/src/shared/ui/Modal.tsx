@@ -12,6 +12,10 @@ export interface ModalProps {
   children: React.ReactNode
   /** Element to focus when the dialog opens (e.g. the confirm button). Falls back to the dialog. */
   initialFocusRef?: React.RefObject<HTMLElement | null>
+  /** Dialog width — `'md'` (default, `max-w-md`) for short confirmations, `'lg'` (`max-w-xl`) for
+   * forms with a field + a multi-button action row that otherwise feels cramped. Mobile is
+   * unaffected either way (the backdrop's own `p-4` already caps real width below `max-w-md`). */
+  size?: 'md' | 'lg'
 }
 
 /**
@@ -21,7 +25,7 @@ export interface ModalProps {
  * to the previously focused element on close. Purely presentational otherwise — the caller owns
  * the content and the action buttons.
  */
-export function Modal({ open, onClose, title, children, initialFocusRef }: ModalProps) {
+export function Modal({ open, onClose, title, children, initialFocusRef, size = 'md' }: ModalProps) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
 
@@ -67,7 +71,7 @@ export function Modal({ open, onClose, title, children, initialFocusRef }: Modal
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl outline-none sm:p-6"
+        className={`w-full ${size === 'lg' ? 'max-w-xl' : 'max-w-md'} rounded-2xl bg-white p-5 shadow-xl outline-none sm:p-6`}
       >
         <h2 id={titleId} className="text-base font-bold text-neutral-900">
           {title}

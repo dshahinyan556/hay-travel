@@ -1,7 +1,10 @@
 import { Input, SuggestInput } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import type { ExpenseFormState, Localized } from '@/features/admin/types/form'
 import type { LangKey } from '@/features/admin/tour-form/reducer/tourFormReducer'
 import { AddButton, RemoveButton } from '@/features/admin/ui/RepeaterControls'
+import { adminUiCopy } from '@/features/admin/ui/adminUiCopy'
+import { tourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
 
 interface AdditionalExpensesEditorProps {
   items: ExpenseFormState[]
@@ -26,6 +29,10 @@ export function AdditionalExpensesEditor({
   onChangeAmount,
   onChangeDescription,
 }: AdditionalExpensesEditorProps) {
+  const copy = useCopy(tourFormCopy).expenses
+  // RU|EN here are the CONTENT languages of the description, not the interface locale — only
+  // their captions follow the interface language.
+  const translation = useCopy(adminUiCopy).translation
   const ruSuggestions = suggestions?.map((s) => s.ru).filter(Boolean) ?? []
   const enSuggestions = suggestions?.map((s) => s.en).filter(Boolean) ?? []
   const pickSuggestion = (key: string, label: string, lang: LangKey) => {
@@ -39,7 +46,7 @@ export function AdditionalExpensesEditor({
     <div className="flex flex-col gap-2.5">
       {items.length === 0 ? (
         <p className="rounded-lg border border-dashed border-neutral-200 bg-neutral-50 px-3 py-4 text-center text-xs text-neutral-400">
-          Расходов пока нет. Добавьте, если у позиции есть доплаты (билеты, обеды и т. п.).
+          {copy.empty}
         </p>
       ) : (
         <ul className="flex flex-col gap-2.5">
@@ -53,8 +60,8 @@ export function AdditionalExpensesEditor({
                 onChange={(value) => onChangeDescription(item.key, 'ru', value)}
                 onPick={(label) => pickSuggestion(item.key, label, 'ru')}
                 suggestions={ruSuggestions}
-                aria-label={`Описание расхода ${index + 1} — Русский`}
-                placeholder="Описание (RU)"
+                aria-label={translation.fieldInLang(copy.descriptionLabel(index + 1), translation.langName.ru)}
+                placeholder={copy.descriptionRu}
                 className="text-sm"
               />
               <SuggestInput
@@ -62,8 +69,8 @@ export function AdditionalExpensesEditor({
                 onChange={(value) => onChangeDescription(item.key, 'en', value)}
                 onPick={(label) => pickSuggestion(item.key, label, 'en')}
                 suggestions={enSuggestions}
-                aria-label={`Описание расхода ${index + 1} — English`}
-                placeholder="Описание (EN)"
+                aria-label={translation.fieldInLang(copy.descriptionLabel(index + 1), translation.langName.en)}
+                placeholder={copy.descriptionEn}
                 className="text-sm"
               />
               <Input
@@ -71,18 +78,18 @@ export function AdditionalExpensesEditor({
                 inputMode="decimal"
                 value={item.amount}
                 onChange={(e) => onChangeAmount(item.key, e.target.value)}
-                aria-label={`Сумма расхода ${index + 1}, ֏`}
-                placeholder="Сумма, ֏"
+                aria-label={copy.amountLabel(index + 1)}
+                placeholder={copy.amountPlaceholder}
                 className="text-sm"
               />
               <div className="justify-self-end sm:pt-0.5">
-                <RemoveButton onClick={() => onRemove(item.key)} label="Удалить расход" />
+                <RemoveButton onClick={() => onRemove(item.key)} label={copy.remove} />
               </div>
             </li>
           ))}
         </ul>
       )}
-      <AddButton onClick={onAdd}>Добавить расход</AddButton>
+      <AddButton onClick={onAdd}>{copy.add}</AddButton>
     </div>
   )
 }

@@ -187,6 +187,41 @@ namespace ATTours.DataLayer.Migrations
                     b.ToTable("EmailChangeRequest", (string)null);
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.EmailTemplate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ActionKey")
+                        .HasColumnType("int");
+
+                    b.Property<string>("BodyHtml")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("BodyHtmlEn")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("SubjectEn")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActionKey")
+                        .IsUnique();
+
+                    b.ToTable("EmailTemplate", (string)null);
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.ExchangeRate", b =>
                 {
                     b.Property<int>("Id")
@@ -289,6 +324,42 @@ namespace ATTours.DataLayer.Migrations
                     b.ToTable("GalleryImage", (string)null);
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.ImpersonationEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ImpersonatorUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("IpAddress")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("TargetUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("UserAgent")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ImpersonatorUserId");
+
+                    b.HasIndex("TargetUserId");
+
+                    b.ToTable("ImpersonationEvent", (string)null);
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.LoginHistory", b =>
                 {
                     b.Property<int>("Id")
@@ -330,6 +401,76 @@ namespace ATTours.DataLayer.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("LoginHistory", (string)null);
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.NotificationChannel", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("EventKey")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Platform")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventKey", "Platform")
+                        .IsUnique();
+
+                    b.ToTable("NotificationChannel", (string)null);
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.NotificationRecipient", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CustomEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<int>("EventKey")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("OrderLinkedRole")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Platform")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SourceType")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Type")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("EventKey", "Platform");
+
+                    b.ToTable("NotificationRecipient", (string)null);
                 });
 
             modelBuilder.Entity("ATTours.Common.Entities.Order", b =>
@@ -426,9 +567,6 @@ namespace ATTours.DataLayer.Migrations
                         .HasPrecision(5, 2)
                         .HasColumnType("decimal(5,2)");
 
-                    b.Property<int?>("EmployeeId")
-                        .HasColumnType("int");
-
                     b.Property<int>("GuestCount")
                         .HasColumnType("int");
 
@@ -436,14 +574,8 @@ namespace ATTours.DataLayer.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<string>("NavigatorLink")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<int>("OrderId")
                         .HasColumnType("int");
-
-                    b.Property<string>("PickupDetails")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("PrepaymentAmount")
                         .HasPrecision(18, 2)
@@ -464,8 +596,6 @@ namespace ATTours.DataLayer.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("EmployeeId");
-
                     b.HasIndex("OrderId");
 
                     b.HasIndex("TourDate");
@@ -473,6 +603,46 @@ namespace ATTours.DataLayer.Migrations
                     b.HasIndex("TourId", "TourDate");
 
                     b.ToTable("OrderLine", (string)null);
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.OrderLineEmployee", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Comment")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CommentEn")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("EmployeeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("EmployeeRole")
+                        .HasColumnType("int");
+
+                    b.Property<string>("NavigatorLink")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("OrderLineId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PickupDetails")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeId");
+
+                    b.HasIndex("OrderLineId", "EmployeeId")
+                        .IsUnique();
+
+                    b.ToTable("OrderLineEmployee", (string)null);
                 });
 
             modelBuilder.Entity("ATTours.Common.Entities.OrderPayment", b =>
@@ -621,6 +791,14 @@ namespace ATTours.DataLayer.Migrations
                     b.Property<DateTime>("ExpiresAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("ImpersonatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("RememberMe")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("ReplacedByTokenHash")
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)");
@@ -697,6 +875,35 @@ namespace ATTours.DataLayer.Migrations
                     b.HasIndex("RegionId");
 
                     b.ToTable("RegionTranslation", (string)null);
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.RolePermission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Level")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ScreenKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RoleId", "ScreenKey")
+                        .IsUnique();
+
+                    b.ToTable("RolePermission", (string)null);
                 });
 
             modelBuilder.Entity("ATTours.Common.Entities.RoutePoint", b =>
@@ -1165,6 +1372,9 @@ namespace ATTours.DataLayer.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("DefaultJobRole")
+                        .HasColumnType("int");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -1223,6 +1433,9 @@ namespace ATTours.DataLayer.Migrations
                         .HasMaxLength(15)
                         .HasColumnType("nvarchar(15)");
 
+                    b.Property<int>("PreferredLanguage")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("RegisteredAtUtc")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime2")
@@ -1255,6 +1468,33 @@ namespace ATTours.DataLayer.Migrations
                     b.ToTable("User", (string)null);
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.UserPermissionOverride", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("Level")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ScreenKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ScreenKey")
+                        .IsUnique();
+
+                    b.ToTable("UserPermissionOverride", (string)null);
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.UserRole", b =>
                 {
                     b.Property<int>("Id")
@@ -1263,15 +1503,28 @@ namespace ATTours.DataLayer.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("Description")
+                    b.Property<bool>("CanImpersonate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("CanManageAdmins")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
-                    b.Property<int>("Type")
+                    b.Property<int?>("Type")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
 
                     b.ToTable("UserRole", (string)null);
 
@@ -1279,25 +1532,33 @@ namespace ATTours.DataLayer.Migrations
                         new
                         {
                             Id = 1,
-                            Description = "Обычный пользователь",
+                            CanImpersonate = false,
+                            CanManageAdmins = false,
+                            Name = "Обычный пользователь",
                             Type = 1
                         },
                         new
                         {
                             Id = 2,
-                            Description = "Тур-менеджер",
+                            CanImpersonate = false,
+                            CanManageAdmins = false,
+                            Name = "Тур-менеджер",
                             Type = 2
                         },
                         new
                         {
                             Id = 3,
-                            Description = "Администратор",
+                            CanImpersonate = false,
+                            CanManageAdmins = true,
+                            Name = "Администратор",
                             Type = 3
                         },
                         new
                         {
                             Id = 4,
-                            Description = "Исполнитель",
+                            CanImpersonate = false,
+                            CanManageAdmins = false,
+                            Name = "Исполнитель",
                             Type = 4
                         });
                 });
@@ -1422,6 +1683,25 @@ namespace ATTours.DataLayer.Migrations
                     b.Navigation("TourDay");
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.ImpersonationEvent", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.User", "Impersonator")
+                        .WithMany()
+                        .HasForeignKey("ImpersonatorUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("ATTours.Common.Entities.User", "Target")
+                        .WithMany()
+                        .HasForeignKey("TargetUserId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("Impersonator");
+
+                    b.Navigation("Target");
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.LoginHistory", b =>
                 {
                     b.HasOne("ATTours.Common.Entities.User", "User")
@@ -1429,6 +1709,16 @@ namespace ATTours.DataLayer.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.NotificationRecipient", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("User");
                 });
@@ -1457,11 +1747,6 @@ namespace ATTours.DataLayer.Migrations
 
             modelBuilder.Entity("ATTours.Common.Entities.OrderLine", b =>
                 {
-                    b.HasOne("ATTours.Common.Entities.User", "Employee")
-                        .WithMany()
-                        .HasForeignKey("EmployeeId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("ATTours.Common.Entities.Order", "Order")
                         .WithMany("Lines")
                         .HasForeignKey("OrderId")
@@ -1474,11 +1759,28 @@ namespace ATTours.DataLayer.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("Employee");
-
                     b.Navigation("Order");
 
                     b.Navigation("Tour");
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.OrderLineEmployee", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.User", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ATTours.Common.Entities.OrderLine", "OrderLine")
+                        .WithMany("Employees")
+                        .HasForeignKey("OrderLineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("OrderLine");
                 });
 
             modelBuilder.Entity("ATTours.Common.Entities.OrderPayment", b =>
@@ -1545,6 +1847,17 @@ namespace ATTours.DataLayer.Migrations
                         .IsRequired();
 
                     b.Navigation("Region");
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.RolePermission", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.UserRole", "Role")
+                        .WithMany("Permissions")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("ATTours.Common.Entities.RoutePoint", b =>
@@ -1728,6 +2041,17 @@ namespace ATTours.DataLayer.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.UserPermissionOverride", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.User", "User")
+                        .WithMany("PermissionOverrides")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.UserToken", b =>
                 {
                     b.HasOne("ATTours.Common.Entities.User", "User")
@@ -1758,6 +2082,8 @@ namespace ATTours.DataLayer.Migrations
 
             modelBuilder.Entity("ATTours.Common.Entities.OrderLine", b =>
                 {
+                    b.Navigation("Employees");
+
                     b.Navigation("Payments");
                 });
 
@@ -1836,6 +2162,8 @@ namespace ATTours.DataLayer.Migrations
                 {
                     b.Navigation("EmailChangeRequest");
 
+                    b.Navigation("PermissionOverrides");
+
                     b.Navigation("RefreshTokens");
 
                     b.Navigation("Tokens");
@@ -1843,6 +2171,8 @@ namespace ATTours.DataLayer.Migrations
 
             modelBuilder.Entity("ATTours.Common.Entities.UserRole", b =>
                 {
+                    b.Navigation("Permissions");
+
                     b.Navigation("Users");
                 });
 #pragma warning restore 612, 618

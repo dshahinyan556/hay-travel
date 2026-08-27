@@ -28,6 +28,9 @@ export function RailSegmentedControl() {
   const { t, locale: activeLocale, setLocale } = useLocale()
   const nextTheme = theme === 'dark' ? 'light' : 'dark'
 
+  const currentLocale = LOCALES.find((locale) => locale.code === activeLocale) ?? LOCALES[0]
+  const nextLocale = LOCALES[(LOCALES.indexOf(currentLocale) + 1) % LOCALES.length]
+
   return (
     <div className="flex h-[34px] items-stretch rounded-full ring-1 ring-edge lg:h-[38px]">
       {/* Валюта — всегда первый сегмент, поэтому её триггер закруглён слева самим треком. */}
@@ -35,32 +38,51 @@ export function RailSegmentedControl() {
         <CurrencySwitch variant="rail" />
       </div>
 
+      {/*
+        Ниже 640px язык — ОДИН сегмент с текущим языком (тап переключает), а не два: место в
+        служебном треке уходит под кнопку корзины (spec 008 §8.4). Причина и приём те же, что в
+        капсульной шапке (`LanguageSwitch`) — там же подробное обоснование. С 640px оба сегмента
+        возвращаются как были.
+      */}
       <div className="flex items-stretch border-l border-gold-line/70">
-        {LOCALES.map((locale) => (
-          <button
-            key={locale.code}
-            type="button"
-            onClick={() => setLocale(locale.code)}
-            aria-pressed={activeLocale === locale.code}
-            aria-label={locale.name}
-            className={[
-              // Переключатель состояния — только кросс-фейд цвета на `--dur-micro` (2.4 §5):
-              // сегмент не должен «шевелиться» относительно соседнего.
-              'relative inline-flex items-center px-2.5 text-[12px] font-semibold tracking-wide transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)]',
-              "before:absolute before:-top-1.5 before:-bottom-1.5 before:content-[''] first:before:-left-2 first:before:right-0 last:before:left-0 last:before:-right-2",
-              activeLocale === locale.code
-                ? 'text-gold-ink'
-                : 'text-ink-muted hover:text-gold-ink',
-            ].join(' ')}
-          >
-            {/*
-              Активный язык — золотыми чернилами, а не залитой капсулой `bg-wine-tint`, как в
-              плавающей шапке. Внутри общего трека вторая заливка читалась бы как ещё один
-              контрол поверх контрола; в макете здесь тоже только цвет.
-            */}
-            {locale.label}
-          </button>
-        ))}
+        <button
+          type="button"
+          onClick={() => setLocale(nextLocale.code)}
+          aria-label={t('language.switchTo', { language: nextLocale.name })}
+          className="relative inline-flex items-center px-2.5 text-[12px] font-semibold tracking-wide text-gold-ink transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] before:absolute before:-inset-2 before:content-[''] focus-visible:outline-none sm:hidden"
+        >
+          {currentLocale.label}
+        </button>
+        {/* Свой контейнер, а не два `hidden`-класса на кнопках рядом со схлопнутой: `first:`/
+            `last:`-расширители тапа адресуют позицию СРЕДИ СОСЕДЕЙ, и лишний сосед забрал бы у
+            «RU» его горизонтальный расширитель. */}
+        <div className="hidden items-stretch sm:flex">
+          {LOCALES.map((locale) => (
+            <button
+              key={locale.code}
+              type="button"
+              onClick={() => setLocale(locale.code)}
+              aria-pressed={activeLocale === locale.code}
+              aria-label={locale.name}
+              className={[
+                // Переключатель состояния — только кросс-фейд цвета на `--dur-micro` (2.4 §5):
+                // сегмент не должен «шевелиться» относительно соседнего.
+                'relative inline-flex items-center px-2.5 text-[12px] font-semibold tracking-wide transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)]',
+                "before:absolute before:-top-1.5 before:-bottom-1.5 before:content-[''] first:before:-left-2 first:before:right-0 last:before:left-0 last:before:-right-2",
+                activeLocale === locale.code
+                  ? 'text-gold-ink'
+                  : 'text-ink-muted hover:text-gold-ink',
+              ].join(' ')}
+            >
+              {/*
+                Активный язык — золотыми чернилами, а не залитой капсулой `bg-wine-tint`, как в
+                плавающей шапке. Внутри общего трека вторая заливка читалась бы как ещё один
+                контрол поверх контрола; в макете здесь тоже только цвет.
+              */}
+              {locale.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <button

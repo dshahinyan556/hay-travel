@@ -8,6 +8,15 @@ export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement
    * checkbox into a full-width hover-highlighted list row (`Select`'s searchable-list convention).
    * Additive: omit for the plain inline checkbox every other caller uses. */
   containerClassName?: string
+  /**
+   * Render `label` as `sr-only` instead of visible text. For grids where the caption already lives
+   * in a column header (the permission matrix), so repeating it in every cell would be noise on
+   * screen — but silence for a screen reader, which does not read column headers per cell.
+   *
+   * NOT a way to ship an unlabelled checkbox: `label` stays required and stays associated with the
+   * input, so the accessible name is identical either way.
+   */
+  labelHidden?: boolean
 }
 
 /**
@@ -15,7 +24,7 @@ export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement
  * `input` stay associated without the consumer having to invent unique ids.
  */
 export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Checkbox(
-  { label, id, className = '', containerClassName = '', disabled, ...props },
+  { label, id, className = '', containerClassName = '', labelHidden = false, disabled, ...props },
   ref,
 ) {
   const generatedId = useId()
@@ -31,10 +40,10 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
         id={inputId}
         type="checkbox"
         disabled={disabled}
-        className={`h-[18px] w-[18px] shrink-0 rounded border-neutral-300 text-brand-700 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-600/30 focus:ring-offset-0 disabled:cursor-not-allowed ${className}`}
+        className={`h-[18px] w-[18px] shrink-0 rounded border-neutral-300 text-neutral-900 transition-colors focus:outline-none focus:ring-2 focus:ring-neutral-900/20 focus:ring-offset-0 disabled:cursor-not-allowed ${className}`}
         {...props}
       />
-      <span className="text-sm text-neutral-800">{label}</span>
+      <span className={labelHidden ? 'sr-only' : 'text-sm text-neutral-800'}>{label}</span>
     </label>
   )
 })

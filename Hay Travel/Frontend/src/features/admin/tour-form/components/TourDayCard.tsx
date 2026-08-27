@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
 import { DragHandle } from '@/shared/ui'
 import type { SortableRowRenderProps } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import type { Localized, PlaceOption, TourDayFormState } from '@/features/admin/types/form'
 import type { DaySource } from '@/features/admin/lib/tourMapper'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
+import { formatDayPrice } from '@/features/admin/tour-form/lib/price'
+import { tourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
 import { RemoveButton } from '@/features/admin/ui/RepeaterControls'
 import { TourDayFields } from './TourDayFields'
 
@@ -29,24 +33,6 @@ interface TourDayCardProps {
   daySources: DaySource[]
 }
 
-const priceFormatter = new Intl.NumberFormat('ru-RU')
-
-/** Turn the raw price string into a compact summary label, e.g. "15 000 ֏" or "0 ֏". */
-function formatPrice(raw: string): string {
-  const trimmed = raw.trim()
-  if (trimmed === '') return '0 ֏'
-  const n = Number(trimmed.replace(',', '.'))
-  return `${Number.isFinite(n) ? priceFormatter.format(n) : trimmed} ֏`
-}
-
-function imagesLabel(count: number): string {
-  const mod10 = count % 10
-  const mod100 = count % 100
-  if (mod10 === 1 && mod100 !== 11) return `${count} картинка`
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${count} картинки`
-  return `${count} картинок`
-}
-
 /**
  * One collapsible day. Collapsed, the header is a one-line summary (День N · title · images ·
  * price); expanded, it reveals the day's price, bilingual fields, its route points
@@ -69,9 +55,13 @@ export function TourDayCard({
   placeOptions,
   daySources,
 }: TourDayCardProps) {
+  const { locale } = useLocale()
+  const copy = useCopy(tourFormCopy).days
   const [open, setOpen] = useState(index === 0)
   const bodyId = `day-body-${day.key}`
-  const summaryTitle = day.title.ru.trim() || `День ${index + 1}`
+  // The day's own title is CONTENT: RU is the required language, so the summary shows it as
+  // typed. Only its placeholder ("День 2"/"Day 2") follows the interface language.
+  const summaryTitle = day.title.ru.trim() || copy.label(index + 1)
   const hasError = Boolean(titleError || priceError || routePointError)
 
   // Collapse before a drag starts: an expanded card's body (price/text fields, route points,
@@ -89,7 +79,7 @@ export function TourDayCard({
       ref={sortable.setNodeRef}
       style={sortable.style}
       className={`relative overflow-hidden rounded-xl border bg-white ${
-        sortable.isDragging ? 'z-10 border-brand-300 shadow-lg' : 'border-neutral-200'
+        sortable.isDragging ? 'z-10 border-neutral-400 shadow-lg' : 'border-neutral-200'
       }`}
     >
       <div className="flex items-center gap-2 bg-neutral-50 px-2.5 py-2.5 sm:gap-2.5 sm:px-3">
@@ -97,9 +87,9 @@ export function TourDayCard({
           ref={sortable.setActivatorNodeRef}
           {...sortable.attributes}
           {...sortable.listeners}
-          label={`Перетащить день ${index + 1}, чтобы изменить порядок`}
+          label={copy.drag(index + 1)}
         />
-        <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md bg-brand-700 text-xs font-bold text-white tabular-nums">
+        <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md bg-neutral-950 text-xs font-bold text-white tabular-nums">
           {index + 1}
         </span>
 
@@ -113,7 +103,7 @@ export function TourDayCard({
           <span className="truncate text-sm font-bold text-neutral-900">{summaryTitle}</span>
           {!open && (
             <span className="truncate text-xs text-neutral-500">
-              · {imagesLabel(day.gallery.length)} · {formatPrice(day.price)}
+              · {copy.images(day.gallery.length)} · {formatDayPrice(day.price, locale)}
             </span>
           )}
           {hasError && (
@@ -121,7 +111,7 @@ export function TourDayCard({
               className="shrink-0 text-xs font-semibold text-rose-600"
               title={titleError ?? priceError ?? routePointError}
             >
-              ⚠ проверьте день
+              {copy.hasError}
             </span>
           )}
           <span
@@ -133,7 +123,7 @@ export function TourDayCard({
         </button>
 
         {canRemove && (
-          <RemoveButton onClick={() => actions.removeDay(day.key)} label={`Удалить день ${index + 1}`} />
+          <RemoveButton onClick={() => actions.removeDay(day.key)} label={copy.remove(index + 1)} />
         )}
       </div>
 

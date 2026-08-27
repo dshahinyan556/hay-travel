@@ -39,7 +39,7 @@ export function Tabs({ tabs, activeId, onChange, label }: TabsProps) {
               // Tabs are a segment control: colour cross-fade only, on `--dur-micro` (2.4 §5).
               className={`-mb-px flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-sm font-semibold transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] ${
                 selected
-                  ? 'border-brand-700 text-brand-800'
+                  ? 'border-neutral-900 text-neutral-900'
                   : 'border-transparent text-neutral-500 hover:text-neutral-800'
               }`}
             >
@@ -47,7 +47,7 @@ export function Tabs({ tabs, activeId, onChange, label }: TabsProps) {
               {tab.badge !== undefined && (
                 <span
                   className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                    selected ? 'bg-brand-100 text-brand-800' : 'bg-neutral-100 text-neutral-500'
+                    selected ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-500'
                   }`}
                 >
                   {tab.badge}

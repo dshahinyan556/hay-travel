@@ -9,6 +9,10 @@
   <ItemGroup>
     <PackageReference Include="AutoMapper" Version="16.1.1" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
+    <!-- Санитизация HTML шаблонов писем (Задача E, §E.5). Пакет называется HtmlSanitizer,
+         namespace с 8.x — Ganss.Xss. Де-факто стандарт для .NET, на базе AngleSharp.
+         Allow-list задан один раз в EmailTemplateValidationService; чистим на сохранении. -->
+    <PackageReference Include="HtmlSanitizer" Version="9.2.995" />
     <PackageReference Include="MaxMind.GeoIP2" Version="6.1.0" />
     <!-- Community-лицензия (checklist-orders-redesign.txt Фаза 4, подтверждено Давидом
          2026-08-16): бесплатно для частных лиц и компаний с выручкой < $1M/год.

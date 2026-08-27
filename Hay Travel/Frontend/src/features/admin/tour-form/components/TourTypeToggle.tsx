@@ -1,4 +1,7 @@
-import { TourType, tourTypeLabels } from '@/features/admin/lib/enums'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { TourType } from '@/features/admin/lib/enums'
+import { adminEnumsCopy } from '@/features/admin/lib/adminEnumsCopy'
+import { tourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
 
 interface TourTypeToggleProps {
   value: TourType
@@ -17,10 +20,13 @@ const options: TourType[] = [TourType.Tour, TourType.Excursion]
  * (the backend rejects a change too).
  */
 export function TourTypeToggle({ value, onChange, disabled = false }: TourTypeToggleProps) {
+  const copy = useCopy(tourFormCopy).header
+  const typeLabels = useCopy(adminEnumsCopy).tourType
+
   return (
     <div
       role="radiogroup"
-      aria-label="Тип позиции"
+      aria-label={copy.type}
       className={`inline-flex rounded-xl border border-neutral-200 bg-neutral-100 p-1 ${
         disabled ? 'opacity-70' : ''
       }`}
@@ -34,15 +40,15 @@ export function TourTypeToggle({ value, onChange, disabled = false }: TourTypeTo
             role="radio"
             aria-checked={selected}
             disabled={disabled}
-            title={disabled && !selected ? 'Тип нельзя изменить после создания' : undefined}
+            title={disabled && !selected ? copy.typeLocked : undefined}
             onClick={() => onChange(option)}
-            className={`rounded-lg px-5 py-2 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${
+            className={`rounded-lg px-5 py-2 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30 ${
               disabled ? 'cursor-not-allowed' : 'cursor-pointer'
             } ${
-              selected ? 'bg-white text-brand-800 shadow-sm' : 'text-neutral-600 hover:text-neutral-800'
+              selected ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-600 hover:text-neutral-800'
             }`}
           >
-            {tourTypeLabels[option]}
+            {typeLabels[option]}
           </button>
         )
       })}

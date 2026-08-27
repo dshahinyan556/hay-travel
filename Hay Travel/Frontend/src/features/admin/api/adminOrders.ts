@@ -5,8 +5,9 @@
  * `Order/GetMine` exists server-side but has no UI yet, and a wrapper nobody calls is dead code —
  * add it with the screen that needs it.
  *
- * Every endpoint below except `updateOrder` (owner-or-admin) is `[Authorize(Roles = "Admin")]` —
- * mirrored client-side by `canManageCalendar` (`OrdersPage`'s loader gate).
+ * Every endpoint below except `updateOrder` (owner-or-admin) is gated by the `orders` permission
+ * key (`[RequiresPermission(AdminScreens.Orders, …)]`) — mirrored client-side by `canView`/
+ * `canCreate`/`canUpdate`/`canDelete(AdminScreen.Orders)` (`OrdersPage`'s loader gate).
  */
 
 import { authFetch } from '@/shared/auth'
@@ -16,12 +17,14 @@ import type {
   OrderEventInfoModel,
   OrderInfoModel,
   OrderLineCreateModel,
+  OrderLineEmployeeUpdateModel,
   OrderLineInfoModel,
   OrderLineUpdateModel,
   OrderPaymentCreateModel,
   OrderPaymentInfoModel,
   OrderStatus,
   OrderStatusUpdateModel,
+  OrderUnassignEmployeeModel,
   OrderUpdateModel,
 } from '@/shared/types/booking'
 import { getUsers } from './adminUsers'
@@ -92,8 +95,9 @@ export function removeOrderLine(lineId: number): Promise<void> {
   return authFetch<void>(`api/Order/RemoveLine?lineId=${lineId}`, { method: 'DELETE' })
 }
 
-/** PUT `Order/UpdateLine` — prepayment + fulfillment details ("Детали для выполнения") of one
- * line. Employee assignment is a separate call (`assignEmployee`). */
+/** PUT `Order/UpdateLine` — one line's prepayment, and nothing else. «Детали для выполнения»
+ * переехали на исполнителя (`updateOrderLineEmployee`, редизайн 2026-08-23), назначение всегда
+ * было отдельным вызовом (`assignEmployee`). */
 export function updateOrderLine(model: OrderLineUpdateModel): Promise<void> {
   return authFetch<void>('api/Order/UpdateLine', {
     method: 'PUT',
@@ -101,12 +105,43 @@ export function updateOrderLine(model: OrderLineUpdateModel): Promise<void> {
   })
 }
 
-/** PATCH `Order/AssignEmployee` — "Назначить и отправить": assigns one line (`lineId` set) or
- * every line at once (`lineId: null`, the bulk action), then emails the employee a PDF of the
- * assigned line(s). Rejects with `errorCode: UserIsNotEmployee` (2027) if the target user's role
- * isn't `RoleType.Employee`. */
+/** PUT `Order/UpdateLineEmployee` — «детали для выполнения» ОДНОГО исполнителя ОДНОЙ строки
+ * (место встречи / навигатор / комментарий RU+EN). `model.id` — id связки
+ * `OrderLineEmployeeInfoModel`, не строки и не пользователя. Роль здесь не правится: её меняет
+ * `assignEmployee` (upsert). Rejects with `errorCode: OrderLineEmployeeNotFound` (2039), если
+ * связку сняли параллельно в другой вкладке. */
+export function updateOrderLineEmployee(model: OrderLineEmployeeUpdateModel): Promise<void> {
+  return authFetch<void>('api/Order/UpdateLineEmployee', {
+    method: 'PUT',
+    body: JSON.stringify(model),
+  })
+}
+
+/** PATCH `Order/AssignEmployee` — мультивыбор попапа назначения: список людей, у каждого своя
+ * роль, на одну строку (`lineId` set) или на все строки заказа сразу (`lineId: null`).
+ *
+ * Семантика — АДДИТИВНЫЙ upsert, а не «заменить набор»: не перечисленные в запросе исполнители со
+ * строки НЕ снимаются (для этого `unassignEmployee` с конкретным `employeeId`), а повторный вызов
+ * с тем же человеком меняет ему роль. Письмо с персональным PDF уходит только при
+ * `sendEmail: true` И включённом канале события `order.assign_employee`.
+ *
+ * Rejects with `errorCode: UserIsNotEmployee` (2027), если у кого-то из выбранных нет роли
+ * `RoleType.Employee`, или `errorCode: EmployeeRoleRequired` (2029), если `employeeRole` не
+ * входит в enum — назначения без роли не существует. Пустой `employees` — 400. */
 export function assignEmployee(model: OrderAssignEmployeeModel): Promise<void> {
   return authFetch<void>('api/Order/AssignEmployee', {
+    method: 'PATCH',
+    body: JSON.stringify(model),
+  })
+}
+
+/** PATCH `Order/UnassignEmployee` — адресное снятие: `employeeId` задан → снимается только этот
+ * человек, `employeeId: null` → все исполнители целевых строк; `lineId: null` → все строки заказа.
+ * Idempotent: снятие того, кого уже сняли, — тихий no-op, не ошибка. Whether this emails the former
+ * employee is decided entirely by the `order.unassign_employee` notification setting — there is no
+ * flag here. */
+export function unassignEmployee(model: OrderUnassignEmployeeModel): Promise<void> {
+  return authFetch<void>('api/Order/UnassignEmployee', {
     method: 'PATCH',
     body: JSON.stringify(model),
   })
@@ -138,7 +173,8 @@ export function deleteOrder(id: number): Promise<void> {
   return authFetch<void>(`api/Order/Delete?id=${id}`, { method: 'DELETE' })
 }
 
-/** Every account with the `Employee` role — for the assignment `Select`. There is no dedicated
+/** Every account with the `Employee` role — for the assignment popup's multi-select AND for
+ * `OrderFulfillmentTab`'s `preferredLanguage` lookup. There is no dedicated
  * "list employees" endpoint: `api/Users` is the same small admin-only list `UsersPage` already
  * loads whole, filtered client-side (same pattern `OrderFilters` uses for tours). */
 export async function getEmployees(): Promise<UserInfoModel[]> {

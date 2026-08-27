@@ -2,7 +2,10 @@ import { useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Button, buttonClassName, Card, DragHandle, Modal, SortableList, Spinner } from '@/shared/ui'
 import type { SortableRowRenderProps } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { adminCommonCopy } from '@/features/admin/lib/adminCommonCopy'
 import { SidePanel } from '@/features/admin/ui/SidePanel'
+import type { ScreenPermission } from '@/shared/auth'
 import {
   createTourNoteTemplate,
   deleteTourNoteTemplate,
@@ -11,6 +14,7 @@ import {
 import { TourNoteType } from '@/features/admin/lib/enums'
 import type { TourNoteTemplateInfoModel } from '@/shared/types/attours'
 import { readLocalized, writeLocalized, writeLocalizedForUpdate } from '@/features/admin/catalog/lib/catalogMapper'
+import { catalogCopy, type CatalogCopy } from '@/features/admin/catalog/lib/catalogCopy'
 import { catalogErrorMessage } from '@/features/admin/catalog/lib/catalogErrors'
 import { catalogRowId, nextSortOrder, useCatalogReorder } from '@/features/admin/catalog/lib/useCatalogReorder'
 import { useCatalogSearch } from '@/features/admin/catalog/lib/useCatalogSearch'
@@ -19,27 +23,25 @@ import { NoteTemplateForm, type NoteTemplateFormValues } from './NoteTemplateFor
 
 interface NoteTemplatesTabProps {
   items: TourNoteTemplateInfoModel[]
+  /** The four flags of this tab's own permission key, resolved once by `CatalogPage`. */
+  permission: ScreenPermission
   onMutated: () => void
 }
 
 type PanelState = { mode: 'create' } | { mode: 'edit'; item: TourNoteTemplateInfoModel } | null
 type TypeFilter = 'all' | TourNoteType
 
-const TYPE_LABELS: Record<number, string> = {
-  [TourNoteType.OrganizationalDetail]: 'Организационная деталь',
-  [TourNoteType.Restriction]: 'Ограничение',
-  [TourNoteType.Included]: 'Включено',
-  [TourNoteType.NotIncluded]: 'Не включено',
-}
+/** An unknown `type` off the wire falls back to the first member's caption, as before. */
+const typeLabel = (copy: CatalogCopy, type: number) =>
+  copy.noteTemplates.typeLabels[type] ?? copy.noteTemplates.typeLabels[TourNoteType.OrganizationalDetail]
 
-const typeLabel = (type: number) => TYPE_LABELS[type] ?? 'Организационная деталь'
-
-const TYPE_FILTER_OPTIONS: { value: TypeFilter; label: string }[] = [
-  { value: 'all', label: 'Все' },
-  { value: TourNoteType.OrganizationalDetail, label: 'Орг. детали' },
-  { value: TourNoteType.Restriction, label: 'Ограничения' },
-  { value: TourNoteType.Included, label: 'Включено' },
-  { value: TourNoteType.NotIncluded, label: 'Не включено' },
+/** Short captions — five pills have to fit a phone; the full ones live in the table's `Тип` column. */
+const typeFilterOptions = (copy: CatalogCopy): { value: TypeFilter; label: string }[] => [
+  { value: 'all', label: copy.noteTemplates.filterAll },
+  { value: TourNoteType.OrganizationalDetail, label: copy.noteTemplates.filterOrganizational },
+  { value: TourNoteType.Restriction, label: copy.noteTemplates.filterRestriction },
+  { value: TourNoteType.Included, label: copy.noteTemplates.filterIncluded },
+  { value: TourNoteType.NotIncluded, label: copy.noteTemplates.filterNotIncluded },
 ]
 
 /**
@@ -50,7 +52,9 @@ const TYPE_FILTER_OPTIONS: { value: TypeFilter; label: string }[] = [
  * templates by type, still sees each type's rows in exactly the order shown here, because
  * filtering a sorted list preserves its order.
  */
-export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
+export function NoteTemplatesTab({ items, permission, onMutated }: NoteTemplatesTabProps) {
+  const copy = useCopy(catalogCopy)
+  const common = useCopy(adminCommonCopy)
   const [panel, setPanel] = useState<PanelState>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -63,7 +67,7 @@ export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
     items,
     update: updateTourNoteTemplate,
     onMutated,
-    errorAction: 'изменить порядок заметок',
+    errorAction: copy.noteTemplates.actions.reorder,
   })
   // Type is filtered first (a separate control from the search box below), then the name search
   // narrows whatever the type filter left — the two compose instead of fighting over one field.
@@ -100,7 +104,13 @@ export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
       setPanel(null)
       onMutated()
     } catch (err) {
-      setFormError(catalogErrorMessage(err, panel?.mode === 'edit' ? 'сохранить заметку' : 'добавить заметку'))
+      setFormError(
+        catalogErrorMessage(
+          copy,
+          err,
+          panel?.mode === 'edit' ? copy.noteTemplates.actions.save : copy.noteTemplates.actions.add,
+        ),
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -115,7 +125,7 @@ export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
       setConfirmTarget(null)
       onMutated()
     } catch (err) {
-      setListError(catalogErrorMessage(err, 'удалить заметку'))
+      setListError(catalogErrorMessage(copy, err, copy.noteTemplates.actions.delete))
     } finally {
       setPendingDeleteId(null)
     }
@@ -130,41 +140,46 @@ export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
         ref={sortable?.setNodeRef}
         style={sortable?.style as CSSProperties | undefined}
         className={`border-b border-neutral-100 last:border-0 ${
-          sortable?.isDragging ? 'relative z-10 bg-brand-50/60' : ''
+          sortable?.isDragging ? 'relative z-10 bg-neutral-100/60' : ''
         }`}
       >
         <td className="w-10 px-2 py-2.5">
           {sortable && (
             <DragHandle
               ref={sortable.setActivatorNodeRef}
-              disabled={order.isSaving}
-              label={`Перетащить «${name || `заметку №${item.id}`}», чтобы изменить порядок`}
+              // Reordering PERSISTS server-side — it is an edit, not a view preference.
+              disabled={order.isSaving || !permission.canUpdate}
+              label={copy.common.dragToReorder(name || copy.noteTemplates.rowFallback(item.id))}
               {...sortable.attributes}
               {...sortable.listeners}
             />
           )}
         </td>
         <td className="px-3 py-2.5 font-medium text-neutral-900">
-          {name || <span className="text-neutral-400">—</span>}
+          {name || <span className="text-neutral-400">{copy.common.emptyValue}</span>}
         </td>
-        <td className="px-3 py-2.5 text-neutral-500">{typeLabel(item.type)}</td>
+        <td className="px-3 py-2.5 text-neutral-500">{typeLabel(copy, item.type)}</td>
         <td className="px-3 py-2.5">
           <div className="flex justify-end gap-1.5">
-            <button
-              type="button"
-              onClick={() => setPanel({ mode: 'edit', item })}
-              className="rounded-lg px-2.5 py-1 text-sm font-medium text-brand-700 transition-colors hover:bg-brand-50"
-            >
-              Изменить
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmTarget(item)}
-              disabled={pendingDeleteId === item.id}
-              className="rounded-lg px-2.5 py-1 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-50 disabled:pointer-events-none disabled:opacity-50"
-            >
-              Удалить
-            </button>
+            {permission.canUpdate && (
+              <button
+                type="button"
+                onClick={() => setPanel({ mode: 'edit', item })}
+                className="rounded-lg px-2.5 py-1 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100"
+              >
+                {common.edit}
+              </button>
+            )}
+            {permission.canDelete && (
+              <button
+                type="button"
+                onClick={() => setConfirmTarget(item)}
+                disabled={pendingDeleteId === item.id}
+                className="rounded-lg px-2.5 py-1 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-50 disabled:pointer-events-none disabled:opacity-50"
+              >
+                {common.delete}
+              </button>
+            )}
           </div>
         </td>
       </tr>
@@ -175,16 +190,20 @@ export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-3">
-          <CatalogSearchInput value={search.query} onChange={search.setQuery} placeholder="Поиск по названию…" />
+          <CatalogSearchInput
+            value={search.query}
+            onChange={search.setQuery}
+            placeholder={copy.common.searchByName}
+          />
           {/* `max-w-full overflow-x-auto` (same pattern as `shared/ui/Tabs`): five pills don't fit
               a 375px viewport, so the group scrolls horizontally in place instead of either
               wrapping into a multi-row pill cluster or bleeding past the edge of the screen. */}
           <div
             role="radiogroup"
-            aria-label="Тип заметки"
+            aria-label={copy.noteTemplates.typeFilterLabel}
             className="no-scrollbar inline-flex max-w-full overflow-x-auto rounded-xl border border-neutral-200 bg-neutral-100 p-1"
           >
-            {TYPE_FILTER_OPTIONS.map((option) => {
+            {typeFilterOptions(copy).map((option) => {
               const selected = option.value === typeFilter
               return (
                 <button
@@ -193,8 +212,8 @@ export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
                   role="radio"
                   aria-checked={selected}
                   onClick={() => setTypeFilter(option.value)}
-                  className={`shrink-0 rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${
-                    selected ? 'bg-white text-brand-800 shadow-sm' : 'text-neutral-600 hover:text-neutral-800'
+                  className={`shrink-0 rounded-lg px-3.5 py-1.5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30 ${
+                    selected ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-600 hover:text-neutral-800'
                   }`}
                 >
                   {option.label}
@@ -203,7 +222,9 @@ export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
             })}
           </div>
         </div>
-        <Button onClick={() => setPanel({ mode: 'create' })}>Добавить заметку</Button>
+        {permission.canCreate && (
+          <Button onClick={() => setPanel({ mode: 'create' })}>{copy.noteTemplates.addButton}</Button>
+        )}
       </div>
 
       {(listError ?? order.error) && (
@@ -213,24 +234,26 @@ export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
       )}
 
       {items.length === 0 ? (
-        <Card className="text-center text-sm text-neutral-500">Заметок пока нет.</Card>
+        <Card className="text-center text-sm text-neutral-500">{copy.noteTemplates.empty}</Card>
       ) : isNarrowing && search.filtered.length === 0 ? (
         <Card className="text-center text-sm text-neutral-500">
-          {search.isFiltering ? <>Ничего не найдено по «{search.query.trim()}».</> : 'Заметок этого типа пока нет.'}
+          {search.isFiltering
+            ? copy.common.nothingFoundFor(search.query.trim())
+            : copy.noteTemplates.emptyOfType}
         </Card>
       ) : (
         <Card padding="sm" className="overflow-x-auto">
           {isNarrowing && (
-            <p className="px-1 pb-2 text-xs text-neutral-400">Изменение порядка недоступно во время фильтрации — сбросьте поиск и тип.</p>
+            <p className="px-1 pb-2 text-xs text-neutral-400">{copy.noteTemplates.reorderDisabledByFilter}</p>
           )}
           <table className="w-full min-w-[560px] text-left text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-xs font-semibold uppercase tracking-wide text-neutral-500">
                 <th className="w-10 px-2 py-2.5">
-                  <span className="sr-only">Порядок</span>
+                  <span className="sr-only">{copy.common.colOrder}</span>
                 </th>
-                <th className="px-3 py-2.5">Название</th>
-                <th className="px-3 py-2.5">Тип</th>
+                <th className="px-3 py-2.5">{copy.common.colName}</th>
+                <th className="px-3 py-2.5">{copy.noteTemplates.colType}</th>
                 <th className="px-3 py-2.5" />
               </tr>
             </thead>
@@ -242,7 +265,7 @@ export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
                   items={order.rows}
                   getId={catalogRowId}
                   onReorder={order.reorder}
-                  itemLabel="Заметка"
+                  itemLabel={copy.noteTemplates.sortableItem}
                 >
                   {(item, _index, sortable) => renderRow(item, sortable)}
                 </SortableList>
@@ -255,7 +278,7 @@ export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
       <SidePanel
         open={panel !== null}
         onClose={() => setPanel(null)}
-        title={panel?.mode === 'edit' ? 'Заметка' : 'Новая заметка'}
+        title={panel?.mode === 'edit' ? copy.noteTemplates.panelEdit : copy.noteTemplates.panelCreate}
       >
         <NoteTemplateForm
           key={panel?.mode === 'edit' ? panel.item.id : 'create'}
@@ -273,14 +296,15 @@ export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
         onClose={() => {
           if (pendingDeleteId === null) setConfirmTarget(null)
         }}
-        title="Удалить заметку?"
+        title={copy.noteTemplates.deleteTitle}
         initialFocusRef={cancelDeleteRef}
       >
         <p className="text-sm text-neutral-600">
           {confirmTarget && (
             <>
-              Заметка «<span className="font-semibold text-neutral-900">{readLocalized(confirmTarget.translations).ru}</span>»
-              будет удалена безвозвратно. Если она используется в турах, сначала уберите её оттуда.
+              {copy.noteTemplates.deleteBefore}
+              <span className="font-semibold text-neutral-900">{readLocalized(confirmTarget.translations).ru}</span>
+              {copy.noteTemplates.deleteAfter}
             </>
           )}
         </p>
@@ -292,16 +316,16 @@ export function NoteTemplatesTab({ items, onMutated }: NoteTemplatesTabProps) {
             disabled={pendingDeleteId !== null}
             className={`${buttonClassName('ghost', 'md')} disabled:pointer-events-none disabled:opacity-50`}
           >
-            Отмена
+            {common.cancel}
           </button>
           <Button type="button" variant="danger" onClick={confirmDelete} disabled={pendingDeleteId !== null} className="min-w-28">
             {pendingDeleteId !== null ? (
               <span className="inline-flex items-center gap-2">
                 <Spinner size="sm" />
-                Удаление…
+                {copy.common.deletingButton}
               </span>
             ) : (
-              'Удалить'
+              common.delete
             )}
           </Button>
         </div>

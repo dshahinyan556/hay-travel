@@ -1,84 +1,184 @@
 import { useState } from 'react'
-import { redirect, useLoaderData, useNavigate, useRevalidator } from 'react-router'
+import { Link, redirect, useLoaderData, useNavigate, useRevalidator } from 'react-router'
 import type { LoaderFunctionArgs } from 'react-router'
 import {
+  AdminScreen,
+  adoptSession,
+  canImpersonate,
   canManageAdmins,
-  canManageUsers,
-  ensureAuthReady,
+  canOpenAdminPanel,
+  canUpdate,
+  canView,
+  ensurePermissionsReady,
   getAuthState,
-  RoleType,
+  refreshPermissions,
+  useScreenPermission,
   type LoginHistoryEntryModel,
   type UserDetailInfoModel,
 } from '@/shared/auth'
+import { AdminActionButton, DataEntryScreenLayout } from '@/shared/ui'
+import { HelpButton } from '@/shared/ui/HelpButton'
+import { UserIcon } from '@/shared/ui/icons'
+import type { EmployeeJobRole } from '@/shared/types/employeeRole'
+import type { LanguageCode } from '@/shared/types/language'
+import {
+  roleHoldsCanImpersonate,
+  roleHoldsCanManageAdmins,
+} from '@/features/admin/roles/lib/roleModel'
 import {
   deleteUser,
   forcePasswordReset,
   getUserDetail,
   getUserLoginHistory,
+  getUserPermissionOverrides,
+  impersonateUser,
+  setUserJobRole,
+  setUserPreferredLanguage,
 } from '@/features/admin/api/adminUsers'
+import { getRoles, getScreens } from '@/features/admin/api/adminRoles'
+import type {
+  RoleInfoModel,
+  ScreenDefinitionModel,
+  ScreenOverrideModel,
+} from '@/features/admin/types/roles'
 import { UserDetailHeader } from './components/UserDetailHeader'
 import { UserDetailInfo } from './components/UserDetailInfo'
+import { UserImpersonateModal } from './components/UserImpersonateModal'
+import { UserPermissionsCard } from './components/UserPermissionsCard'
 import { LoginHistoryList } from './components/LoginHistoryList'
 import { UserDangerZone, type DangerConfirmKind } from './components/UserDangerZone'
-import { userDetailCopy, usersErrorMessage } from './lib/userCopy'
+import { getStoredLocale } from '@/shared/lib/locale'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { userCopy, usersErrorMessage } from './lib/userCopy'
 
 /**
- * Loads one account's detail for `:id`. Same permission gate as `usersLoader` (a TourManager
- * typing the URL directly must not see a raw 403 screen) plus a defensive id check, mirroring
- * `tourEditLoader`. A missing/deleted id 404s from `getUserDetail` itself and is NOT caught here —
- * it propagates to `AdminErrorBoundary`, per the F4 architecture note's point 2.
+ * Loads one account's detail for `:id`. Same permission gate as `usersLoader` (somebody without
+ * `users.View` typing the URL directly must not see a raw 403 screen) plus a defensive id check,
+ * mirroring `tourEditLoader`. A missing/deleted id 404s from `getUserDetail` itself and is NOT
+ * caught here — it propagates to `AdminErrorBoundary`, per the F4 architecture note's point 2.
+ *
+ * The three permission-editor requests are made only for a system Admin (their endpoints are
+ * Admin-only) and each degrades to `null`, exactly like the login history: a failing meta-endpoint
+ * must not take the profile card down with it.
  */
 export async function userDetailLoader({ params }: LoaderFunctionArgs) {
-  await ensureAuthReady()
-  if (!canManageUsers(getAuthState().user?.role)) throw redirect('/admin')
+  await ensurePermissionsReady()
+  if (!canView(AdminScreen.Users)) throw redirect('/admin')
 
   const id = Number(params.id)
   if (!Number.isInteger(id) || id <= 0) {
-    throw new Response('Некорректный идентификатор пользователя', { status: 400 })
+    // A loader runs outside React, so there is no `useCopy` here — the stored locale is read
+    // directly, per `shared/i18n/defineCopy.ts`'s rule 3.
+    throw new Response(userCopy(getStoredLocale()).errors.invalidId, { status: 400 })
   }
 
-  // Parallel, but NOT equally critical: the history is caught here and degrades to `null`, so a
-  // failing (or not-yet-deployed) history endpoint cannot take the whole profile card down with it.
-  // The profile request is deliberately left uncaught — without it there is no page.
-  const [user, loginHistory] = await Promise.all([
+  // Mirrors the backend gate on the PermissionOverrides endpoints exactly
+  // (`[RequiresPermission(AdminScreens.Users, PermissionAction.Update)]`) — no role, including a
+  // fully-loaded one, gets this for free any more (решение Давида 2026-08-22).
+  const canEditPermissions = canUpdate(AdminScreen.Users)
+
+  // The role list has TWO independent consumers below: the override editor's baseline (needs
+  // `canEditPermissions`) and `isTargetAdmin` in the danger zone (needs only `roles.View` — do NOT
+  // narrow this to `canEditPermissions`, or an actor with `users.Delete` but not `users.Update`
+  // would see the delete button unlocked for an account it cannot actually touch).
+  const canReadRoles = canEditPermissions || canView(AdminScreen.Roles)
+
+  // Parallel, but NOT equally critical: everything except the profile itself is caught and degrades
+  // to `null`. The profile request is deliberately left uncaught — without it there is no page.
+  const [user, loginHistory, overrides, screens, roles] = await Promise.all([
     getUserDetail(id),
     getUserLoginHistory(id).catch(() => null),
+    canEditPermissions
+      ? getUserPermissionOverrides(id).catch(() => null)
+      : Promise.resolve(null),
+    canEditPermissions ? getScreens().catch(() => null) : Promise.resolve(null),
+    // The role list supplies the BASELINE shown under every override cell: without "по роли:
+    // разрешено" a three-state control is unreadable.
+    canReadRoles ? getRoles().catch(() => null) : Promise.resolve(null),
   ])
-  return { user, loginHistory }
+  return { user, loginHistory, overrides, screens, roles, canEditPermissions }
 }
 
 export function UserDetailPage() {
-  const { user, loginHistory } = useLoaderData<typeof userDetailLoader>()
+  const data = useLoaderData<typeof userDetailLoader>()
   // Keyed by id so navigating between two profile URLs remounts with fresh local state instead of
   // carrying the previous user's confirm/error state over — same reasoning as `TourEditPage`.
-  return <UserDetailView key={user.id} user={user} loginHistory={loginHistory} />
+  return (
+    <UserDetailView
+      key={data.user.id}
+      user={data.user}
+      loginHistory={data.loginHistory}
+      overrides={data.overrides}
+      screens={data.screens}
+      roles={data.roles}
+      canEditPermissions={data.canEditPermissions}
+    />
+  )
 }
 
 function UserDetailView({
   user,
   loginHistory,
+  overrides,
+  screens,
+  roles,
+  canEditPermissions,
 }: {
   user: UserDetailInfoModel
   loginHistory: LoginHistoryEntryModel[] | null
+  overrides: ScreenOverrideModel[] | null
+  screens: ScreenDefinitionModel[] | null
+  roles: RoleInfoModel[] | null
+  canEditPermissions: boolean
 }) {
   const navigate = useNavigate()
   const revalidator = useRevalidator()
+  const copy = useCopy(userCopy)
+  const usersPermission = useScreenPermission(AdminScreen.Users)
 
   const [confirmKind, setConfirmKind] = useState<DangerConfirmKind | null>(null)
   const [pending, setPending] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [jobRolePending, setJobRolePending] = useState(false)
+  const [languagePending, setLanguagePending] = useState(false)
+  const [impersonateOpen, setImpersonateOpen] = useState(false)
+  const [impersonatePending, setImpersonatePending] = useState(false)
 
   // Read once per render, same convention as `UsersPage` — neither the id nor the SuperAdmin flag
   // can change without a full re-navigation while this screen is open.
   const actor = getAuthState().user
   const isSelf = user.id === actor?.id
-  // Mirrors `UsersTable`'s `isTargetAdmin`.
-  const isTargetAdmin = user.role === RoleType.Admin && !isSelf
+  // Mirrors `UsersTable`'s `isTargetAdmin` — see `roleHoldsCanManageAdmins` for why this is a
+  // lookup by `roleId` and not a straight field comparison any more.
+  const isTargetAdmin = roleHoldsCanManageAdmins(user.roleId, roles) && !isSelf
   // D3 (2026-08-09): another Admin's account is deletable — but only by the SuperAdmin. Self-delete
-  // stays blocked for everyone, SuperAdmin included (D4).
-  const canDelete = !isSelf && (!isTargetAdmin || canManageAdmins(actor))
-  const deleteDisabledHint = isSelf ? userDetailCopy.deleteSelfHint : userDetailCopy.deleteAdminHint
+  // stays blocked for everyone, SuperAdmin included (D4). `users.Delete` is a precondition ON TOP of
+  // those rules, not a replacement for them.
+  const canDelete =
+    usersPermission.canDelete && !isSelf && (!isTargetAdmin || canManageAdmins(actor))
+  const deleteDisabledHint = !usersPermission.canDelete
+    ? copy.detail.deleteNoPermissionHint
+    : isSelf
+      ? copy.detail.deleteSelfHint
+      : copy.detail.deleteAdminHint
   const userLabel = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username
+
+  /**
+   * «Войти как пользователь» (spec 014 §3). Offered when the signed-in account carries the
+   * `can_impersonate` claim and this is somebody else's profile — the same claim
+   * `[RequiresImpersonate]` checks server-side, read through the `shared/auth` predicate like every
+   * other non-matrix privilege (`canManageAdmins`), never off `user.role`.
+   */
+  const showImpersonate = canImpersonate(actor) && !isSelf
+  /**
+   * The backend additionally refuses an ELEVATED target unless the actor is the SuperAdmin
+   * (`ImpersonationTargetNotAllowed`, 2218). Predicted here so the button explains itself instead
+   * of failing — but only DISABLED, not hidden: when `roles` could not be read this answers `false`
+   * and the action stays live, with 2218 surfacing as an inline message if it really was blocked.
+   */
+  const targetIsElevated =
+    roleHoldsCanManageAdmins(user.roleId, roles) || roleHoldsCanImpersonate(user.roleId, roles)
+  const impersonateBlocked = targetIsElevated && !canManageAdmins(actor)
 
   function openConfirm(kind: DangerConfirmKind) {
     if (pending) return
@@ -89,6 +189,74 @@ function UserDetailView({
   function cancelConfirm() {
     if (pending) return
     setConfirmKind(null)
+  }
+
+  /** Задача D — immediate `PATCH`, no separate Save (same UX as `RoleSelect`). Not folded into the
+   * page's `pending`/`confirm` flow above: it has no confirmation step and isn't a danger-zone
+   * action, so it gets its own tiny pending flag instead. */
+  async function handleChangeJobRole(jobRole: EmployeeJobRole | null) {
+    if (jobRolePending) return
+    setJobRolePending(true)
+    setActionError(null)
+    try {
+      await setUserJobRole({ userId: user.id, jobRole })
+      await revalidator.revalidate()
+    } catch (err) {
+      setActionError(usersErrorMessage(copy, err, copy.errorActions.changeJobRole))
+    } finally {
+      setJobRolePending(false)
+    }
+  }
+
+  /** Язык писем (редизайн 2026-08-23) — same immediate-PATCH shape as `handleChangeJobRole`, with
+   * its own pending flag for the same reason: no confirmation step, not a danger-zone action. */
+  async function handleChangePreferredLanguage(preferredLanguage: LanguageCode) {
+    if (languagePending) return
+    setLanguagePending(true)
+    setActionError(null)
+    try {
+      await setUserPreferredLanguage({ userId: user.id, preferredLanguage })
+      await revalidator.revalidate()
+    } catch (err) {
+      setActionError(usersErrorMessage(copy, err, copy.errorActions.changePreferredLanguage))
+    } finally {
+      setLanguagePending(false)
+    }
+  }
+
+  /**
+   * Sign in as this account. The one action on this page that ends the ACTOR's own session: by the
+   * time the response lands the backend has revoked their refresh tokens and blacklisted their
+   * access token (spec 014 §8), so there is nothing to keep and nothing to roll back to —
+   * `adoptSession` replaces the whole client-side session with the target's, exactly as a fresh
+   * login would.
+   *
+   * The permission snapshot in memory still belongs to the admin at that moment, so it is re-read
+   * BEFORE navigating: otherwise the very next screen would render guards for the wrong identity.
+   *
+   * Destination (JUDGEMENT CALL — the spec does not pin it down): the panel if the target reaches
+   * anything under `/admin`, the public site otherwise. `canOpenAdminPanel` reads exactly that —
+   * the `is_admin`/non-empty `perms` claims of the token just issued FOR THE TARGET — so the
+   * decision is made on their resolved rights, not on a guess.
+   */
+  async function confirmImpersonation() {
+    if (impersonatePending) return
+    setImpersonatePending(true)
+    setActionError(null)
+    try {
+      adoptSession(await impersonateUser(user.id))
+      await refreshPermissions()
+      // No `setImpersonatePending(false)` on this path, deliberately: this screen is being replaced
+      // by the destination route, and the button should stay in its pending state until it is
+      // rather than flashing back to idle for the frame before the navigation lands.
+      navigate(canOpenAdminPanel(getAuthState().user) ? '/admin' : '/', { replace: true })
+    } catch (err) {
+      // Close the dialog first: the message belongs in the page's message slot (the convention
+      // every other mutation on this screen follows), and it would be hidden behind the modal.
+      setImpersonateOpen(false)
+      setActionError(usersErrorMessage(copy, err, copy.errorActions.impersonate))
+      setImpersonatePending(false)
+    }
   }
 
   async function confirm() {
@@ -111,27 +279,100 @@ function UserDetailView({
       setConfirmKind(null)
       await revalidator.revalidate()
     } catch (err) {
-      setActionError(usersErrorMessage(err, confirmKind === 'delete' ? 'удалить пользователя' : 'сбросить пароль'))
+      setActionError(
+        usersErrorMessage(
+          copy,
+          err,
+          confirmKind === 'delete' ? copy.errorActions.deleteUser : copy.errorActions.resetPassword,
+        ),
+      )
     } finally {
       setPending(false)
     }
   }
 
+  /**
+   * Template A — «Экран ввода данных» (`DataEntryScreenLayout`): breadcrumbs → title/subtitle →
+   * control zone → message slot → body, the same chrome the Order screen established as canon.
+   * The breadcrumb, `<h1>` and `HelpButton` used to live inside `UserDetailHeader`; that component
+   * is now only the record-identity card at the top of the body.
+   *
+   * No `AdminToolbar` in the control zone: this screen has no page-level draft to save or cancel —
+   * every edit on it (job role, overrides, danger zone) commits on its own. What belongs there is
+   * the contextual action, which is impersonation.
+   */
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+    <DataEntryScreenLayout
+      breadcrumbs={
+        <>
+          <Link to="/admin/users" className="transition-colors hover:text-neutral-800">
+            {copy.page.title}
+          </Link>
+          <span aria-hidden="true"> · </span>
+          <span className="font-semibold text-neutral-800">{userLabel}</span>
+        </>
+      }
+      breadcrumbsLabel={copy.header.breadcrumbAria}
+      title={userLabel}
+      controlZone={
+        <>
+          {showImpersonate && (
+            <AdminActionButton
+              label={copy.impersonate.button}
+              pendingLabel={copy.impersonate.pending}
+              icon={<UserIcon size={17} />}
+              variant="secondary"
+              pending={impersonatePending}
+              disabled={impersonateBlocked}
+              title={impersonateBlocked ? copy.impersonate.elevatedHint : undefined}
+              onClick={() => {
+                setActionError(null)
+                setImpersonateOpen(true)
+              }}
+            />
+          )}
+          <HelpButton surface="admin" title={copy.detail.helpTitle}>
+            {copy.detail.helpBody}
+          </HelpButton>
+        </>
+      }
+      message={
+        actionError && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+          >
+            <span aria-hidden="true">⚠️</span>
+            <span>{actionError}</span>
+          </div>
+        )
+      }
+    >
       <UserDetailHeader user={user} />
 
-      {actionError && (
-        <div
-          role="alert"
-          className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
-        >
-          <span aria-hidden="true">⚠️</span>
-          <span>{actionError}</span>
-        </div>
-      )}
+      <UserDetailInfo
+        user={user}
+        onChangeJobRole={(role) => void handleChangeJobRole(role)}
+        jobRolePending={jobRolePending}
+        onChangePreferredLanguage={(language) => void handleChangePreferredLanguage(language)}
+        languagePending={languagePending}
+        canUpdate={usersPermission.canUpdate}
+      />
 
-      <UserDetailInfo user={user} />
+      {/* Between the account's data and its login history: an override is a SETTING of the account,
+          while the history is reference context for the destructive actions further down.
+          Admin-only — editing overrides is administering the permission system itself. */}
+      {canEditPermissions && (
+        <UserPermissionsCard
+          userId={user.id}
+          roleName={user.roleName}
+          rolePermissions={roles?.find((role) => role.id === user.roleId)?.permissions ?? null}
+          overrides={overrides}
+          screens={screens}
+          canEdit={usersPermission.canUpdate}
+          onSaved={() => void revalidator.revalidate()}
+        />
+      )}
 
       {/* Between the read-only data and the destructive actions: it is context for the decisions
           below it, not an action of its own. */}
@@ -140,6 +381,8 @@ function UserDetailView({
       <UserDangerZone
         userLabel={userLabel}
         canDelete={canDelete}
+        canReset={usersPermission.canUpdate}
+        resetDisabledHint={copy.detail.resetNoPermissionHint}
         targetIsAdmin={isTargetAdmin}
         deleteDisabledHint={deleteDisabledHint}
         confirmKind={confirmKind}
@@ -149,6 +392,14 @@ function UserDetailView({
         onCancelConfirm={cancelConfirm}
         onConfirm={confirm}
       />
-    </div>
+
+      <UserImpersonateModal
+        open={impersonateOpen}
+        userLabel={userLabel}
+        pending={impersonatePending}
+        onCancel={() => setImpersonateOpen(false)}
+        onConfirm={() => void confirmImpersonation()}
+      />
+    </DataEntryScreenLayout>
   )
 }

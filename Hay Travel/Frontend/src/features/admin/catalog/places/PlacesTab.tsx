@@ -2,10 +2,14 @@ import { useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Button, buttonClassName, Card, DragHandle, Modal, SortableList, Spinner } from '@/shared/ui'
 import type { SortableRowRenderProps } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { adminCommonCopy } from '@/features/admin/lib/adminCommonCopy'
 import { SidePanel } from '@/features/admin/ui/SidePanel'
 import { createPlace, deletePlace, updatePlace } from '@/features/admin/api/adminCatalog'
+import type { ScreenPermission } from '@/shared/auth'
 import type { PlaceInfoModel, RegionInfoModel } from '@/shared/types/attours'
 import { readLocalized, writeLocalized, writeLocalizedForUpdate } from '@/features/admin/catalog/lib/catalogMapper'
+import { catalogCopy } from '@/features/admin/catalog/lib/catalogCopy'
 import { catalogErrorMessage } from '@/features/admin/catalog/lib/catalogErrors'
 import { catalogRowId, nextSortOrder, useCatalogReorder } from '@/features/admin/catalog/lib/useCatalogReorder'
 import { useCatalogSearch } from '@/features/admin/catalog/lib/useCatalogSearch'
@@ -14,7 +18,11 @@ import { PlaceForm, type PlaceFormValues } from './PlaceForm'
 
 interface PlacesTabProps {
   places: PlaceInfoModel[]
-  regions: RegionInfoModel[]
+  /** `null` when the role may edit points but not read regions — the region picker then renders
+   * disabled with an explanation rather than as a silently empty dropdown. */
+  regions: RegionInfoModel[] | null
+  /** The four flags of `catalog.places`, resolved once by `CatalogPage`. */
+  permission: ScreenPermission
   /** Called after a successful create/update/delete — the parent revalidates the loader. */
   onMutated: () => void
 }
@@ -28,7 +36,9 @@ function parseOptionalDecimal(value: string): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-export function PlacesTab({ places, regions, onMutated }: PlacesTabProps) {
+export function PlacesTab({ places, regions, permission, onMutated }: PlacesTabProps) {
+  const copy = useCopy(catalogCopy)
+  const common = useCopy(adminCommonCopy)
   const [panel, setPanel] = useState<PanelState>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -40,12 +50,12 @@ export function PlacesTab({ places, regions, onMutated }: PlacesTabProps) {
     items: places,
     update: updatePlace,
     onMutated,
-    errorAction: 'изменить порядок точек',
+    errorAction: copy.places.actions.reorder,
   })
 
   const regionName = (regionId: number) => {
-    const region = regions.find((r) => r.id === regionId)
-    return region ? readLocalized(region.translations).ru || region.slug : '—'
+    const region = regions?.find((r) => r.id === regionId)
+    return region ? readLocalized(region.translations).ru || region.slug : copy.common.emptyValue
   }
 
   const search = useCatalogSearch(order.rows, (place) => {
@@ -87,7 +97,13 @@ export function PlacesTab({ places, regions, onMutated }: PlacesTabProps) {
       setPanel(null)
       onMutated()
     } catch (err) {
-      setFormError(catalogErrorMessage(err, panel?.mode === 'edit' ? 'сохранить точку' : 'добавить точку'))
+      setFormError(
+        catalogErrorMessage(
+          copy,
+          err,
+          panel?.mode === 'edit' ? copy.places.actions.save : copy.places.actions.add,
+        ),
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -102,7 +118,7 @@ export function PlacesTab({ places, regions, onMutated }: PlacesTabProps) {
       setConfirmTarget(null)
       onMutated()
     } catch (err) {
-      setListError(catalogErrorMessage(err, 'удалить точку'))
+      setListError(catalogErrorMessage(copy, err, copy.places.actions.delete))
     } finally {
       setPendingDeleteId(null)
     }
@@ -117,42 +133,47 @@ export function PlacesTab({ places, regions, onMutated }: PlacesTabProps) {
         ref={sortable?.setNodeRef}
         style={sortable?.style as CSSProperties | undefined}
         className={`border-b border-neutral-100 last:border-0 ${
-          sortable?.isDragging ? 'relative z-10 bg-brand-50/60' : ''
+          sortable?.isDragging ? 'relative z-10 bg-neutral-100/60' : ''
         }`}
       >
         <td className="w-10 px-2 py-2.5">
           {sortable && (
             <DragHandle
+              // Reordering PERSISTS through `updatePlace` — it is an edit, not a view preference.
+              disabled={order.isSaving || !permission.canUpdate}
               ref={sortable.setActivatorNodeRef}
-              disabled={order.isSaving}
-              label={`Перетащить «${name || place.slug}», чтобы изменить порядок`}
+              label={copy.common.dragToReorder(name || place.slug)}
               {...sortable.attributes}
               {...sortable.listeners}
             />
           )}
         </td>
         <td className="px-3 py-2.5 font-medium text-neutral-900">
-          {name || <span className="text-neutral-400">—</span>}
+          {name || <span className="text-neutral-400">{copy.common.emptyValue}</span>}
         </td>
         <td className="px-3 py-2.5 text-neutral-500">{place.slug}</td>
         <td className="px-3 py-2.5 text-neutral-500">{regionName(place.regionId)}</td>
         <td className="px-3 py-2.5">
           <div className="flex justify-end gap-1.5">
-            <button
-              type="button"
-              onClick={() => setPanel({ mode: 'edit', place })}
-              className="rounded-lg px-2.5 py-1 text-sm font-medium text-brand-700 transition-colors hover:bg-brand-50"
-            >
-              Изменить
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmTarget(place)}
-              disabled={pendingDeleteId === place.id}
-              className="rounded-lg px-2.5 py-1 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-50 disabled:pointer-events-none disabled:opacity-50"
-            >
-              Удалить
-            </button>
+            {permission.canUpdate && (
+              <button
+                type="button"
+                onClick={() => setPanel({ mode: 'edit', place })}
+                className="rounded-lg px-2.5 py-1 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100"
+              >
+                {common.edit}
+              </button>
+            )}
+            {permission.canDelete && (
+              <button
+                type="button"
+                onClick={() => setConfirmTarget(place)}
+                disabled={pendingDeleteId === place.id}
+                className="rounded-lg px-2.5 py-1 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-50 disabled:pointer-events-none disabled:opacity-50"
+              >
+                {common.delete}
+              </button>
+            )}
           </div>
         </td>
       </tr>
@@ -162,8 +183,14 @@ export function PlacesTab({ places, regions, onMutated }: PlacesTabProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <CatalogSearchInput value={search.query} onChange={search.setQuery} placeholder="Поиск по названию, слагу, региону…" />
-        <Button onClick={() => setPanel({ mode: 'create' })}>Добавить точку</Button>
+        <CatalogSearchInput
+          value={search.query}
+          onChange={search.setQuery}
+          placeholder={copy.places.searchPlaceholder}
+        />
+        {permission.canCreate && (
+          <Button onClick={() => setPanel({ mode: 'create' })}>{copy.places.addButton}</Button>
+        )}
       </div>
 
       {(listError ?? order.error) && (
@@ -173,23 +200,25 @@ export function PlacesTab({ places, regions, onMutated }: PlacesTabProps) {
       )}
 
       {places.length === 0 ? (
-        <Card className="text-center text-sm text-neutral-500">Точек маршрута пока нет.</Card>
+        <Card className="text-center text-sm text-neutral-500">{copy.places.empty}</Card>
       ) : search.isFiltering && search.filtered.length === 0 ? (
-        <Card className="text-center text-sm text-neutral-500">Ничего не найдено по «{search.query.trim()}».</Card>
+        <Card className="text-center text-sm text-neutral-500">
+          {copy.common.nothingFoundFor(search.query.trim())}
+        </Card>
       ) : (
         <Card padding="sm" className="overflow-x-auto">
           {search.isFiltering && (
-            <p className="px-1 pb-2 text-xs text-neutral-400">Изменение порядка недоступно во время поиска — очистите поле.</p>
+            <p className="px-1 pb-2 text-xs text-neutral-400">{copy.common.reorderDisabledBySearch}</p>
           )}
           <table className="w-full min-w-[600px] text-left text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-xs font-semibold uppercase tracking-wide text-neutral-500">
                 <th className="w-10 px-2 py-2.5">
-                  <span className="sr-only">Порядок</span>
+                  <span className="sr-only">{copy.common.colOrder}</span>
                 </th>
-                <th className="px-3 py-2.5">Название</th>
-                <th className="px-3 py-2.5">Слаг</th>
-                <th className="px-3 py-2.5">Регион</th>
+                <th className="px-3 py-2.5">{copy.common.colName}</th>
+                <th className="px-3 py-2.5">{copy.places.colSlug}</th>
+                <th className="px-3 py-2.5">{copy.places.colRegion}</th>
                 <th className="px-3 py-2.5" />
               </tr>
             </thead>
@@ -201,7 +230,7 @@ export function PlacesTab({ places, regions, onMutated }: PlacesTabProps) {
                   items={order.rows}
                   getId={catalogRowId}
                   onReorder={order.reorder}
-                  itemLabel="Точка маршрута"
+                  itemLabel={copy.places.sortableItem}
                 >
                   {(place, _index, sortable) => renderRow(place, sortable)}
                 </SortableList>
@@ -214,7 +243,7 @@ export function PlacesTab({ places, regions, onMutated }: PlacesTabProps) {
       <SidePanel
         open={panel !== null}
         onClose={() => setPanel(null)}
-        title={panel?.mode === 'edit' ? 'Точка маршрута' : 'Новая точка маршрута'}
+        title={panel?.mode === 'edit' ? copy.places.panelEdit : copy.places.panelCreate}
       >
         <PlaceForm
           key={panel?.mode === 'edit' ? panel.place.id : 'create'}
@@ -232,14 +261,15 @@ export function PlacesTab({ places, regions, onMutated }: PlacesTabProps) {
         onClose={() => {
           if (pendingDeleteId === null) setConfirmTarget(null)
         }}
-        title="Удалить точку?"
+        title={copy.places.deleteTitle}
         initialFocusRef={cancelDeleteRef}
       >
         <p className="text-sm text-neutral-600">
           {confirmTarget && (
             <>
-              Точка «<span className="font-semibold text-neutral-900">{readLocalized(confirmTarget.translations).ru}</span>»
-              будет удалена безвозвратно. Если она используется в турах, сначала уберите её оттуда.
+              {copy.places.deleteBefore}
+              <span className="font-semibold text-neutral-900">{readLocalized(confirmTarget.translations).ru}</span>
+              {copy.places.deleteAfter}
             </>
           )}
         </p>
@@ -251,16 +281,16 @@ export function PlacesTab({ places, regions, onMutated }: PlacesTabProps) {
             disabled={pendingDeleteId !== null}
             className={`${buttonClassName('ghost', 'md')} disabled:pointer-events-none disabled:opacity-50`}
           >
-            Отмена
+            {common.cancel}
           </button>
           <Button type="button" variant="danger" onClick={confirmDelete} disabled={pendingDeleteId !== null} className="min-w-28">
             {pendingDeleteId !== null ? (
               <span className="inline-flex items-center gap-2">
                 <Spinner size="sm" />
-                Удаление…
+                {copy.common.deletingButton}
               </span>
             ) : (
-              'Удалить'
+              common.delete
             )}
           </Button>
         </div>

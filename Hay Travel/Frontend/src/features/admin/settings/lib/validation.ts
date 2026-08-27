@@ -14,9 +14,7 @@
 
 import { SettingValueType } from '@/features/admin/lib/enums'
 import type { SettingFieldState } from '@/features/admin/settings/types'
-
-const REQUIRED = 'Обязательное поле'
-const SUSPICIOUS_URL = 'Похоже на неполную ссылку — обычно адрес начинается с https:// или со «/».'
+import type { SettingsCopy } from '@/features/admin/settings/lib/settingsCopy'
 
 /** Blocking errors of one bilingual field, per language. */
 export interface LocalizedErrors {
@@ -40,7 +38,14 @@ function looksLikeLink(value: string): boolean {
   return /^(https?:\/\/|\/)/.test(value)
 }
 
-export function validateSettings(fields: Record<string, SettingFieldState>): SettingsValidation {
+/**
+ * Pure, so the copy arrives as a parameter rather than through a hook — the caller
+ * (`useSettingsForm`) already resolves it against the current locale.
+ */
+export function validateSettings(
+  copy: SettingsCopy,
+  fields: Record<string, SettingFieldState>,
+): SettingsValidation {
   const errors: Record<string, LocalizedErrors> = {}
   const warnings: Record<string, string> = {}
   let missingCount = 0
@@ -48,8 +53,8 @@ export function validateSettings(fields: Record<string, SettingFieldState>): Set
   for (const field of Object.values(fields)) {
     if (field.isTranslatable) {
       const fieldErrors: LocalizedErrors = {}
-      if (field.translations.ru.trim() === '') fieldErrors.ru = REQUIRED
-      if (field.translations.en.trim() === '') fieldErrors.en = REQUIRED
+      if (field.translations.ru.trim() === '') fieldErrors.ru = copy.required
+      if (field.translations.en.trim() === '') fieldErrors.en = copy.required
       if (fieldErrors.ru || fieldErrors.en) {
         errors[field.key] = fieldErrors
         missingCount += 1
@@ -61,7 +66,7 @@ export function validateSettings(fields: Record<string, SettingFieldState>): Set
       field.valueType === SettingValueType.Url || field.valueType === SettingValueType.ImageUrl
     const value = field.value.trim()
     if (isLinkField && value !== '' && !looksLikeLink(value)) {
-      warnings[field.key] = SUSPICIOUS_URL
+      warnings[field.key] = copy.suspiciousUrl
     }
   }
 

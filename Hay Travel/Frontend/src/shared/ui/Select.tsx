@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useIsCompactViewport } from '@/shared/hooks'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { Popover } from './Popover'
 import { Sheet, SHEET_SINGLE_DETENT } from './Sheet'
 import { ChevronDownIcon, CheckIcon } from './icons'
@@ -28,7 +29,8 @@ export interface SelectProps {
   value: string
   onChange: (value: string) => void
   options: SelectOption[]
-  /** Shown in the trigger when `value` matches nothing in `options` (e.g. `''`). */
+  /** Shown in the trigger when `value` matches nothing in `options` (e.g. `''`).
+   * Defaults to `t('ui.select.placeholder')` in the current locale. */
   placeholder?: string
   disabled?: boolean
   /** Marks the field as invalid: red border. Pair with `Field`'s `error` text. */
@@ -68,9 +70,10 @@ export interface SelectProps {
    * the filter input while open, and the listbox is driven from there by `aria-activedescendant`.
    */
   searchable?: boolean
-  /** Placeholder of the `searchable` filter input. Pass a localised string on the public site. */
+  /** Placeholder of the `searchable` filter input. Defaults to `t('ui.select.searchPlaceholder')`. */
   searchPlaceholder?: string
-  /** Shown instead of the list when the filter matches nothing. */
+  /** Shown instead of the list when the filter matches nothing.
+   * Defaults to `t('ui.select.noResults')`. */
   noResultsText?: string
   'aria-label'?: string
   'aria-labelledby'?: string
@@ -161,19 +164,26 @@ export function Select({
   value,
   onChange,
   options,
-  placeholder = 'Выберите…',
+  placeholder,
   disabled = false,
   error = false,
   className = '',
   triggerClassName,
   surface = 'public',
   searchable = false,
-  searchPlaceholder = 'Поиск…',
-  noResultsText = 'Ничего не найдено',
+  searchPlaceholder,
+  noResultsText,
   'aria-label': ariaLabel,
   'aria-labelledby': ariaLabelledBy,
   'aria-describedby': ariaDescribedBy,
 }: SelectProps) {
+  // Defaults are resolved in the body, not in the parameter list — a hook cannot run in a default
+  // parameter expression. Same shape `DatePicker` already uses for its localised month names.
+  const { t } = useLocale()
+  const resolvedPlaceholder = placeholder ?? t('ui.select.placeholder')
+  const resolvedSearchPlaceholder = searchPlaceholder ?? t('ui.select.searchPlaceholder')
+  const resolvedNoResultsText = noResultsText ?? t('ui.select.noResults')
+
   const generatedId = useId()
   const controlId = id ?? generatedId
   const listboxId = `${controlId}-listbox`
@@ -414,7 +424,7 @@ export function Select({
       ? `border bg-white text-neutral-900 disabled:bg-neutral-100 disabled:text-neutral-400 ${
           error
             ? 'border-rose-500 focus-visible:border-rose-600 focus-visible:ring-rose-600/20'
-            : 'border-neutral-300 hover:border-neutral-400 focus-visible:border-brand-600 focus-visible:ring-brand-600/20'
+            : 'border-neutral-300 hover:border-neutral-400 focus-visible:border-neutral-900 focus-visible:ring-neutral-900/15'
         }`
       : `border bg-panel-raised text-ink disabled:border-disabled-edge disabled:bg-disabled-bg disabled:text-disabled-ink ${
           error
@@ -440,7 +450,7 @@ export function Select({
     }
     if (surface === 'admin') {
       return `${base} cursor-pointer ${
-        selected ? 'bg-brand-50 font-semibold text-brand-800' : highlighted ? 'bg-neutral-100 text-neutral-900' : 'text-neutral-900'
+        selected ? 'bg-neutral-100 font-semibold text-neutral-900' : highlighted ? 'bg-neutral-100 text-neutral-900' : 'text-neutral-900'
       } focus-visible:outline-none focus-visible:bg-neutral-100`
     }
     return `${base} cursor-pointer ${
@@ -451,11 +461,11 @@ export function Select({
   const optionIdFor = (index: number) => `${listboxId}-option-${index}`
 
   const labelledByText = useLabelledByText(ariaLabelledBy)
-  const dialogLabel = labelledByText ?? ariaLabel ?? placeholder
+  const dialogLabel = labelledByText ?? ariaLabel ?? resolvedPlaceholder
 
   const searchInputClasses =
     surface === 'admin'
-      ? 'w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-brand-600'
+      ? 'w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-900'
       : 'w-full rounded-lg border border-edge-strong bg-panel px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-muted focus:border-gold-line'
 
   /** The filter row. Rendered inside both popup shapes; `role="combobox"` moves onto it while the
@@ -472,7 +482,7 @@ export function Select({
         aria-label={dialogLabel}
         autoComplete="off"
         value={query}
-        placeholder={searchPlaceholder}
+        placeholder={resolvedSearchPlaceholder}
         onChange={(event) => setQuery(event.currentTarget.value)}
         onKeyDown={handleSearchKeyDown}
         className={searchInputClasses}
@@ -482,7 +492,7 @@ export function Select({
 
   const emptyState = (
     <p className={`px-3 py-3 text-sm ${mutedTextClass}`} role="status">
-      {noResultsText}
+      {resolvedNoResultsText}
     </p>
   )
 
@@ -592,7 +602,7 @@ export function Select({
           </span>
         )}
         <span className={`flex-1 truncate ${selectedOption ? '' : mutedTextClass}`}>
-          {selectedOption ? (selectedOption.triggerLabel ?? selectedOption.label) : placeholder}
+          {selectedOption ? (selectedOption.triggerLabel ?? selectedOption.label) : resolvedPlaceholder}
         </span>
         <ChevronDownIcon
           size={16}

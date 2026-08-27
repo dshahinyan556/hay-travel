@@ -35,7 +35,8 @@ namespace ATTours.BusinessServices.Services.InfoServices
                            .ThenInclude(line => line.Tour)
                                .ThenInclude((Expression<Func<Tour, ICollection<TourInfoTranslation>>>)(tour => tour.Translations))
                        .Include((Expression<Func<Order, ICollection<OrderLine>>>)(x => x.Lines))
-                           .ThenInclude(line => line.Employee)
+                           .ThenInclude((Expression<Func<OrderLine, ICollection<OrderLineEmployee>>>)(line => line.Employees))
+                               .ThenInclude(assignment => assignment.Employee)
                        .Include((Expression<Func<Order, ICollection<OrderLine>>>)(x => x.Lines))
                            .ThenInclude(line => line.Payments)
                        // Lines->Payments — коллекция внутри коллекции, тот же cartesian-explosion
@@ -60,7 +61,7 @@ namespace ATTours.BusinessServices.Services.InfoServices
         public async Task<List<Order>> GetByEmployeeAsync(int employeeId, CancellationToken cancellationToken = default)
         {
             return await GetEntityQueryableRepository()
-                         .Where(order => order.Lines.Any(line => line.EmployeeId == employeeId))
+                         .Where(order => order.Lines.Any(line => line.Employees.Any(assignment => assignment.EmployeeId == employeeId)))
                          .ToListAsync(cancellationToken);
         }
     }

@@ -200,6 +200,77 @@ sibling-коллекций с одного корня одним `Include`-че�
   `OrderLineService.RemoveLineAsync` → `OrderLineRemovedResult`. HTTP-контракты этих трёх
   эндпоинтов не изменились — это внутренние сигнатуры сервисов, не тела запроса/ответа.
 
+## Роль исполнителя (Задача D, 2026-08-21/22) — база, ЧАСТИЧНО заменена редизайном 2026-08-23
+`EmployeeJobRole` (`Driver=1, Guide=2, DriverGuide=3`, отдельный enum от `RoleType`) и
+`User.DefaultJobRole` (`PATCH api/Users/SetJobRole`) — в силе без изменений. Всё, что касалось
+ОДНОГО исполнителя на строке (`OrderLine.EmployeeRole`, `UnassignEmployee {OrderId, LineId}`) —
+заменено мульти-исполнительской моделью, см. следующий раздел. Полная история решения (зачем
+`EmployeeJobRole` — отдельный enum, почему `DefaultJobRole` необязателен) — по-прежнему в
+`docs/architecture-role-notifications.md` ЧАСТЬ D.
+
+## Мульти-исполнители на строке заказа + настраиваемые получатели + билингвальные письма — 2026-08-23
+Полное архитектурное решение — `docs/architecture-notification-recipients-multi-employee.md`
+(бэкенд) и `docs/architecture-notification-frontend.md` (фронт). Заменяет одиночного исполнителя
+на строке (Задача D) и зашитых в код получателей писем + RU-only шаблоны (Задача E, было в этом
+файле ниже). Причина редизайна — на одной строке заказа нужно несколько исполнителей одновременно
+(например водитель + гид), у каждого своя роль и свои детали для выполнения; получатели писем
+должны настраиваться админом, а не жить в коде; клиенты и сотрудники бывают англоязычными.
+
+- **`OrderLineEmployee`** (новая сущность, заменяет `OrderLine.EmployeeId/EmployeeRole/
+  PickupDetails/NavigatorLink`) — join `OrderLine`×`User`, unique `(OrderLineId, EmployeeId)`
+  (один и тот же человек не добавляется на строку дважды — случай «и водитель, и гид»
+  покрывается значением `EmployeeJobRole.DriverGuide`, не второй строкой). На каждой связке —
+  своя роль (non-nullable, гейт `EmployeeRoleRequired=2029` не изменился) и свои
+  `PickupDetails`/`NavigatorLink`/`Comment`/`CommentEn`. Пустое поле нигде не появляется — ни в
+  PDF (было так и раньше), ни в письме (раньше в письме подставлялись заглушки «не указано»/«не
+  указан» — это было расхождение с PDF, исправлено).
+- **`AssignEmployee` — аддитивный upsert**, не replace: `OrderAssignEmployeeModel` принимает
+  список `{EmployeeId, EmployeeRole}[]`, каждый добавляется/обновляется точечно, остальные
+  исполнители строки не трогаются (bulk-клик больше не стирает случайно назначенных ранее людей).
+  **`UnassignEmployee`** — `{OrderId, LineId: int?, EmployeeId: int?}`: `EmployeeId` задан — снять
+  конкретного человека, не задан — снять всех со строки/заказа (та же bulk-семантика `LineId`,
+  что раньше). Идемпотентно, письмо/событие только если реально кто-то был снят.
+- **`GetAssignedToMe`** (кабинет сотрудника) фильтрует по `OrderLineEmployee.EmployeeId`, не по
+  `OrderLine.EmployeeId` — индекс переехал вместе с полем.
+- **`User.PreferredLanguage`** (`LanguageCode`: `Russian=1` (дефолт) `/ English=2`) — определяет,
+  какая языковая версия письма уходит этому получателю. Меняется через
+  `PATCH api/Users/SetPreferredLanguage`. Получатель без `User` (см. `CustomEmail` ниже) языка не
+  имеет — уходит RU-версия (осознанный дефолт, не запрошена доп. настройка под это).
+- **`EmailTemplate` стал билингвальным**: `Subject/BodyHtml` (RU) + новые `SubjectEn/BodyHtmlEn` —
+  для всех 4 писем, не только для письма-назначения. `IsEnabled` с сущности **убран** (рубильник
+  переехал на `NotificationChannel`, см. ниже — теперь это пара событие×платформа, а не только
+  событие). Санитизация/allow-list/абсолютизация media-URL из Задачи E не изменились (тот же
+  `RichHtmlSanitizer`, см. ADR 026/спека 013) — применяются к обеим языковым версиям тела.
+- **Получатели больше не зашиты в код.** `NotificationChannel` (`EventKey × Platform`,
+  `IsEnabled`) — рубильник; `NotificationRecipient` (`EventKey`, `Platform`, `IsActive`, `Type` —
+  `To/Cc/Bcc`, применим только к `Platform.Email`, `SourceType`: `User` (FK) / `OrderLinkedRole`
+  (`Client`/`Employee`, закрытый список — «Исполнитель» при нескольких активных исполнителях
+  уходит каждому персонально) / `CustomEmail` (строка) / `AdminMailbox` (адрес из
+  `EmailSettings.AdminNotificationEmail`, единственный некастомизируемый источник — вынужденно,
+  т.к. этот адрес в конфиге, а не в БД, и различается prod/dev). `NotificationPlatform`:
+  `Email=1` (рабочая), `Telegram=2` (**только модель и настройки, реальной отправки нет** —
+  отдельная будущая задача). PUT сохраняет событие целиком (declarative sync) — список
+  получателей передаётся полностью, а не диффом.
+- **`EmailTemplateController` удалён**, заменён `NotificationSettingsController` (Admin-only,
+  гейтится ключом `notifications`, как раньше): `GET api/NotificationSettings` (все 4 события),
+  `GET api/NotificationSettings/{eventKey}`, `PUT api/NotificationSettings` (событие целиком:
+  рубильники платформ + билингвальный шаблон + полный список получателей).
+- **Письма группируются по языку получателя**: одна отправка на языковую группу (сохраняя
+  To/Cc/Bcc внутри неё), кроме order-linked «Исполнителя» — он всегда получает персональное письмо
+  ‚ ‑ свои fulfillment-детали и своё PDF-вложение, `Type` для него не действует.
+- **Миграции**: `OrderLineMultiEmployee` (2026-08-23 — новая таблица, перенос данных из старых
+  полей `OrderLine` без потерь, «осиротевшие» Pickup/Navigator без исполнителя уезжают текстом в
+  `OrderEvent`, затем drop старых колонок) и `NotificationRecipientsAndBilingualTemplates`
+  (2026-08-23 — `User.PreferredLanguage`, EN-колонки `EmailTemplate`, таблицы
+  `NotificationChannel`/`NotificationRecipient`, сид 8 каналов из старого `IsEnabled` + сид 4
+  получателей из прежней зашитой в код логики, чтобы поведение не изменилось молча, drop
+  `EmailTemplate.IsEnabled` последним шагом).
+- **Живая проверка**: реальный заказ, мультиназначение (водитель+гид на одну строку), адресное
+  снятие одного из двух — в лог `DevEmailSender` ушло письмо снятому конкретному человеку с его
+  ролью; `AdminMailbox`-получатель подтверждён в перехваченном PUT-payload (не потерялся при
+  сохранении); UI на 375px — без горизонтального переполнения, грид получателей карточный, RU/EN
+  поля стеком.
+
 ## Настройки темы/палитры (`api/SiteSettings` — группа `Theme`) — 2026-08-13
 Спецификация — `docs/specs/002-design-settings-backend.md` (+ `docs/adr/013`). Новая группа `SiteSettingGroup.Theme = 7` (не `Branding` — там только логотип):
 - **`theme.activePalette`** — id активного пресета палитры сайта, тип контрола `Select` (новый `SettingValueType.Select=5`), допустимые значения — код-каталог `ThemePaletteCatalog` (не миграция): `obsidian` (дефолт, «Обсидиан + золото») и `basalt` («Базальт и медь», см. `client-site.md` — НЕ дефолт). Сервер валидирует значение против `definition.Options` (код 2013 при недопустимом).
@@ -262,7 +333,103 @@ sibling-коллекций с одного корня одним `Include`-че�
 
 **Миграции**: `AddTagsAndOrderDiscount` (2026-08-15) — таблицы `Tag`/`TagTranslation`/`TourTag`; `TourDiscountFields` (2026-08-16) — `Tour.DiscountPercent`/`DiscountValidUntil`; `AddTourDiscountStartDate` (2026-08-18) — `Tour.DiscountStartDate`.
 
+## Гибкая система ролей и прав (`api/Roles`, `api/Screens`) — 2026-08-22
+Полная архитектура — `architecture-flexible-roles.md`. Заменяет `[Authorize(Roles=...)]` на
+`[RequiresPermission(AdminScreens.X, PermissionAction.Y)]` на всех фич-контроллерах (Tour,
+Availability, Order-админ-методы, Place/ExpenseTemplate/TourNoteTemplate/Region/Tag,
+Users-админ-методы, SiteSettings, Upload).
+
+- **Сущности**: `UserRole` эволюционировала (`Description→Name`, `Type` стал `RoleType?` —
+  `null` у кастомных ролей, влияет ТОЛЬКО на Employee-эндпоинт, ни на что больше), новые
+  `RolePermission` (RoleId, ScreenKey, **`AccessLevel Level`**), `UserPermissionOverride`
+  (UserId, ScreenKey, **`AccessLevel? Level`** — `null` = наследовать от роли).
+- **Реестр экранов** — `ATTours.Common/Authorization/AdminScreens.cs`, 13 строковых ключей (не
+  enum — ключи с точкой-неймспейсом типа `catalog.places`), включая `roles`/`notifications`.
+  Единственное место, которое трогают при добавлении нового экрана (без миграций схемы, без
+  правок ядра авторизации — см. §5 архитектурного документа).
+- **Эндпоинты**:
+  - `GET/POST/PUT/DELETE api/Roles`, `GET api/Screens` — гейтятся ключом `roles`, как любой
+    другой экран (правка 22.08.2026 — были жёстко `[Authorize(Roles=Admin)]`, отвязаны от
+    RoleType по прямому требованию Давида: ни одна роль не должна быть привилегированной кодом).
+  - `GET/PUT api/Users/{id}/PermissionOverrides` — персональный override, гейтится ключом
+    `users` (часть экрана «Пользователи»).
+  - `GET api/Auth/MyPermissions` → `MyPermissionsModel` — резолвленный набор прав по всем 13
+    экранам, всегда свежий из БД (не из токена) — фронт дёргает его для мгновенной перерисовки
+    гардов.
+- **`UserRole.CanManageAdmins`** (правка 22.08.2026, заменяет удалённый `IsSystem`) — ролевой (не
+  per-экранный) флаг: может ли роль назначать/снимать эту же способность у других ролей и
+  удалять/понижать аккаунты, у которых она стоит. Ставить/снимать именно это поле может только
+  SuperAdmin (`RoleCreationService`/`RoleUpdateService`, читают актёра из БД) — обычное
+  редактирование роли (имя, вся остальная матрица) этому не подчиняется. `GuardRoleChange`/
+  `GuardAdminAccountAsync` теперь ключуются на этот флаг, а не на `RoleType.Admin`.
+  `PermissionResolutionService`: полный доступ мимо матрицы дают ТОЛЬКО SuperAdmin, не роль
+  «Администратор» как таковая — её реальный доступ читается из её собственных строк
+  `RolePermission` (сидированы явно, поведение сразу после миграции не меняется, но матрица
+  и имя роли отныне полностью редактируемы, как у любой кастомной роли).
+- **Резолвинг** — печётся в JWT (`is_admin`/`perms`-claims) в момент `Login`/`DevLogin`/
+  `Refresh`; на каждый запрос БД не трогаем. Изменение прав применяется на следующей ротации
+  access-токена (≤15 мин) либо мгновенно при перелогине.
+- **Регресс, закрытый этой задачей**: `UserInfoModel.Role`/`UserDetailInfoModel.Role` стали
+  `RoleType?` (были non-nullable) + добавлено поле `RoleName` (string) — у кастомной роли `Role`
+  теперь `null`, отображаемое имя всегда в `RoleName`.
+- **Коды ошибок** (`GlobalErrorCode.cs`): `RoleIsSystem=2033` (больше не бросается ни при каких
+  условиях — значение оставлено занятым, не переиспользовать), `RoleInUse=2034`,
+  `UnknownScreenKey=2035`, `RoleNameInvalid=2036` (сдвинуты с 2031-2034 из проектного документа —
+  эти номера заняты чекаутом корзины, `OrderHasInvalidLines`/`OrderTooManyLines`, ADR 025).
+- **Миграции**: `AddFlexibleRolesAndPermissions` (2026-08-22) — rename+nullable на `UserRole`,
+  две новые таблицы, сид `IsSystem=true` для 4 старых ролей + матрица прав для TourManager/Admin;
+  `RemoveRoleSystemLockAddCanManageAdmins` (2026-08-22, часть 2) — переименовывает
+  `IsSystem`→`CanManageAdmins` (сохранив `true` только у роли 3), сидит права на `roles`/
+  `notifications` для роли 3.
+
+### Единый уровень доступа вместо 4 независимых флагов + Impersonation + Remember me (2026-08-22/23)
+Спека — `docs/specs/014-permission-levels-impersonation-sessions.md` (+ Section 8 addendum),
+ADR 027-030. Продукт-решение Давида: 4 независимых `CanView/CanCreate/CanUpdate/CanDelete`
+заменены на один `AccessLevel Level` (None/View/Create/Update/Delete) — каждый уровень включает
+всё, что ниже него (раньше только `View` был воротами, остальные три были независимы). Миграция,
+создававшая старую 4-флаговую схему (`AddFlexibleRolesAndPermissions`), **отредактирована на
+месте** — права никогда не были задеплоены, поэтому это безопасно (локальные БД пересозданы).
+
+- **JWT claim** — один символ уровня на экран (`products:U`) вместо подмножества букв
+  (`products:VCU`); экраны на `None` в claim не попадают. `AdminScreens.CapLevel`/
+  `IsAssignableLevel` — не всякий уровень применим к любому экрану (напр. `calendar` без Update).
+  Уровень, не входящий в допустимые для экрана, отклоняется на 400 (`InvalidPermissionLevel=2037`
+  ), а не тихо коэрсится, как раньше.
+- **`UserRole.CanImpersonate`** — новый ролевой флаг (не привязан к `is_admin`/SuperAdmin),
+  меняется только SuperAdmin, как и `CanManageAdmins`. Дан claim `can_impersonate` в JWT.
+- **`POST api/Users/{id}/Impersonate`** — вход админа под целевым пользователем. Гварды по
+  порядку: not-found → self (`CannotImpersonateSelf=2217`) → эскалация привилегий, не-SuperAdmin
+  не может имперсонировать SuperAdmin/`CanManageAdmins`/`CanImpersonate`-носителя
+  (`ImpersonationTargetNotAllowed=2218`) → заблокирован (`AccountLocked=2201`, переиспользован) →
+  email не подтверждён (`EmailNotVerified=2202`, переиспользован). При успехе: все refresh-токены
+  импersonator'а отзываются, целевому пользователю выдаётся новая сессия
+  (`RefreshToken.ImpersonatedByUserId` проставлен, `RememberMe=false`), пишется аудит-запись
+  `ImpersonationEvent` (кто/кого/когда/IP/UA). Обратной кнопки «вернуться в админа» нет по
+  дизайну — конец сеанса имперсонации это обычный логаут + повторный вход.
+- **Мгновенный kill access-токена импersonator'а** (ADR 030) — ранее открытый риск («стейтлес
+  15-минутный JWT не убить мгновенно») закрыт: `IAccessTokenRevocationRegistry`, in-memory
+  `ConcurrentDictionary<userId, cutoffUtc>` (backend — один инстанс на netcup VPS, поэтому
+  in-memory достаточно, интерфейс существует специально ради безболезненного перехода на
+  `IDistributedCache`, если появятся реплики). Пишется в `AuthService.ImpersonateAsync`,
+  читается первым шагом в `RequiresPermissionAttribute`/`RequiresAnyPermissionAttribute`/новом
+  `RequiresImpersonateAttribute` — токен с `iat` до cutoff получает 401, даже если формально ещё
+  не истёк. **Важно**: `JwtTokenService` раньше не эмитил `iat` вообще (библиотека его не
+  добавляет по умолчанию) — без явного `EpochTime.GetIntDate()` в клеймах эта проверка 401'ила бы
+  и легитимный релогин impersonator'а. Исправлено при реализации, не в спеке изначально.
+- **Remember me** — `LoginModel.RememberMe`, refresh-токен теперь со скользящим окном:
+  `RememberMe ? 14 дней : 1 час`, пересчитывается при каждой ротации. Существующий чек
+  `ExpiresAtUtc <= now` в `RefreshAsync` закрывает и inactivity-таймаут — новой логики не
+  потребовалось. Миграция `AddImpersonationAndRememberMe` (2026-08-22) ретроактивно выставляет
+  всем существующим refresh-токенам `RememberMe=0` и обрезает `ExpiresAtUtc` до ≤1 часа от
+  деплоя — намеренный побочный эффект: все активные сессии переходят на реального пользователя в
+  течение часа и заодно получают свежие права (закрывает практическую боль «права применяются
+  только на ротации токена» для всей базы разом, а не только для тех, кому права поменяли).
+- **Вне скоупа**: жёсткий немедленный revoke сессий при обычной смене прав вне impersonation
+  (только impersonation получил мгновенный kill); роль `Employee` и её `GetAssignedToMe`;
+  блокировка impersonation для юзеров с истёкшим email-verification токеном сверх уже описанной
+  проверки.
+
 ## Миграции
-Актуальные (в `ATTours.DataLayer/Migrations`): `InitialCreate`, `AddRoutePoint`, `AddOrganizationalDetailAndRestriction`, `ChangeTourDayChildrenToCascade`, `AddTourIsArchived`, `AddSiteSettings`, `AddRegionAndTourRegion`, `SeedArmenianRegions`, `MergeRestrictionAndOrganizationalDetailIntoTourNote`, `AddReferenceCatalogs`, `AddTourFeatured`, `SeedRegionBlurbs`, `AddExchangeRate`, `AddOrdersAndClosureRules`, `AddTourRequiresPrepayment` (2026-08-13 — `Tour.RequiresPrepayment`, `bit NOT NULL DEFAULT 1`; см. `product-model.md`), `AddClosureRuleBatchId` (2026-08-14 — `ClosureRule.BatchId`, `uniqueidentifier NULL`; см. выше), `AddTagsAndOrderDiscount` (2026-08-15), `TourDiscountFields` (2026-08-16), `AddTourDiscountStartDate` (2026-08-18 — см. «Скидка тура» выше). Миграции применяются автоматически при старте backend (с retry, с 2026-08-10) — отдельного ручного шага `dotnet ef database update` в проде не требуется.
+Актуальные (в `ATTours.DataLayer/Migrations`): `InitialCreate`, `AddRoutePoint`, `AddOrganizationalDetailAndRestriction`, `ChangeTourDayChildrenToCascade`, `AddTourIsArchived`, `AddSiteSettings`, `AddRegionAndTourRegion`, `SeedArmenianRegions`, `MergeRestrictionAndOrganizationalDetailIntoTourNote`, `AddReferenceCatalogs`, `AddTourFeatured`, `SeedRegionBlurbs`, `AddExchangeRate`, `AddOrdersAndClosureRules`, `AddTourRequiresPrepayment` (2026-08-13 — `Tour.RequiresPrepayment`, `bit NOT NULL DEFAULT 1`; см. `product-model.md`), `AddClosureRuleBatchId` (2026-08-14 — `ClosureRule.BatchId`, `uniqueidentifier NULL`; см. выше), `AddTagsAndOrderDiscount` (2026-08-15), `TourDiscountFields` (2026-08-16), `AddTourDiscountStartDate` (2026-08-18 — см. «Скидка тура» выше), `AddFlexibleRolesAndPermissions` (2026-08-22 — отредактирована на месте 2026-08-23, чтобы сразу эмитить `AccessLevel Level` вместо 4 bool-флагов; права никогда не были задеплоены, редактирование существующей миграции безопасно), `RemoveRoleSystemLockAddCanManageAdmins` (2026-08-22), `AddImpersonationAndRememberMe` (2026-08-22 — `UserRole.CanImpersonate`, `RefreshToken.RememberMe`/`ImpersonatedByUserId`, таблица `ImpersonationEvent`, ретроактивный флаш существующих refresh-токенов). Миграции применяются автоматически при старте backend (с retry, с 2026-08-10) — отдельного ручного шага `dotnet ef database update` в проде не требуется.
 
 **Известный пробел в этом списке**: миграции переделки B14/multi-line заказов (`checklist-orders-redesign.txt`, между 08-16 и 08-16) в список не занесены — Фаза 12 (docs) той работы была осознанно пропущена по просьбе пользователя. Список неполный между `AddOrdersAndClosureRules` и `AddTagsAndOrderDiscount`.

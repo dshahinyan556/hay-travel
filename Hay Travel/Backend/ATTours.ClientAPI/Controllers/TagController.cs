@@ -3,25 +3,27 @@ using ATTours.BusinessServices.Services.DeleteServices;
 using ATTours.BusinessServices.Services.InfoServices;
 using ATTours.BusinessServices.Services.UpdateServices;
 using ATTours.ClientAPI.Authorization;
+using ATTours.Common.Authorization;
 using ATTours.Common.Dto.Init;
 using ATTours.Common.DTO.Info;
 using ATTours.Common.Entities;
+using ATTours.Common.Enums;
 using ATTours.Common.Extensions;
 using AutoMapper;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ATTours.ClientAPI.Controllers
 {
-    // Каталог мерч-тегов продукта (скидка/хит сезона/…). CRUD — админ; чтение каталога
-    // доступно и тур-менеджеру, который назначает теги в редакторе тура.
+    // Каталог мерч-тегов продукта (скидка/хит сезона/…). Права по ключу "catalog.tags":
+    // в сиде CRUD у админа, чтение — и у тур-менеджера, который назначает теги в
+    // редакторе тура.
     [ApiController]
     [Route("api/[controller]")]
     public class TagController(IMapper mapper) : Controller
     {
         [HttpGet]
         [Route("GetAll")]
-        [Authorize(Roles = ApiRoles.TourManagerOrAdmin)]
+        [RequiresPermission(AdminScreens.CatalogTags, PermissionAction.View)]
         public async Task<List<TagInfoModel>> GetAllAsync()
         {
             using var info = new TagInfo();
@@ -31,7 +33,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpPost]
         [Route("Create")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.CatalogTags, PermissionAction.Create)]
         public async Task<TagInfoModel> CreateAsync([FromBody] TagCreateModel model)
         {
             var entity = mapper.Map<Tag>(model);
@@ -44,7 +46,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpPut]
         [Route("Update")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.CatalogTags, PermissionAction.Update)]
         public async Task<TagInfoModel> UpdateAsync([FromBody] TagInfoModel model)
         {
             var entity = mapper.Map<Tag>(model);
@@ -57,7 +59,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpDelete]
         [Route("Delete")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.CatalogTags, PermissionAction.Delete)]
         public async Task DeleteAsync([FromQuery] int id)
         {
             using var deletionService = new TagDeletionService();

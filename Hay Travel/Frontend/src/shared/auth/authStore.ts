@@ -21,18 +21,21 @@
  * concern (it needs name/phone), not the session's — the store still only needs what the token
  * already carries (ADR 007).
  *
- * INVARIANT (ADR 011): `AuthUser.isSuperAdmin` is written ONLY from a decoded access token. No
- * path that builds a user from a `UserInfoModel` may overwrite it — that DTO never carries the
- * flag, so "not present" there means "unknown", not "false".
+ * INVARIANT (ADR 011, extended by ADR 024): `AuthUser.isSuperAdmin` AND `AuthUser.hasPanelAccess`
+ * are written ONLY from a decoded access token. No path that builds a user from a `UserInfoModel`
+ * may overwrite them — that DTO carries neither flag, so "not present" there means "unknown", not
+ * "false". Both have the same four write sites, numbered in the comments below.
  */
 
 import { setAuthTokenProvider } from '@/shared/lib/http'
 import { loginRequest, logoutRequest, refreshRequest, registerRequest } from './authApi'
+import { clearPermissions, invalidatePermissions, setPermissionSessionProbe } from './permissionStore'
 import {
   ROLE_NAME_TO_TYPE,
   type AuthState,
   type AuthUser,
   type LoginRequest,
+  type LoginResultModel,
   type MessageResultModel,
   type RegisterRequest,
   type RoleType,
@@ -115,6 +118,11 @@ export function getAccessToken(): string | null {
 // doc comment) so `apiFetch` can reach the live token without inverting the `http ← authApi ←
 // authStore` dependency direction `authApi.ts` documents.
 setAuthTokenProvider(getAccessToken)
+
+// The permission store must wait for the session before asking the server "what may I do?", but it
+// may not import this module (that would invert the documented direction into a cycle — see its
+// doc comment). So the wait is injected, exactly like the token provider above.
+setPermissionSessionProbe(async () => (await ensureAuthReady()).user !== null)
 
 /** Refresh this many ms before the token actually expires, so a request can't die in flight
  * because the token aged out between the check and the server reading it. */
@@ -231,6 +239,67 @@ function superAdminFromToken(token: string): boolean {
 }
 
 /**
+ * "Does this account reach anything under `/admin`?" — read from the token's `is_admin` claim, or
+ * from `perms` being non-empty.
+ *
+ * This is the ONE bit the frontend still takes from the token's permission claims (ADR 024,
+ * decision 1). It is a non-emptiness test, not a parse of the `perms` grammar (`products:VCU;…`),
+ * which stays an internal token format the backend may change. Everything else comes from
+ * `GET api/Auth/MyPermissions`.
+ *
+ * It exists for the PUBLIC site, which must not fetch the whole matrix just to decide whether to
+ * render one link. `is_admin` gets the same string/number tolerance as `is_super_admin` for the
+ * same reason: an ASP.NET claim value is always a string.
+ */
+function panelAccessClaim(payload: Record<string, unknown>): boolean {
+  const rawAdmin = payload.is_admin
+  const admin = Array.isArray(rawAdmin) ? rawAdmin[0] : rawAdmin
+  if (admin === true) return true
+  if (typeof admin === 'number' && admin === 1) return true
+  if (typeof admin === 'string' && (admin.toLowerCase() === 'true' || admin === '1')) return true
+
+  const rawPerms = payload.perms
+  const perms = Array.isArray(rawPerms) ? rawPerms[0] : rawPerms
+  return typeof perms === 'string' && perms.trim() !== ''
+}
+
+function panelAccessFromToken(token: string): boolean {
+  try {
+    const [, payloadSegment] = token.split('.')
+    if (!payloadSegment) return false
+    return panelAccessClaim(JSON.parse(decodeBase64Url(payloadSegment)) as Record<string, unknown>)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * `can_impersonate` (spec 014 §2.3) — "may sign in as another account".
+ *
+ * Present only when true, and with the same string/number tolerance as `is_super_admin` for the
+ * same reason: an ASP.NET claim value is always a string. Like the other two token-only flags this
+ * is UX only — `[RequiresImpersonate]` re-reads the claim server-side and answers 403.
+ */
+function canImpersonateClaim(payload: Record<string, unknown>): boolean {
+  const raw = payload.can_impersonate
+  const value = Array.isArray(raw) ? raw[0] : raw
+  if (value === true) return true
+  if (typeof value === 'number') return value === 1
+  if (typeof value === 'string') return value.toLowerCase() === 'true' || value === '1'
+  return false
+}
+
+function canImpersonateFromToken(token: string): boolean {
+  try {
+    const [, payloadSegment] = token.split('.')
+    if (!payloadSegment) return false
+    return canImpersonateClaim(JSON.parse(decodeBase64Url(payloadSegment)) as Record<string, unknown>)
+  } catch {
+    return false
+  }
+}
+
+/**
  * Rebuild the user from the access token's payload.
  *
  * The signature is NOT verified here — it cannot be, the key is server-side. That is fine: this
@@ -250,13 +319,26 @@ export function decodeAccessToken(token: string): AuthUser | null {
     const id = Number(claim(payload, 'sub', 'nameid'))
     const username = claim(payload, 'unique_name', 'name')
     const email = claim(payload, 'email')
-    const role = roleClaim(payload)
 
-    if (!Number.isInteger(id) || id <= 0 || !username || !email || role === undefined) return null
+    if (!Number.isInteger(id) || id <= 0 || !username || !email) return null
 
-    // Write site 2 of 4 for `isSuperAdmin` (ADR 011): the cold-reload path, where this decode IS
-    // the user.
-    return { id, username, email, role, isSuperAdmin: isSuperAdminClaim(payload) }
+    // The role claim is OPTIONAL since roles became user-creatable: a custom role has
+    // `UserRole.Type = null` server-side and therefore emits no role claim at all. Treating that as
+    // a malformed token (as this did until the flexible-roles migration) would not mean "no
+    // rights" — it would mean the user is SIGNED OUT by every page refresh.
+    const role = roleClaim(payload) ?? null
+
+    // Write site 2 of 4 for `isSuperAdmin`/`hasPanelAccess`/`canImpersonate` (ADR 011, ADR 024,
+    // spec 014 §2.3): the cold-reload path, where this decode IS the user.
+    return {
+      id,
+      username,
+      email,
+      role,
+      isSuperAdmin: isSuperAdminClaim(payload),
+      hasPanelAccess: panelAccessClaim(payload),
+      canImpersonate: canImpersonateClaim(payload),
+    }
   } catch {
     return null
   }
@@ -281,7 +363,9 @@ function expiryFromToken(token: string, expiresInSeconds: number): number {
 /*  Mapping                                                                    */
 /* -------------------------------------------------------------------------- */
 
-/** Wire user → UI user. Note `role` (the permission tier), never `roleId` (the table key). */
+/** Wire user → UI user. Note `role` (the role row's type, `null` for a custom role), never
+ * `roleId` (the table key). Neither `isSuperAdmin` nor `hasPanelAccess` is set here: the DTO does
+ * not carry them, and "absent" must not be read as "false" (see the module invariant). */
 export function toAuthUser(model: UserInfoModel): AuthUser {
   return {
     id: model.id,
@@ -357,29 +441,42 @@ export function refreshAccessToken(): Promise<string | null> {
       const user = existing ?? decodeAccessToken(result.accessToken)
       if (!user) {
         clearSession()
+        clearPermissions()
         setState({ status: 'anonymous', user: null, forceChangePassword: false })
         return null
       }
 
-      // Write site 3 of 4 (ADR 011). The token is re-issued roughly every 15 minutes and is the
-      // ONLY carrier of this flag — no endpoint and no DTO can report it — so even when the richer
-      // existing user object is kept, `isSuperAdmin` is re-read from the fresh token. Deliberately
-      // narrow: `role` and every other field on that object are still NOT refreshed here, because
-      // widening this path would be fixing a different problem.
+      // Write site 3 of 4 (ADR 011, ADR 024, spec 014 §2.3). The token is re-issued roughly every
+      // 15 minutes and is the ONLY carrier of these three flags — no endpoint and no DTO reports
+      // them — so even when the richer existing user object is kept, all three are re-read from the
+      // fresh token. Deliberately narrow: `role` and every other field on that object are still NOT
+      // refreshed here, because widening this path would be fixing a different problem.
       const isSuperAdmin = superAdminFromToken(result.accessToken)
+      const hasPanelAccess = panelAccessFromToken(result.accessToken)
+      const canImpersonate = canImpersonateFromToken(result.accessToken)
       const next =
-        existing && existing.isSuperAdmin !== isSuperAdmin ? { ...existing, isSuperAdmin } : user
+        existing &&
+        (existing.isSuperAdmin !== isSuperAdmin ||
+          existing.hasPanelAccess !== hasPanelAccess ||
+          existing.canImpersonate !== canImpersonate)
+          ? { ...existing, isSuperAdmin, hasPanelAccess, canImpersonate }
+          : user
 
       setState({
         status: 'authenticated',
         user: next,
         forceChangePassword: state.forceChangePassword,
       })
+      // A new access token means the backend just re-resolved this user's rights from the database.
+      // Re-reading the matrix now keeps the UI and the server's enforcement describing the same
+      // state (ADR 024, decision 2). No-op unless the set was already loaded, i.e. for staff.
+      invalidatePermissions()
       return accessToken
     } catch {
       if (epoch !== sessionEpoch) return accessToken
 
       clearSession()
+      clearPermissions()
       setState({ status: 'anonymous', user: null, forceChangePassword: false })
       return null
     } finally {
@@ -388,6 +485,43 @@ export function refreshAccessToken(): Promise<string | null> {
   })()
 
   return refreshPromise
+}
+
+/**
+ * Adopt a `LoginResultModel` as THE session of this tab. Shared by `login` and `adoptSession` —
+ * a login response and an impersonation response are the same payload and must be applied
+ * identically, or the two paths would drift.
+ *
+ * Callers bump `sessionEpoch` BEFORE the request that produced `result`, so an older in-flight
+ * refresh cannot overwrite what this writes.
+ */
+function applyLoginResult(result: LoginResultModel): AuthState {
+  accessToken = result.accessToken
+  accessTokenExpiresAt = expiryFromToken(result.accessToken, result.expiresInSeconds)
+  writeSessionHint(true)
+
+  setState({
+    status: 'authenticated',
+    // Write site 1 of 4 (ADR 011, ADR 024, spec 014 §2.3). `toAuthUser` alone is NOT enough:
+    // `UserInfoModel` carries none of the three token-only flags, so the token has to be decoded
+    // on top of the response body.
+    user: {
+      ...toAuthUser(result.user),
+      isSuperAdmin: superAdminFromToken(result.accessToken),
+      hasPanelAccess: panelAccessFromToken(result.accessToken),
+      canImpersonate: canImpersonateFromToken(result.accessToken),
+    },
+    forceChangePassword: result.forceChangePassword,
+  })
+  // Whatever set was cached belongs to the previous session — for impersonation that is literally
+  // somebody else's matrix, so it must not survive. Nothing is fetched here unless a set was
+  // already loaded; the next admin loader awaits a fresh one either way.
+  invalidatePermissions()
+  // This also answers the "is there a session?" question for this page load, so the guard that
+  // runs right after the redirect must not re-bootstrap (and must not see a stale `anonymous`
+  // snapshot cached by an earlier `ensureAuthReady`).
+  bootstrapPromise = Promise.resolve(state)
+  return state
 }
 
 /** Sign in. Rejects with the raw `ApiError` so the form can map `errorCode` to a message. */
@@ -399,31 +533,35 @@ export async function login(request: LoginRequest): Promise<AuthState> {
   setState({ status: 'loading', user: null, forceChangePassword: false })
 
   try {
-    const result = await loginRequest(request)
-    accessToken = result.accessToken
-    accessTokenExpiresAt = expiryFromToken(result.accessToken, result.expiresInSeconds)
-    writeSessionHint(true)
-
-    setState({
-      status: 'authenticated',
-      // Write site 1 of 4 (ADR 011). `toAuthUser` alone is NOT enough: `UserInfoModel` never
-      // carries `is_super_admin`, so the token has to be decoded on top of the response body.
-      user: {
-        ...toAuthUser(result.user),
-        isSuperAdmin: superAdminFromToken(result.accessToken),
-      },
-      forceChangePassword: result.forceChangePassword,
-    })
-    // A successful login also answers the "is there a session?" question for this page load, so
-    // the guard that runs right after the redirect must not re-bootstrap (and must not see the
-    // pre-login `anonymous` snapshot cached from an earlier `ensureAuthReady`).
-    bootstrapPromise = Promise.resolve(state)
-    return state
+    return applyLoginResult(await loginRequest(request))
   } catch (error) {
     clearSession()
+    clearPermissions()
     setState({ status: 'anonymous', user: null, forceChangePassword: false })
     throw error
   }
+}
+
+/**
+ * Replace the current session with one the server just issued for a DIFFERENT identity —
+ * `POST api/Users/{id}/Impersonate` (spec 014 §3).
+ *
+ * The request itself is not made here: it is authenticated, so it needs `authFetch`, which sits
+ * BELOW this module in the dependency order (`http ← authApi ← authStore ← authFetch`). The
+ * caller (`features/admin/api/adminUsers.ts`) performs it and hands the response over — the same
+ * split `applyUser` already uses.
+ *
+ * Tearing the admin's own state down is not optional politeness: by the time this response exists
+ * the backend has already revoked their refresh tokens AND blacklisted their still-valid access
+ * token (spec 014 §8). Keeping any of it client-side would only render a session that 401s.
+ *
+ * `sessionEpoch` is bumped here rather than before the request: a refresh that was already in
+ * flight belongs to the old epoch and drops its result, while a refresh started afterwards uses
+ * the target's freshly-set cookie and is correct.
+ */
+export function adoptSession(result: LoginResultModel): AuthState {
+  sessionEpoch += 1
+  return applyLoginResult(result)
 }
 
 /**
@@ -445,6 +583,7 @@ export async function logout(): Promise<void> {
     await logoutRequest()
   } finally {
     clearSession()
+    clearPermissions()
     setState({ status: 'anonymous', user: null, forceChangePassword: false })
     bootstrapPromise = Promise.resolve(state)
   }
@@ -460,13 +599,21 @@ export function clearForceChangePassword(): void {
  * Replace the current user — e.g. someone who just changed their own phone number on `/account`
  * and must see it without a reload. No-op when nobody is signed in.
  *
- * Write site 4 of 4 (ADR 011): callers build `user` from a `UserInfoModel`, which cannot carry
- * `isSuperAdmin`, so the flag is CARRIED OVER from the current user rather than taken from the
- * argument. Without this, saving your own phone number would silently demote a SuperAdmin for the
- * rest of the session.
+ * Write site 4 of 4 (ADR 011, ADR 024, spec 014 §2.3): callers build `user` from a `UserInfoModel`,
+ * which carries none of the three token-only flags, so all of them are CARRIED OVER from the
+ * current user rather than taken from the argument. Without this, saving your own phone number
+ * would silently demote a SuperAdmin — and hide the panel link — for the rest of the session.
  */
 export function applyUser(user: AuthUser): void {
   const current = state.user
   if (!current) return
-  setState({ ...state, user: { ...user, isSuperAdmin: current.isSuperAdmin } })
+  setState({
+    ...state,
+    user: {
+      ...user,
+      isSuperAdmin: current.isSuperAdmin,
+      hasPanelAccess: current.hasPanelAccess,
+      canImpersonate: current.canImpersonate,
+    },
+  })
 }

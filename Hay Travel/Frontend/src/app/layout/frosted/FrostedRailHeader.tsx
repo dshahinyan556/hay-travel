@@ -3,6 +3,7 @@ import { NavLink } from 'react-router'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { getLogoUrl } from '@/shared/api/siteSettings'
 import { MountainIcon } from '@/shared/ui/icons'
+import { CartNavButton } from '../CartNavButton'
 import { UserMenu } from '../UserMenu'
 import { RailSegmentedControl } from './RailSegmentedControl'
 import { useScrollElevation } from './useScrollElevation'
@@ -120,8 +121,12 @@ export function FrostedRailHeader() {
             ))}
           </nav>
 
-          <div className="flex items-center gap-2.5 lg:justify-self-end">
+          {/* Зазор служебного кластера сжимается ниже 640px — там же, где язык схлопывается в одну
+              кнопку, чтобы освободить место под корзину (spec 008 §8.4). */}
+          <div className="flex items-center gap-2 sm:gap-2.5 lg:justify-self-end">
             <RailSegmentedControl />
+            {/* Ссылка на `/cart` с бейджем — в обеих шапках, на всех брейкпоинтах. */}
+            <CartNavButton variant="rail" />
             {/* Единственное золотое пятно ленты: «Войти» / кнопка аккаунта (с `lg`). */}
             <UserMenu variant="rail" />
           </div>

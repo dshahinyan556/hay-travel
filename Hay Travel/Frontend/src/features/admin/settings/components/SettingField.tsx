@@ -1,7 +1,9 @@
 import { useId } from 'react'
 import { Field, Input, Select, Textarea } from '@/shared/ui'
 import type { SelectOption } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import { SettingValueType } from '@/features/admin/lib/enums'
+import { settingsCopy } from '@/features/admin/settings/lib/settingsCopy'
 import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
 import { ImageUrlField } from '@/features/admin/ui/ImageUrlField'
 import type { LangKey } from '@/features/admin/types/localized'
@@ -75,6 +77,7 @@ interface PlainSettingFieldProps {
  * value picked from a server-supplied catalog (`Select`). */
 function PlainSettingField({ field, label, hint, warning, onChange }: PlainSettingFieldProps) {
   const id = useId()
+  const copy = useCopy(settingsCopy)
   const value = field.value
 
   if (field.valueType === SettingValueType.ImageUrl) {
@@ -107,9 +110,9 @@ function PlainSettingField({ field, label, hint, warning, onChange }: PlainSetti
               href={value.trim()}
               target="_blank"
               rel="noreferrer noopener"
-              className="shrink-0 rounded-lg px-2 py-1.5 text-xs font-semibold text-brand-700 transition-colors hover:bg-brand-50 hover:text-brand-800 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+              className="shrink-0 rounded-lg px-2 py-1.5 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 hover:text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/15"
             >
-              Открыть ↗
+              {copy.openLink}
             </a>
           )}
         </div>
@@ -131,7 +134,7 @@ function PlainSettingField({ field, label, hint, warning, onChange }: PlainSetti
     const options: SelectOption[] =
       known || value === ''
         ? field.options
-        : [{ value, label: `${value} — неизвестное значение`, disabled: true }, ...field.options]
+        : [{ value, label: copy.unknownOption(value), disabled: true }, ...field.options]
 
     return (
       <Field label={label} htmlFor={id} hint={hint}>

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { DragHandle, Input, SortableList } from '@/shared/ui'
 import { adaptiveImageUrl } from '@/shared/lib/adaptiveImage'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import { AddButton, RemoveButton } from './RepeaterControls'
 import { ImageUploadButton } from './ImageUploadButton'
+import { adminUiCopy } from './adminUiCopy'
 
 /** One row of an image-list repeater — a tour day's gallery, or a catalog Place's photos.
  * `sortOrder` on the wire is derived from array index. */
@@ -61,24 +63,26 @@ function Thumb({ url }: { url: string }) {
  * handle (the row itself stays clickable — it holds the URL input).
  */
 export function ImageListEditor({ items, onAdd, onRemove, onReorder, onChangeUrl }: ImageListEditorProps) {
+  const copy = useCopy(adminUiCopy).images
+
   return (
     <div className="flex flex-col gap-2">
       {items.length > 0 && (
         <ul className="flex flex-col gap-2">
-          <SortableList items={items} getId={imageId} onReorder={onReorder} itemLabel="Картинка">
+          <SortableList items={items} getId={imageId} onReorder={onReorder} itemLabel={copy.item}>
             {(item, index, sortable) => (
               <li
                 ref={sortable.setNodeRef}
                 style={sortable.style}
                 className={`relative flex items-center gap-2 rounded-lg border bg-neutral-50 px-2 py-2 sm:gap-2.5 sm:px-2.5 ${
-                  sortable.isDragging ? 'z-10 border-brand-300 shadow-md' : 'border-neutral-200'
+                  sortable.isDragging ? 'z-10 border-neutral-400 shadow-md' : 'border-neutral-200'
                 }`}
               >
                 <DragHandle
                   ref={sortable.setActivatorNodeRef}
                   {...sortable.attributes}
                   {...sortable.listeners}
-                  label={`Перетащить картинку ${index + 1}, чтобы изменить порядок`}
+                  label={copy.dragImage(index + 1)}
                 />
                 <span className="w-4 shrink-0 text-center text-xs tabular-nums text-neutral-400">
                   {index + 1}
@@ -87,22 +91,22 @@ export function ImageListEditor({ items, onAdd, onRemove, onReorder, onChangeUrl
                 <Input
                   value={item.url}
                   onChange={(e) => onChangeUrl(item.key, e.target.value)}
-                  aria-label={`Ссылка на картинку ${index + 1}`}
+                  aria-label={copy.urlLabel(index + 1)}
                   placeholder="https://…"
                   className="min-w-0 flex-1 text-sm"
                 />
                 <ImageUploadButton
                   compact
-                  label={`Загрузить файл вместо картинки ${index + 1}`}
+                  label={copy.uploadInstead(index + 1)}
                   onUploaded={(url) => onChangeUrl(item.key, url)}
                 />
-                <RemoveButton onClick={() => onRemove(item.key)} label="Удалить картинку" />
+                <RemoveButton onClick={() => onRemove(item.key)} label={copy.remove} />
               </li>
             )}
           </SortableList>
         </ul>
       )}
-      <AddButton onClick={onAdd}>Добавить картинку</AddButton>
+      <AddButton onClick={onAdd}>{copy.add}</AddButton>
     </div>
   )
 }

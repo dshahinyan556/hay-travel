@@ -1,6 +1,8 @@
 import { Select } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import type { PlaceOption, RoutePointFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
+import { tourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
 
 interface RoutePointPlaceSelectProps {
   dayKey: string
@@ -21,6 +23,8 @@ const NO_LINK = ''
  * route point is known to have added are removed with it.
  */
 export function RoutePointPlaceSelect({ dayKey, item, placeOptions, actions }: RoutePointPlaceSelectProps) {
+  const copy = useCopy(tourFormCopy)
+
   return (
     <Select
       value={item.placeId != null ? String(item.placeId) : NO_LINK}
@@ -34,15 +38,17 @@ export function RoutePointPlaceSelect({ dayKey, item, placeOptions, actions }: R
         actions.setRoutePointPlace(dayKey, item.key, placeId, picked?.name, picked?.images)
       }}
       options={[
-        { value: NO_LINK, label: 'Без привязки — свободный текст' },
+        { value: NO_LINK, label: copy.placeSelect.noLink },
         ...placeOptions.map((p) => ({
           value: String(p.id),
-          label: p.name.ru || p.name.en || `#${p.id}`,
+          // A place's name is content — shown in the panel's language when it has one
+          // (ADR 021, decision 5), by id when the catalog entry is untranslated.
+          label: copy.localizedName(p.name) || `#${p.id}`,
         })),
       ]}
-      placeholder="Привязать к точке каталога…"
+      placeholder={copy.placeSelect.placeholder}
       searchable
-      searchPlaceholder="Поиск по названию…"
+      searchPlaceholder={copy.placeSelect.search}
       surface="admin"
       className="w-full sm:max-w-xs"
     />

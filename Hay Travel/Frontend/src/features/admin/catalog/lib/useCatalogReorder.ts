@@ -19,6 +19,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { arrayMove } from '@dnd-kit/sortable'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { catalogCopy } from './catalogCopy'
 import { catalogErrorMessage } from './catalogErrors'
 
 /** Minimum shape a catalog row needs to take part in reordering. */
@@ -43,7 +45,7 @@ export interface UseCatalogReorderOptions<T extends SortableCatalogEntry> {
   update: (item: T) => Promise<unknown>
   /** Same callback the tab already passes to create/update/delete — revalidates the loader. */
   onMutated: () => void
-  /** Verb phrase for `catalogErrorMessage`, e.g. `'изменить порядок точек'`. */
+  /** Already-localised verb phrase for `catalogErrorMessage`, e.g. `copy.places.actions.reorder`. */
   errorAction: string
 }
 
@@ -71,6 +73,7 @@ export function useCatalogReorder<T extends SortableCatalogEntry>({
   onMutated,
   errorAction,
 }: UseCatalogReorderOptions<T>): CatalogReorder<T> {
+  const copy = useCopy(catalogCopy)
   const sorted = useMemo(() => [...items].sort((a, b) => a.sortOrder - b.sortOrder), [items])
   const [optimistic, setOptimistic] = useState<OptimisticOrder<T> | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -100,7 +103,7 @@ export function useCatalogReorder<T extends SortableCatalogEntry>({
       })
       .catch((err: unknown) => {
         setOptimistic(null)
-        setError(catalogErrorMessage(err, errorAction))
+        setError(catalogErrorMessage(copy, err, errorAction))
       })
       .finally(() => setIsSaving(false))
   }

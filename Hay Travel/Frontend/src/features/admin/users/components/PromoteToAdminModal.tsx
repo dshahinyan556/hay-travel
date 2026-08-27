@@ -1,6 +1,8 @@
 import { useRef } from 'react'
 import { Button, Modal, Spinner, buttonClassName } from '@/shared/ui'
-import { promoteCopy } from '../lib/userCopy'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { adminCommonCopy } from '@/features/admin/lib/adminCommonCopy'
+import { userCopy } from '../lib/userCopy'
 
 interface PromoteToAdminModalProps {
   /** The row awaiting confirmation, or `null` when nothing is pending. Doubles as the open flag so
@@ -33,6 +35,8 @@ export function PromoteToAdminModal({
   onConfirm,
 }: PromoteToAdminModalProps) {
   const cancelRef = useRef<HTMLButtonElement>(null)
+  const copy = useCopy(userCopy).promote
+  const common = useCopy(adminCommonCopy)
 
   return (
     <Modal
@@ -40,10 +44,10 @@ export function PromoteToAdminModal({
       onClose={() => {
         if (!pending) onCancel()
       }}
-      title={userLabel === null ? '' : promoteCopy.title(userLabel)}
+      title={userLabel === null ? '' : copy.title(userLabel)}
       initialFocusRef={cancelRef}
     >
-      <p className="text-sm text-neutral-600">{promoteCopy.body}</p>
+      <p className="text-sm text-neutral-600">{copy.body}</p>
       <div className="mt-5 flex justify-end gap-2.5">
         <button
           ref={cancelRef}
@@ -52,16 +56,16 @@ export function PromoteToAdminModal({
           disabled={pending}
           className={`${buttonClassName('ghost', 'md')} disabled:pointer-events-none disabled:opacity-50`}
         >
-          Отмена
+          {common.cancel}
         </button>
         <Button type="button" onClick={onConfirm} disabled={pending} className="min-w-28">
           {pending ? (
             <span className="inline-flex items-center gap-2">
               <Spinner size="sm" />
-              {promoteCopy.pending}
+              {copy.pending}
             </span>
           ) : (
-            promoteCopy.confirm
+            copy.confirm
           )}
         </Button>
       </div>

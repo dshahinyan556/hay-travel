@@ -3,12 +3,13 @@ using ATTours.BusinessServices.Services.DeleteServices;
 using ATTours.BusinessServices.Services.InfoServices;
 using ATTours.BusinessServices.Services.UpdateServices;
 using ATTours.ClientAPI.Authorization;
+using ATTours.Common.Authorization;
 using ATTours.Common.Dto.Init;
 using ATTours.Common.DTO.Info;
 using ATTours.Common.Entities;
+using ATTours.Common.Enums;
 using ATTours.Common.Extensions;
 using AutoMapper;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ATTours.ClientAPI.Controllers
@@ -19,11 +20,11 @@ namespace ATTours.ClientAPI.Controllers
     [Route("api/[controller]")]
     public class TourNoteTemplateController(IMapper mapper) : Controller
     {
-        // Чтение каталога доступно и тур-менеджеру: из этих шаблонов он набирает заметки
-        // в редакторе тура. Правка самого каталога — только админ.
+        // Права по ключу "catalog.note-templates": в сиде чтение есть у тур-менеджера
+        // (из этих шаблонов он набирает заметки в редакторе тура), правка — у админа.
         [HttpGet]
         [Route("GetAll")]
-        [Authorize(Roles = ApiRoles.TourManagerOrAdmin)]
+        [RequiresPermission(AdminScreens.CatalogNoteTemplates, PermissionAction.View)]
         public async Task<List<TourNoteTemplateInfoModel>> GetAllAsync()
         {
             using var info = new TourNoteTemplateInfo();
@@ -34,7 +35,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpPost]
         [Route("Create")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.CatalogNoteTemplates, PermissionAction.Create)]
         public async Task<TourNoteTemplateInfoModel> CreateAsync([FromBody] TourNoteTemplateCreateModel model)
         {
             var entity = mapper.Map<TourNoteTemplate>(model);
@@ -47,7 +48,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpPut]
         [Route("Update")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.CatalogNoteTemplates, PermissionAction.Update)]
         public async Task<TourNoteTemplateInfoModel> UpdateAsync([FromBody] TourNoteTemplateInfoModel model)
         {
             var entity = mapper.Map<TourNoteTemplate>(model);
@@ -60,7 +61,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpDelete]
         [Route("Delete")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.CatalogNoteTemplates, PermissionAction.Delete)]
         public async Task DeleteAsync([FromQuery] int id)
         {
             using var deletionService = new TourNoteTemplateDeletionService();

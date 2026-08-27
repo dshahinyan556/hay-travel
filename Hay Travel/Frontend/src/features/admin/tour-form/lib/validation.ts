@@ -18,15 +18,12 @@
 import { TourType } from '@/features/admin/lib/enums'
 import type { TourFormState, TourDayFormState } from '@/features/admin/types/form'
 import { MIN_TOUR_DAYS } from '@/features/admin/tour-form/reducer/tourFormReducer'
+import type { TourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
 
-const REQUIRED = 'Обязательное поле'
-const NEGATIVE_PRICE = 'Цена не может быть отрицательной'
-const NO_ROUTE_POINT = 'Добавьте хотя бы одну точку маршрута'
-const DISCOUNT_RANGE = 'Введите процент от 0 до 100'
-const DISCOUNT_NEEDS_DATE = 'Укажите дату, до которой действует скидка'
-const DISCOUNT_NEEDS_START_DATE = 'Укажите дату начала скидки'
-const DISCOUNT_NEEDS_PERCENT = 'Укажите размер скидки'
-const DISCOUNT_START_AFTER_END = 'Дата начала не может быть позже даты окончания'
+/** The messages this module hands back. It stays pure: the caller (`useTourForm`, which has the
+ * locale) resolves the copy and passes this section in, rather than the validator returning error
+ * codes every consumer would then have to map back to text. */
+export type ValidationCopy = TourFormCopy['validation']
 
 export interface TourFormValidation {
   /** Error for the tour's RU title, if empty. */
@@ -63,15 +60,15 @@ function priceValue(raw: string): number {
   return Number.isFinite(n) ? n : 0
 }
 
-export function validateTourForm(state: TourFormState): TourFormValidation {
+export function validateTourForm(state: TourFormState, copy: ValidationCopy): TourFormValidation {
   const isExcursion = state.type === TourType.Excursion
 
-  const titleRu = state.title.ru.trim() === '' ? REQUIRED : undefined
-  const mainImageUrl = state.mainImageUrl.trim() === '' ? 'Укажите ссылку на главную картинку' : undefined
+  const titleRu = state.title.ru.trim() === '' ? copy.required : undefined
+  const mainImageUrl = state.mainImageUrl.trim() === '' ? copy.mainImageUrl : undefined
 
   const days =
     state.type === TourType.Tour && state.days.length < MIN_TOUR_DAYS
-      ? `Для тура нужно минимум ${MIN_TOUR_DAYS} дня`
+      ? copy.minDays(MIN_TOUR_DAYS)
       : undefined
 
   const dayTitleErrors: Record<string, string | undefined> = {}
@@ -80,9 +77,9 @@ export function validateTourForm(state: TourFormState): TourFormValidation {
 
   for (const day of state.days) {
     // The excursion's single day inherits the tour's title, so it is never validated on its own.
-    if (!isExcursion && day.title.ru.trim() === '') dayTitleErrors[day.key] = REQUIRED
-    if (priceValue(day.price) < 0) dayPriceErrors[day.key] = NEGATIVE_PRICE
-    if (!hasRoutePoint(day)) dayRoutePointErrors[day.key] = NO_ROUTE_POINT
+    if (!isExcursion && day.title.ru.trim() === '') dayTitleErrors[day.key] = copy.required
+    if (priceValue(day.price) < 0) dayPriceErrors[day.key] = copy.negativePrice
+    if (!hasRoutePoint(day)) dayRoutePointErrors[day.key] = copy.noRoutePoint
   }
 
   // Все три поля (процент + начало + окончание) заданы вместе или пусты все три, и начало
@@ -97,17 +94,17 @@ export function validateTourForm(state: TourFormState): TourFormValidation {
   let discountStartDate: string | undefined
   let discountValidUntil: string | undefined
   if (hasDiscountPercent || hasDiscountStartDate || hasDiscountValidUntil) {
-    if (!hasDiscountStartDate) discountStartDate = DISCOUNT_NEEDS_START_DATE
-    if (!hasDiscountValidUntil) discountValidUntil = DISCOUNT_NEEDS_DATE
+    if (!hasDiscountStartDate) discountStartDate = copy.discountNeedsStartDate
+    if (!hasDiscountValidUntil) discountValidUntil = copy.discountNeedsValidUntil
     if (!hasDiscountPercent) {
-      discountPercent = DISCOUNT_NEEDS_PERCENT
+      discountPercent = copy.discountNeedsPercent
     } else {
       const n = Number(state.discountPercent.trim().replace(',', '.'))
-      if (!Number.isFinite(n) || n <= 0 || n > 100) discountPercent = DISCOUNT_RANGE
+      if (!Number.isFinite(n) || n <= 0 || n > 100) discountPercent = copy.discountRange
     }
     // Равенство разрешено — однодневная акция.
     if (hasDiscountStartDate && hasDiscountValidUntil && discountStart > discountEnd) {
-      discountStartDate = DISCOUNT_START_AFTER_END
+      discountStartDate = copy.discountStartAfterEnd
     }
   }
 

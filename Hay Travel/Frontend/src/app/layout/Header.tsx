@@ -6,6 +6,7 @@ import { MountainIcon } from '@/shared/ui/icons'
 import { ThemeToggle } from './ThemeToggle'
 import { CurrencySwitch } from './CurrencySwitch'
 import { LanguageSwitch } from './LanguageSwitch'
+import { CartNavButton } from './CartNavButton'
 import { UserMenu } from './UserMenu'
 
 /**
@@ -48,7 +49,11 @@ export function Header() {
       className="sticky top-0 z-30 w-full px-3 pb-3 sm:px-4 sm:pb-4"
       style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
     >
-      <div className="mx-auto flex w-full max-w-6xl items-center gap-4 rounded-full border border-edge/70 bg-panel/85 px-4 py-2.5 shadow-lg shadow-black/20 backdrop-blur-md sm:px-6">
+      {/* `gap-2 sm:gap-4` — the "логотип ↔ кластер" gap halves below 640px (spec 008 §8.4 math:
+          the cart button needs 44px that only exist once the language switch collapses and these
+          gaps tighten). The wordmark itself is NOT touched: hiding it on mobile was tried once and
+          read as a bug. */}
+      <div className="mx-auto flex w-full max-w-6xl items-center gap-2 rounded-full border border-edge/70 bg-panel/85 px-4 py-2.5 shadow-lg shadow-black/20 backdrop-blur-md sm:gap-4 sm:px-6">
         <NavLink to="/" className="flex items-center gap-2">
           {logoUrl ? (
             <img src={logoUrl} alt="Hay Travel" className="h-9 w-auto sm:h-11" />
@@ -90,7 +95,7 @@ export function Header() {
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+        <div className="ml-auto flex items-center gap-1 sm:gap-2">
           {/*
             Currency first, and on EVERY viewport — no `lg:` gate. On a travel catalog "what does
             this cost in my money" is a higher-intent question than theme or language, and mobile is
@@ -100,6 +105,9 @@ export function Header() {
           <CurrencySwitch />
           <LanguageSwitch />
           <ThemeToggle />
+          {/* Same argument as `CurrencySwitch` above: shown on every breakpoint, and NOT moved to
+              `MobileTabBar` (that bar is four navigation tabs, full stop — see `CartNavButton`). */}
+          <CartNavButton />
           {/* Renders the same gold "Войти" pill when signed out, an account dropdown when in. */}
           <UserMenu />
         </div>

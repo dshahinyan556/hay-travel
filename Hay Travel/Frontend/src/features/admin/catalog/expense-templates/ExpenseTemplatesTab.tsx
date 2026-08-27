@@ -2,7 +2,10 @@ import { useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Button, buttonClassName, Card, DragHandle, Modal, SortableList, Spinner } from '@/shared/ui'
 import type { SortableRowRenderProps } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { adminCommonCopy } from '@/features/admin/lib/adminCommonCopy'
 import { SidePanel } from '@/features/admin/ui/SidePanel'
+import type { ScreenPermission } from '@/shared/auth'
 import {
   createExpenseTemplate,
   deleteExpenseTemplate,
@@ -10,6 +13,7 @@ import {
 } from '@/features/admin/api/adminCatalog'
 import type { ExpenseTemplateInfoModel } from '@/shared/types/attours'
 import { readLocalized, writeLocalized, writeLocalizedForUpdate } from '@/features/admin/catalog/lib/catalogMapper'
+import { catalogCopy } from '@/features/admin/catalog/lib/catalogCopy'
 import { catalogErrorMessage } from '@/features/admin/catalog/lib/catalogErrors'
 import { catalogRowId, nextSortOrder, useCatalogReorder } from '@/features/admin/catalog/lib/useCatalogReorder'
 import { useCatalogSearch } from '@/features/admin/catalog/lib/useCatalogSearch'
@@ -18,12 +22,16 @@ import { ExpenseTemplateForm, type ExpenseTemplateFormValues } from './ExpenseTe
 
 interface ExpenseTemplatesTabProps {
   items: ExpenseTemplateInfoModel[]
+  /** The four flags of this tab's own permission key, resolved once by `CatalogPage`. */
+  permission: ScreenPermission
   onMutated: () => void
 }
 
 type PanelState = { mode: 'create' } | { mode: 'edit'; item: ExpenseTemplateInfoModel } | null
 
-export function ExpenseTemplatesTab({ items, onMutated }: ExpenseTemplatesTabProps) {
+export function ExpenseTemplatesTab({ items, permission, onMutated }: ExpenseTemplatesTabProps) {
+  const copy = useCopy(catalogCopy)
+  const common = useCopy(adminCommonCopy)
   const [panel, setPanel] = useState<PanelState>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -35,7 +43,7 @@ export function ExpenseTemplatesTab({ items, onMutated }: ExpenseTemplatesTabPro
     items,
     update: updateExpenseTemplate,
     onMutated,
-    errorAction: 'изменить порядок расходов',
+    errorAction: copy.expenseTemplates.actions.reorder,
   })
   const search = useCatalogSearch(order.rows, (item) => {
     const name = readLocalized(item.translations)
@@ -62,7 +70,13 @@ export function ExpenseTemplatesTab({ items, onMutated }: ExpenseTemplatesTabPro
       setPanel(null)
       onMutated()
     } catch (err) {
-      setFormError(catalogErrorMessage(err, panel?.mode === 'edit' ? 'сохранить расход' : 'добавить расход'))
+      setFormError(
+        catalogErrorMessage(
+          copy,
+          err,
+          panel?.mode === 'edit' ? copy.expenseTemplates.actions.save : copy.expenseTemplates.actions.add,
+        ),
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -77,7 +91,7 @@ export function ExpenseTemplatesTab({ items, onMutated }: ExpenseTemplatesTabPro
       setConfirmTarget(null)
       onMutated()
     } catch (err) {
-      setListError(catalogErrorMessage(err, 'удалить расход'))
+      setListError(catalogErrorMessage(copy, err, copy.expenseTemplates.actions.delete))
     } finally {
       setPendingDeleteId(null)
     }
@@ -92,40 +106,45 @@ export function ExpenseTemplatesTab({ items, onMutated }: ExpenseTemplatesTabPro
         ref={sortable?.setNodeRef}
         style={sortable?.style as CSSProperties | undefined}
         className={`border-b border-neutral-100 last:border-0 ${
-          sortable?.isDragging ? 'relative z-10 bg-brand-50/60' : ''
+          sortable?.isDragging ? 'relative z-10 bg-neutral-100/60' : ''
         }`}
       >
         <td className="w-10 px-2 py-2.5">
           {sortable && (
             <DragHandle
               ref={sortable.setActivatorNodeRef}
-              disabled={order.isSaving}
-              label={`Перетащить «${name || `расход №${item.id}`}», чтобы изменить порядок`}
+              // Reordering PERSISTS server-side — it is an edit, not a view preference.
+              disabled={order.isSaving || !permission.canUpdate}
+              label={copy.common.dragToReorder(name || copy.expenseTemplates.rowFallback(item.id))}
               {...sortable.attributes}
               {...sortable.listeners}
             />
           )}
         </td>
         <td className="px-3 py-2.5 font-medium text-neutral-900">
-          {name || <span className="text-neutral-400">—</span>}
+          {name || <span className="text-neutral-400">{copy.common.emptyValue}</span>}
         </td>
         <td className="px-3 py-2.5">
           <div className="flex justify-end gap-1.5">
+            {permission.canUpdate && (
             <button
               type="button"
               onClick={() => setPanel({ mode: 'edit', item })}
-              className="rounded-lg px-2.5 py-1 text-sm font-medium text-brand-700 transition-colors hover:bg-brand-50"
+              className="rounded-lg px-2.5 py-1 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-100"
             >
-              Изменить
+              {common.edit}
             </button>
+            )}
+            {permission.canDelete && (
             <button
               type="button"
               onClick={() => setConfirmTarget(item)}
               disabled={pendingDeleteId === item.id}
               className="rounded-lg px-2.5 py-1 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-50 disabled:pointer-events-none disabled:opacity-50"
             >
-              Удалить
+              {common.delete}
             </button>
+            )}
           </div>
         </td>
       </tr>
@@ -135,8 +154,16 @@ export function ExpenseTemplatesTab({ items, onMutated }: ExpenseTemplatesTabPro
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <CatalogSearchInput value={search.query} onChange={search.setQuery} placeholder="Поиск по названию…" />
-        <Button onClick={() => setPanel({ mode: 'create' })}>Добавить расход</Button>
+        <CatalogSearchInput
+          value={search.query}
+          onChange={search.setQuery}
+          placeholder={copy.common.searchByName}
+        />
+        {permission.canCreate && (
+          <Button onClick={() => setPanel({ mode: 'create' })}>
+            {copy.expenseTemplates.addButton}
+          </Button>
+        )}
       </div>
 
       {(listError ?? order.error) && (
@@ -146,21 +173,23 @@ export function ExpenseTemplatesTab({ items, onMutated }: ExpenseTemplatesTabPro
       )}
 
       {items.length === 0 ? (
-        <Card className="text-center text-sm text-neutral-500">Доп. расходов пока нет.</Card>
+        <Card className="text-center text-sm text-neutral-500">{copy.expenseTemplates.empty}</Card>
       ) : search.isFiltering && search.filtered.length === 0 ? (
-        <Card className="text-center text-sm text-neutral-500">Ничего не найдено по «{search.query.trim()}».</Card>
+        <Card className="text-center text-sm text-neutral-500">
+          {copy.common.nothingFoundFor(search.query.trim())}
+        </Card>
       ) : (
         <Card padding="sm" className="overflow-x-auto">
           {search.isFiltering && (
-            <p className="px-1 pb-2 text-xs text-neutral-400">Изменение порядка недоступно во время поиска — очистите поле.</p>
+            <p className="px-1 pb-2 text-xs text-neutral-400">{copy.common.reorderDisabledBySearch}</p>
           )}
           <table className="w-full min-w-[460px] text-left text-sm">
             <thead>
               <tr className="border-b border-neutral-200 text-xs font-semibold uppercase tracking-wide text-neutral-500">
                 <th className="w-10 px-2 py-2.5">
-                  <span className="sr-only">Порядок</span>
+                  <span className="sr-only">{copy.common.colOrder}</span>
                 </th>
-                <th className="px-3 py-2.5">Название</th>
+                <th className="px-3 py-2.5">{copy.common.colName}</th>
                 <th className="px-3 py-2.5" />
               </tr>
             </thead>
@@ -172,7 +201,7 @@ export function ExpenseTemplatesTab({ items, onMutated }: ExpenseTemplatesTabPro
                   items={order.rows}
                   getId={catalogRowId}
                   onReorder={order.reorder}
-                  itemLabel="Доп. расход"
+                  itemLabel={copy.expenseTemplates.sortableItem}
                 >
                   {(item, _index, sortable) => renderRow(item, sortable)}
                 </SortableList>
@@ -185,7 +214,7 @@ export function ExpenseTemplatesTab({ items, onMutated }: ExpenseTemplatesTabPro
       <SidePanel
         open={panel !== null}
         onClose={() => setPanel(null)}
-        title={panel?.mode === 'edit' ? 'Доп. расход' : 'Новый доп. расход'}
+        title={panel?.mode === 'edit' ? copy.expenseTemplates.panelEdit : copy.expenseTemplates.panelCreate}
       >
         <ExpenseTemplateForm
           key={panel?.mode === 'edit' ? panel.item.id : 'create'}
@@ -202,14 +231,15 @@ export function ExpenseTemplatesTab({ items, onMutated }: ExpenseTemplatesTabPro
         onClose={() => {
           if (pendingDeleteId === null) setConfirmTarget(null)
         }}
-        title="Удалить расход?"
+        title={copy.expenseTemplates.deleteTitle}
         initialFocusRef={cancelDeleteRef}
       >
         <p className="text-sm text-neutral-600">
           {confirmTarget && (
             <>
-              Расход «<span className="font-semibold text-neutral-900">{readLocalized(confirmTarget.translations).ru}</span>»
-              будет удалён безвозвратно. Если он используется в турах, сначала уберите его оттуда.
+              {copy.expenseTemplates.deleteBefore}
+              <span className="font-semibold text-neutral-900">{readLocalized(confirmTarget.translations).ru}</span>
+              {copy.expenseTemplates.deleteAfter}
             </>
           )}
         </p>
@@ -221,16 +251,16 @@ export function ExpenseTemplatesTab({ items, onMutated }: ExpenseTemplatesTabPro
             disabled={pendingDeleteId !== null}
             className={`${buttonClassName('ghost', 'md')} disabled:pointer-events-none disabled:opacity-50`}
           >
-            Отмена
+            {common.cancel}
           </button>
           <Button type="button" variant="danger" onClick={confirmDelete} disabled={pendingDeleteId !== null} className="min-w-28">
             {pendingDeleteId !== null ? (
               <span className="inline-flex items-center gap-2">
                 <Spinner size="sm" />
-                Удаление…
+                {copy.common.deletingButton}
               </span>
             ) : (
-              'Удалить'
+              common.delete
             )}
           </Button>
         </div>

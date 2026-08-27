@@ -14,7 +14,9 @@ interface RemoveButtonProps {
   disabled?: boolean
 }
 
-/** Square icon button that removes a repeater row. Turns rose on hover to signal deletion. */
+/** Square icon button that removes a repeater row. Inverts to solid black on hover to signal
+ * deletion (strict b/w palette — no red, same convention as `AdminActionButton`'s destructive
+ * variant). */
 export function RemoveButton({ onClick, label, disabled = false }: RemoveButtonProps) {
   return (
     <button
@@ -41,7 +43,7 @@ export function AddButton({ onClick, children }: AddButtonProps) {
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-4 py-2.5 text-sm font-semibold text-brand-700 transition-colors hover:border-brand-600 hover:bg-brand-50"
+      className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-4 py-2.5 text-sm font-semibold text-neutral-700 transition-colors hover:border-neutral-500 hover:bg-neutral-100"
     >
       <span aria-hidden="true">＋</span>
       {children}

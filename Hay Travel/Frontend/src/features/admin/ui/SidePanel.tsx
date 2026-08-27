@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useBodyScrollLock, useFocusTrap } from '@/shared/hooks'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { adminUiCopy } from './adminUiCopy'
 
 export interface SidePanelProps {
   open: boolean
@@ -24,6 +26,7 @@ export interface SidePanelProps {
  * already uses, just docked right instead of left.
  */
 export function SidePanel({ open, onClose, title, children }: SidePanelProps) {
+  const copy = useCopy(adminUiCopy).sidePanel
   const titleId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
   const [mounted, setMounted] = useState(false)
@@ -64,7 +67,7 @@ export function SidePanel({ open, onClose, title, children }: SidePanelProps) {
     <div className="fixed inset-0 z-50">
       <button
         type="button"
-        aria-label="Закрыть"
+        aria-label={copy.close}
         onClick={onClose}
         className={`absolute inset-0 bg-neutral-900/50 transition-opacity duration-200 ${
           open ? 'opacity-100' : 'opacity-0'
@@ -93,7 +96,7 @@ export function SidePanel({ open, onClose, title, children }: SidePanelProps) {
           <button
             type="button"
             onClick={onClose}
-            aria-label="Закрыть"
+            aria-label={copy.close}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">

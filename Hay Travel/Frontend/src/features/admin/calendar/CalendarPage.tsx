@@ -1,7 +1,14 @@
 import { useMemo, useState } from 'react'
 import { redirect, useLoaderData, useRevalidator } from 'react-router'
-import { Button, Tabs, type TabItem } from '@/shared/ui'
-import { canManageCalendar, ensureAuthReady, getAuthState } from '@/shared/auth'
+import { Button, InquiryScreenLayout, Tabs, type TabItem } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
+import {
+  AdminScreen,
+  canView,
+  ensurePermissionsReady,
+  useScreenPermission,
+} from '@/shared/auth'
 import { getAllTours } from '@/features/admin/api/adminTours'
 import {
   createClosureRules,
@@ -27,24 +34,26 @@ import { isEmptyPlan, planDayToggle } from './lib/closureToggle'
  * navigation and therefore not a loader's job.
  *
  * Checks the permission itself and redirects rather than letting the requests 403: `adminRootLoader`
- * only gates the panel as a whole, so a TourManager typing `/admin/calendar` would otherwise land
- * on a raw error screen. Errors from the two requests are NOT swallowed — they propagate to
- * `AdminErrorBoundary`, same contract as `catalogLoader`.
+ * only gates the panel as a whole, so somebody without `calendar.View` typing `/admin/calendar`
+ * would otherwise land on a raw error screen. Errors from the two requests are NOT swallowed — they
+ * propagate to `AdminErrorBoundary`, same contract as `catalogLoader`.
  */
 export async function calendarLoader() {
-  await ensureAuthReady()
-  if (!canManageCalendar(getAuthState().user?.role)) throw redirect('/admin')
+  await ensurePermissionsReady()
+  if (!canView(AdminScreen.Calendar)) throw redirect('/admin')
 
-  const [tours, rules] = await Promise.all([getAllTours(), getClosureRules()])
+  // `Tour/GetAll` is gated by `products.View`, a DIFFERENT key: a role granted only the calendar
+  // would get a 403 on a screen it was explicitly given. The tour list is auxiliary here (names on
+  // closure rules, the bulk scope picker), so it degrades to empty — the same trade the dashboard
+  // makes. It is not the §0.8 case: nothing here silently saves a broken object without it.
+  const [tours, rules] = await Promise.all([
+    canView(AdminScreen.Products) ? getAllTours() : Promise.resolve([]),
+    getClosureRules(),
+  ])
   return { tours, rules }
 }
 
 type CalendarTabId = 'calendar' | 'rules'
-
-const tabs: TabItem[] = [
-  { id: 'calendar', label: calendarCopy.tabCalendar },
-  { id: 'rules', label: calendarCopy.tabRules },
-]
 
 /** How far the arrows may travel from the current month, in either direction. A year each way
  * covers real planning; beyond that the admin is looking at data nobody has entered yet. */
@@ -66,10 +75,32 @@ function monthIndex(year: number, month: number): number {
  * Mutations follow one shape: run → invalidate the month cache AND revalidate the loader (rules
  * changed) → clear pending. On failure the cache is invalidated all the same, because a bulk
  * operation can fail halfway and the screen must not keep showing the state it assumed.
+ *
+ * Template D — «Экран просмотра» (`InquiryScreenLayout`) for the SHELL only. The month grid is a
+ * pure display of state, which is what the archetype describes; the two mutating surfaces the
+ * screen also carries — `DayDetailPanel` (a miniature data-entry form) and `BulkClosurePanel`
+ * («Массовые операции», a genuine batch-processing flow) — keep their own internals untouched and
+ * simply live nested inside. Per the approved classification, the bulk panel is the first screen
+ * that moves to template E once that archetype exists; it is deliberately NOT bent into this one.
+ *
+ * The month toolbar therefore does NOT go in the layout's `controlZone`: it holds «Массовые
+ * операции», which opens that mutating flow, and this archetype's control zone must contain
+ * nothing that changes stored data. It stays in the body, inside the same sticky block as the
+ * tabs it belongs to.
  */
 export function CalendarPage() {
   const { tours, rules } = useLoaderData<typeof calendarLoader>()
   const revalidator = useRevalidator()
+  const copy = useCopy(calendarCopy)
+  // Through the hook, not the bare predicate: the matrix is refetched in the background on every
+  // token rotation, and the controls have to follow it without a navigation.
+  const permission = useScreenPermission(AdminScreen.Calendar)
+  const { locale } = useLocale()
+
+  const tabs: TabItem[] = [
+    { id: 'calendar', label: copy.tabCalendar },
+    { id: 'rules', label: copy.tabRules },
+  ]
 
   const now = useMemo(() => new Date(), [])
   const [view, setView] = useState(() => ({ year: now.getFullYear(), month: now.getMonth() + 1 }))
@@ -84,7 +115,7 @@ export function CalendarPage() {
     view.month,
   )
 
-  const tourTitle = useMemo(() => tourTitleResolver(tours), [tours])
+  const tourTitle = useMemo(() => tourTitleResolver(tours, locale, copy), [tours, locale, copy])
   const days = useMemo(
     () => buildCalendarGrid(view.year, view.month, data?.calendar ?? null, now),
     [view.year, view.month, data, now],
@@ -151,7 +182,13 @@ export function CalendarPage() {
       if (plan.create.length > 0) await createClosureRules(plan.create)
       await refreshAfterMutation()
     } catch (err) {
-      setError(calendarErrorMessage(err, close ? 'закрыть день' : 'открыть день'))
+      setError(
+        calendarErrorMessage(
+          copy,
+          err,
+          close ? copy.errorActions.closeDay : copy.errorActions.openDay,
+        ),
+      )
       await refreshAfterMutation()
     } finally {
       setPending(false)
@@ -167,7 +204,7 @@ export function CalendarPage() {
       setBulkOpen(false)
       await refreshAfterMutation()
     } catch (err) {
-      setError(calendarErrorMessage(err, 'применить массовую операцию'))
+      setError(calendarErrorMessage(copy, err, copy.errorActions.applyBulk))
       await refreshAfterMutation()
     } finally {
       setPending(false)
@@ -185,7 +222,7 @@ export function CalendarPage() {
       await deleteClosureRules(ids)
       await refreshAfterMutation()
     } catch (err) {
-      setError(calendarErrorMessage(err, 'удалить блокировки'))
+      setError(calendarErrorMessage(copy, err, copy.errorActions.deleteRules))
       await refreshAfterMutation()
     } finally {
       setPending(false)
@@ -193,22 +230,21 @@ export function CalendarPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-xl font-bold text-neutral-900">{calendarCopy.title}</h1>
-        <p className="text-sm text-neutral-500">{calendarCopy.subtitle}</p>
-      </header>
-
-      {error && (
-        <div
-          role="alert"
-          className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
-        >
-          <span aria-hidden="true">⚠️</span>
-          <span>{error}</span>
-        </div>
-      )}
-
+    <InquiryScreenLayout
+      title={copy.title}
+      subtitle={copy.subtitle}
+      message={
+        error && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+          >
+            <span aria-hidden="true">⚠️</span>
+            <span>{error}</span>
+          </div>
+        )
+      }
+    >
       {/* Pinned below the mobile hamburger bar (60px) on phones, flush to the viewport top on
           desktop where that bar doesn't exist — same treatment as `CatalogPage`. The calendar
           toolbar («Массовые операции») joins this SAME sticky block (2026-08-14, on request) —
@@ -220,7 +256,7 @@ export function CalendarPage() {
           tabs={tabs}
           activeId={tab}
           onChange={(id) => setTab(id as CalendarTabId)}
-          label={calendarCopy.tabsLabel}
+          label={copy.tabsLabel}
         />
         {tab === 'calendar' && (
           <CalendarToolbar
@@ -232,6 +268,7 @@ export function CalendarPage() {
             onPrev={() => shiftMonth(-1)}
             onNext={() => shiftMonth(1)}
             onOpenBulk={() => setBulkOpen(true)}
+            canCreate={permission.canCreate}
           />
         )}
       </div>
@@ -242,9 +279,9 @@ export function CalendarPage() {
             // The toolbar stays usable above this — paging to another month is a valid way out of
             // a failed one.
             <div className="rounded-xl border border-neutral-200 bg-white px-6 py-12 text-center">
-              <p className="text-sm text-neutral-600">{calendarCopy.gridLoadFailed}</p>
+              <p className="text-sm text-neutral-600">{copy.gridLoadFailed}</p>
               <Button type="button" variant="secondary" onClick={retry} className="mt-3 min-h-11">
-                {calendarCopy.retry}
+                {copy.retry}
               </Button>
             </div>
           ) : (
@@ -263,20 +300,20 @@ export function CalendarPage() {
                 aria-hidden="true"
                 className="h-3.5 w-3.5 rounded border border-neutral-200 bg-neutral-100 bg-[repeating-linear-gradient(45deg,transparent,transparent_3px,rgb(0_0_0/0.08)_3px,rgb(0_0_0/0.08)_6px)]"
               />
-              {calendarCopy.legendClosed}
+              {copy.legendClosed}
             </li>
             <li className="flex items-center gap-1.5">
-              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-              {calendarCopy.legendPartial}
+              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-neutral-900" />
+              {copy.legendPartial}
             </li>
             <li className="flex items-center gap-1.5">
               <span
                 aria-hidden="true"
-                className="rounded-full bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700"
+                className="rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-700"
               >
                 3
               </span>
-              {calendarCopy.legendOrders}
+              {copy.legendOrders}
             </li>
           </ul>
         </div>
@@ -288,6 +325,7 @@ export function CalendarPage() {
           tours={tours}
           pending={pending}
           onDeleteSelected={(ids) => void removeRules(ids)}
+          canDelete={permission.canDelete}
         />
       )}
 
@@ -300,6 +338,10 @@ export function CalendarPage() {
         rules={rules}
         pending={pending}
         isPast={selectedIsPast}
+        // Closing a day CREATES a rule and re-opening it DELETES one — both are needed for the
+        // toggle to be meaningful, so a role with only one of them gets a read-only block.
+        canManage={permission.canCreate && permission.canDelete}
+        readOnlyHint={copy.closureReadOnlyHint}
         onClose={() => setSelectedISO(null)}
         onToggleClosure={(tourIds, close, reason) => {
           if (selectedISO === null) return
@@ -314,6 +356,6 @@ export function CalendarPage() {
         onClose={() => setBulkOpen(false)}
         onApply={(models) => void applyBulk(models)}
       />
-    </div>
+    </InquiryScreenLayout>
   )
 }

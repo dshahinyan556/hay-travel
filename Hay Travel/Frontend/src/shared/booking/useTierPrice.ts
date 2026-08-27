@@ -23,9 +23,10 @@ export interface TierPriceView {
  * The live figures for `BookingCard`: base AMD price (flat, for up to 4 guests — NOT per person) +
  * guest count → formatted strings in the visitor's currency.
  *
- * Feature-local, not shared: the group tier only applies where a live guest counter exists, which
- * is that one component. The RULE itself still lives in `shared/currency/pricing.ts` — this hook
- * composes rule + money + booking policy and never re-expresses any of them.
+ * Общий модуль (`shared/booking`, 2026-08): живой счётчик гостей есть теперь и на странице тура, и
+ * в каждой строке корзины, а фичи не импортируют друг друга. Само ПРАВИЛО тарифных ступеней
+ * по-прежнему живёт в одном месте — `shared/currency/pricing.ts`; этот хук только композирует
+ * правило + деньги + условие предоплаты.
  *
  * Guest count only selects the tier (`applyGroupTier`) — it is never multiplied into the price.
  * `tiered.amountAmd` is already the flat total; converting+rounding happens exactly once, inside

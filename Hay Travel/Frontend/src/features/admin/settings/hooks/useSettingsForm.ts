@@ -16,10 +16,13 @@
 import { useMemo, useState } from 'react'
 import { updateSiteSettings } from '@/features/admin/api/adminSiteSettings'
 import { ApiError } from '@/shared/lib/http'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import type { SiteSettingInfoModel } from '@/shared/types/attours'
 import type { LangKey } from '@/features/admin/types/localized'
 import type { SettingFieldState, SettingsFormState } from '@/features/admin/settings/types'
 import { diffToUpdateModels, settingsToForm } from '@/features/admin/settings/lib/settingsMapper'
+import { settingsCopy } from '@/features/admin/settings/lib/settingsCopy'
+import type { SettingsCopy } from '@/features/admin/settings/lib/settingsCopy'
 import { validateSettings } from '@/features/admin/settings/lib/validation'
 import type { SettingsValidation } from '@/features/admin/settings/lib/validation'
 
@@ -59,15 +62,13 @@ function errorCodeOf(body: unknown): number | undefined {
   return typeof raw === 'number' ? raw : undefined
 }
 
-/** Turn any thrown value from the save call into a user-facing Russian message. */
-function submitErrorMessage(error: unknown): string {
+/** Turn any thrown value from the save call into a user-facing message in the current locale. */
+function submitErrorMessage(copy: SettingsCopy, error: unknown): string {
   if (error instanceof ApiError) {
-    if (errorCodeOf(error.body) === SITE_SETTING_KEY_UNKNOWN) {
-      return 'Одна из настроек больше не поддерживается сервером — обновите страницу и попробуйте ещё раз.'
-    }
-    return `Не удалось сохранить: сервер вернул ошибку (${error.status}). Введённые значения сохранены — попробуйте ещё раз.`
+    if (errorCodeOf(error.body) === SITE_SETTING_KEY_UNKNOWN) return copy.keyUnknownError
+    return copy.saveServerError(error.status)
   }
-  return 'Не удалось сохранить: проверьте соединение и попробуйте ещё раз. Введённые значения сохранены.'
+  return copy.saveNetworkError
 }
 
 /** Immutably replace one field, leaving `sections` (and every other field) untouched. */
@@ -83,6 +84,7 @@ function patchField(
 }
 
 export function useSettingsForm(initial: SiteSettingInfoModel[]): UseSettingsFormResult {
+  const copy = useCopy(settingsCopy)
   const [state, setState] = useState<SettingsFormState>(() => settingsToForm(initial))
   // The last saved snapshot. `state.fields` is replaced wholesale on every edit, so holding the
   // initial object here is enough — it never mutates underneath us.
@@ -112,7 +114,7 @@ export function useSettingsForm(initial: SiteSettingInfoModel[]): UseSettingsFor
     () => diffToUpdateModels(baseline, state.fields),
     [baseline, state.fields],
   )
-  const rawValidation = useMemo(() => validateSettings(state.fields), [state.fields])
+  const rawValidation = useMemo(() => validateSettings(copy, state.fields), [copy, state.fields])
   // Errors stay hidden until the first submit attempt — a blank required field shouldn't greet
   // the admin in red before they've had a chance to type anything. `isValid` itself stays live
   // throughout so `submit` can correctly refuse to save from the very start (mirrors the tour
@@ -140,7 +142,7 @@ export function useSettingsForm(initial: SiteSettingInfoModel[]): UseSettingsFor
         setBaseline(next.fields)
         setSavedAt(new Date())
       })
-      .catch((err: unknown) => setError(submitErrorMessage(err)))
+      .catch((err: unknown) => setError(submitErrorMessage(copy, err)))
       .finally(() => setIsSubmitting(false))
   }
 

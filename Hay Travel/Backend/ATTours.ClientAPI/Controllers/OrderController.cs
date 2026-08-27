@@ -1,12 +1,12 @@
-using ATTours.BusinessServices.Email;
+using ATTours.BusinessServices.Notifications;
 using ATTours.BusinessServices.Services.CreateServices;
 using ATTours.BusinessServices.Services.DeleteServices;
 using ATTours.BusinessServices.Services.InfoServices;
-using ATTours.BusinessServices.Services.PdfServices;
 using ATTours.BusinessServices.Services.Shared;
 using ATTours.BusinessServices.Services.UpdateServices;
 using ATTours.ClientAPI.Authorization;
 using ATTours.ClientAPI.Extensions;
+using ATTours.Common.Authorization;
 using ATTours.Common.DTO.Info;
 using ATTours.Common.DTO.Init;
 using ATTours.Common.DTO.Request;
@@ -24,22 +24,36 @@ namespace ATTours.ClientAPI.Controllers
 {
     // Заказы (spec 001, переделка ADR 019 2026-08-16 — мульти-строчные заказы). Стиль
     // контроллеров проекта: сервисы через new + using, в конструкторе только IMapper
-    // (плюс IEmailSender — singleton в DI, `new` для него не годится).
+    // (плюс IOrderNotificationService — он держит внедрённый singleton IEmailSender,
+    // `new` для такого не годится, ADR 005).
+    //
+    // Все письма заказов идут через notification-сервис: тексты живут в шаблонах БД, и
+    // решение «слать или нет» (тумблер IsEnabled) принимается там, а не здесь.
     //
     // Гостевой брони нет: создать заказ может любой аутентифицированный пользователь
     // (роль значения не имеет), поэтому [Authorize] без ролей на Create. Id владельца ВСЕГДА
     // берётся из токена (User.GetUserId()), никогда из тела запроса (IDOR).
+    //
+    // Админские методы гейтятся ключом "orders" целиком (решение 8 чек-листа: заказ +
+    // строки + платежи + назначение — одно право, без дробления). Клиентские Create/Update/
+    // GetMine и Employee-эндпоинт GetAssignedToMe в матрицу не входят (§2.5).
     [ApiController]
     [Route("api/[controller]")]
-    public class OrderController(IMapper mapper, IEmailSender emailSender) : Controller
+    public class OrderController(IMapper mapper, IOrderNotificationService notificationService) : Controller
     {
+        // Чекаут корзины (ADR 025): тело — список позиций, результат — ОДИН заказ с N
+        // строками, даже если позиция одна. Атомарность держит сам сервис (один агрегат,
+        // один SaveChanges), поэтому здесь нет ни цикла по позициям, ни транзакции.
+        //
+        // try/catch тут сознательно нет: отказ валидации приезжает клиенту пер-строчным
+        // OrderLinesErrorModel через цепочку обработчиков (ATToursExceptionMaster).
         [HttpPost]
         [Route("Create")]
         [Authorize]
         public async Task<OrderInfoModel> CreateAsync([FromBody] OrderCreateModel model, CancellationToken cancellationToken)
         {
             int orderId;
-            using (var creationService = new OrderCreationService(model.TourId, model.TourDate, model.GuestCount, User.GetUserId(), cancellationToken))
+            using (var creationService = new OrderCreationService(model.Lines, User.GetUserId(), cancellationToken))
             {
                 await creationService.ExecuteEntityChangesAsync();
                 orderId = creationService.Entities.Single().Id;
@@ -52,11 +66,10 @@ namespace ATTours.ClientAPI.Controllers
 
             // Флоу заказов (B12): каждая новая бронь ждёт подтверждения — админ должен об
             // этом узнать, а не наткнуться на неё сам в календаре. Провайдер письма не
-            // бросает наружу (см. Brevo/SendGridEmailSender.SendAsync) — сбой уведомления
-            // не должен ронять уже оформленную бронь. Бронь с сайта — всегда одна строка.
-            var line = result.Lines.Single();
-            await emailSender.SendNewOrderNotificationAsync(line.TourTitle, line.TourDate, line.GuestCount,
-                result.UserFullName, result.UserEmail, cancellationToken);
+            // бросает наружу (см. Brevo/SendGridEmailSender.PostAsync) — сбой уведомления
+            // не должен ронять уже оформленную бронь. Выключенный тумблер шаблона
+            // order.created тоже просто не даёт письму уйти (Задача E).
+            await notificationService.SendOrderCreatedAsync(result, cancellationToken);
 
             await OrderEventLog.LogOrderCreatedAsync(orderId, User.GetUserId(), cancellationToken);
 
@@ -66,7 +79,7 @@ namespace ATTours.ClientAPI.Controllers
         // Деталь одного заказа для админского OrderDetailPage — только админ.
         [HttpGet]
         [Route("{id:int}")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Orders, PermissionAction.View)]
         public async Task<OrderInfoModel> GetByIdAsync(int id, CancellationToken cancellationToken)
         {
             using var info = new OrderInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
@@ -99,7 +112,7 @@ namespace ATTours.ClientAPI.Controllers
         // Смена статуса — только админ (заменяет старые Confirm/Cancel, ADR 019).
         [HttpPatch]
         [Route("SetStatus")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Orders, PermissionAction.Update)]
         public async Task SetStatusAsync([FromBody] OrderStatusUpdateModel model, CancellationToken cancellationToken)
         {
             OrderStatusChangeResult change;
@@ -113,7 +126,7 @@ namespace ATTours.ClientAPI.Controllers
         // Добавить строку в существующий заказ — только админ.
         [HttpPost]
         [Route("AddLine")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Orders, PermissionAction.Create)]
         public async Task<OrderLineInfoModel> AddLineAsync([FromBody] OrderLineCreateModel model, CancellationToken cancellationToken)
         {
             OrderLineInfoModel line;
@@ -129,7 +142,7 @@ namespace ATTours.ClientAPI.Controllers
         // (OrderMustHaveAtLeastOneLine) — для этого есть удаление заказа целиком.
         [HttpDelete]
         [Route("RemoveLine")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Orders, PermissionAction.Delete)]
         public async Task RemoveLineAsync([FromQuery] int lineId, CancellationToken cancellationToken)
         {
             OrderLineRemovedResult removed;
@@ -140,10 +153,11 @@ namespace ATTours.ClientAPI.Controllers
                 removed.TourDate, removed.GuestCount, cancellationToken);
         }
 
-        // Правка строки: предоплата + "детали для выполнения" — только админ.
+        // Правка строки: предоплата — только админ. "Детали для выполнения" переехали
+        // на исполнителя (UpdateLineEmployee ниже).
         [HttpPut]
         [Route("UpdateLine")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Orders, PermissionAction.Update)]
         public async Task UpdateLineAsync([FromBody] OrderLineUpdateModel model, CancellationToken cancellationToken)
         {
             using (var lineService = new OrderLineService(cancellationToken))
@@ -152,15 +166,36 @@ namespace ATTours.ClientAPI.Controllers
             await OrderEventLog.LogLineUpdatedAsync(model.Id, User.GetUserId(), cancellationToken);
         }
 
+        // "Детали для выполнения" одного исполнителя на одной строке (редизайн 2026-08-23):
+        // место встречи / навигатор / комментарий теперь у каждого свои. Роль здесь не
+        // правится — её меняет AssignEmployee (upsert).
+        //
+        // Отдельного типа события журнала не заводим: для истории заказа это правка строки.
+        [HttpPut]
+        [Route("UpdateLineEmployee")]
+        [RequiresPermission(AdminScreens.Orders, PermissionAction.Update)]
+        public async Task UpdateLineEmployeeAsync([FromBody] OrderLineEmployeeUpdateModel model,
+            CancellationToken cancellationToken)
+        {
+            OrderLineEmployeeUpdateResult updated;
+            using (var updateService = new OrderLineEmployeeUpdateService(cancellationToken))
+                updated = await updateService.UpdateAsync(model);
+
+            await OrderEventLog.LogLineUpdatedAsync(updated.OrderLineId, User.GetUserId(), cancellationToken);
+        }
+
         // "Назначить" / "Назначить и отправить" (Фаза 5.2) — на одну строку или на все
-        // (model.LineId == null). При model.SendEmail (по умолчанию true) исполнителю сразу
-        // уходит письмо с PDF-вложением только по назначенным строкам; попап админки шлёт
-        // false для тихого назначения (Давид, 2026-08-21). Сбой письма не должен откатывать
-        // уже сохранённое назначение — тот же принцип, что у SendNewOrderNotificationAsync
-        // в CreateAsync (провайдер не бросает наружу).
+        // (model.LineId == null), теперь СРАЗУ НЕСКОЛЬКО исполнителей, у каждого своя роль
+        // (редизайн 2026-08-23). Роль обязательна (Задача D) и уезжает снапшотом.
+        //
+        // Два независимых гейта письма (§E.8): model.SendEmail — намерение конкретного клика
+        // (попап разводит «Назначить» и «Назначить и отправить»), рубильник канала события
+        // order.assign_employee — глобальный, его проверяет notification-сервис. Он же решает,
+        // кому письмо уходит, и сам собирает персональные PDF-вложения.
+        // Сбой письма не должен откатывать уже сохранённое назначение (провайдер не бросает).
         [HttpPatch]
         [Route("AssignEmployee")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Orders, PermissionAction.Update)]
         public async Task AssignEmployeeAsync([FromBody] OrderAssignEmployeeModel model, CancellationToken cancellationToken)
         {
             OrderAssignEmployeeResult assignment;
@@ -170,24 +205,55 @@ namespace ATTours.ClientAPI.Controllers
             if (model.SendEmail)
             {
                 using var info = new OrderInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
-                var order = await info.GetByIdAsync(model.OrderId, cancellationToken);
-                var orderDto = mapper.Map<OrderInfoModel>(order);
+                var orderDto = mapper.Map<OrderInfoModel>(await info.GetByIdAsync(model.OrderId, cancellationToken));
 
-                var pdfDocument = OrderPdfService.GenerateAssignmentDocument(orderDto, assignment.AssignedLineIds);
-                var details = BuildAssignmentDetailsText(orderDto, assignment.AssignedLineIds);
-
-                await emailSender.SendAssignmentAsync(assignment.EmployeeEmail, assignment.EmployeeFullName,
-                    orderDto.Number, details, pdfDocument, cancellationToken);
+                await notificationService.SendAssignmentAsync(orderDto, assignment.Assigned, cancellationToken);
             }
 
-            await OrderEventLog.LogEmployeeAssignedAsync(model.OrderId, User.GetUserId(), assignment.EmployeeFullName,
-                assignment.AssignedLineIds, model.LineId is null, cancellationToken);
+            // По одной записи журнала на сотрудника: «назначен X и Y» одной строкой читалось
+            // бы хуже, а фильтровать историю по человеку стало бы нечем.
+            foreach (var employee in assignment.Assigned)
+                await OrderEventLog.LogEmployeeAssignedAsync(model.OrderId, User.GetUserId(), employee.FullName,
+                    employee.LineIds, model.LineId is null, cancellationToken);
         }
 
-        // "Отправить заказ" клиенту (Фаза 5.1) — весь заказ PDF-вложением, простое письмо.
+        // Снятие исполнителя (Задача D) — на одну строку или на все (model.LineId == null),
+        // та же bulk-семантика, что у назначения. model.EmployeeId задан — снимается только
+        // он, null — все исполнители целевых строк. Снятие уже-снятого идемпотентно: письма
+        // нет, событие в журнал не пишется.
+        //
+        // Персонального «тихого снятия» в UX нет: отправку решает только рубильник канала
+        // события order.unassign_employee (§E.8), поэтому SendEmail в модели отсутствует.
+        [HttpPatch]
+        [Route("UnassignEmployee")]
+        [RequiresPermission(AdminScreens.Orders, PermissionAction.Update)]
+        public async Task UnassignEmployeeAsync([FromBody] OrderUnassignEmployeeModel model, CancellationToken cancellationToken)
+        {
+            OrderUnassignEmployeeResult unassignment;
+            using (var unassignService = new OrderUnassignEmployeeService(cancellationToken))
+                unassignment = await unassignService.UnassignAsync(model);
+
+            if (unassignment.UnassignedLineIds.Count == 0)
+                return;
+
+            using var info = new OrderInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
+            var orderDto = mapper.Map<OrderInfoModel>(await info.GetByIdAsync(model.OrderId, cancellationToken));
+
+            // Один вызов: сервис сам разошлёт персональные письма снятым и общие —
+            // остальным настроенным получателям.
+            await notificationService.SendUnassignmentAsync(orderDto, unassignment.Unassigned, cancellationToken);
+
+            foreach (var employee in unassignment.Unassigned)
+                await OrderEventLog.LogEmployeeUnassignedAsync(model.OrderId, User.GetUserId(), employee.FullName,
+                    employee.LineIds, model.LineId is null, cancellationToken);
+        }
+
+        // "Отправить заказ" клиенту (Фаза 5.1). PDF собирает notification-сервис: вложение
+        // зависит от того, кому уходит конкретное письмо (документ заказа клиенту ≠
+        // персональное задание исполнителю, если админ добавил его в получатели).
         [HttpPost]
         [Route("SendToClient")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Orders, PermissionAction.Update)]
         public async Task SendToClientAsync([FromQuery] int id, CancellationToken cancellationToken)
         {
             using var info = new OrderInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
@@ -196,8 +262,7 @@ namespace ATTours.ClientAPI.Controllers
                             $"Order with id {id} not found.");
             var orderDto = mapper.Map<OrderInfoModel>(order);
 
-            var pdfDocument = OrderPdfService.GenerateOrderDocument(orderDto);
-            await emailSender.SendOrderDocumentAsync(orderDto.UserEmail, orderDto.UserFullName, orderDto.Number, pdfDocument, cancellationToken);
+            await notificationService.SendOrderDocumentAsync(orderDto, cancellationToken);
 
             await OrderEventLog.LogSentToClientAsync(id, User.GetUserId(), orderDto.UserEmail, cancellationToken);
         }
@@ -205,7 +270,7 @@ namespace ATTours.ClientAPI.Controllers
         // Ручная проводка (предоплата/оплата) по строке — только админ, нет платёжного шлюза.
         [HttpPost]
         [Route("AddPayment")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Orders, PermissionAction.Create)]
         public async Task<OrderPaymentInfoModel> AddPaymentAsync([FromBody] OrderPaymentCreateModel model, CancellationToken cancellationToken)
         {
             OrderPaymentInfoModel payment;
@@ -221,7 +286,7 @@ namespace ATTours.ClientAPI.Controllers
         // cascade сносит историю вместе с заказом, положить событие «удалён» некуда.
         [HttpDelete]
         [Route("Delete")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Orders, PermissionAction.Delete)]
         public async Task DeleteAsync([FromQuery] int id, CancellationToken cancellationToken)
         {
             using var deletionService = new OrderDeletionService(cancellationToken);
@@ -234,7 +299,7 @@ namespace ATTours.ClientAPI.Controllers
         // у несуществующего история просто пустая, 404 здесь не нужен.
         [HttpGet]
         [Route("{id:int}/Events")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Orders, PermissionAction.View)]
         public async Task<List<OrderEventInfoModel>> GetEventsAsync(int id, CancellationToken cancellationToken)
         {
             using var info = new OrderEventInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
@@ -274,7 +339,7 @@ namespace ATTours.ClientAPI.Controllers
         // фильтруют ПО СТРОКАМ (Any), заказ попадает в список, если хоть одна строка подходит.
         [HttpGet]
         [Route("GetAll")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.Orders, PermissionAction.View)]
         public async Task<List<OrderInfoModel>> GetAllAsync([FromQuery] int? tourId, [FromQuery] DateOnly? from,
             [FromQuery] DateOnly? to, [FromQuery] OrderStatus? status, CancellationToken cancellationToken)
         {
@@ -288,23 +353,12 @@ namespace ATTours.ClientAPI.Controllers
             return mapper.Map<List<OrderInfoModel>>(orders.OrderByDescending(order => order.CreatedAtUtc));
         }
 
-        // Текст в тело письма исполнителю (Фаза 5.2) — дублирует то, что уже есть в PDF, но
-        // Давид явно просил текст самого письма, а не только вложение (checklist Фаза 5.2).
-        private static string BuildAssignmentDetailsText(OrderInfoModel order, List<int> lineIds)
-        {
-            var blocks = order.Lines
-                .Where(line => lineIds.Contains(line.Id))
-                .Select(line =>
-                    $"Тур: {line.TourTitle}\n" +
-                    $"Дата: {line.TourDate:dd.MM.yyyy}, гостей: {line.GuestCount}\n" +
-                    $"Место встречи: {(string.IsNullOrWhiteSpace(line.PickupDetails) ? "не указано" : line.PickupDetails)}\n" +
-                    $"Навигатор: {(string.IsNullOrWhiteSpace(line.NavigatorLink) ? "не указан" : line.NavigatorLink)}");
-
-            return string.Join("\n\n", blocks);
-        }
-
-        // Владелец или админ — общая проверка для Update/UpdateAsync и любого другого
-        // действия, которое пользователь может совершить над СВОИМ заказом.
+        // Владелец или тот, у кого есть orders.Update — общая проверка для Update/UpdateAsync
+        // и любого другого действия, которое пользователь может совершить над СВОИМ заказом.
+        // Раньше проверялось User.IsInRole(Admin): с гибкими ролями это было бы дырой в обе
+        // стороны — роль, буквально названная «Admin», но лишённая orders.Update, сохраняла
+        // бы доступ к чужим заказам, а кастомная роль с реальным orders.Update — не получала
+        // бы его. HasPermission читает то же самое, чем гейтится admin-путь ниже по файлу.
         private async Task EnsureOwnerOrAdminAsync(int orderId, CancellationToken cancellationToken)
         {
             using var info = new OrderInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
@@ -312,7 +366,7 @@ namespace ATTours.ClientAPI.Controllers
                         ?? throw new ErrorModelException(GlobalErrorCode.OrderNotFound, HttpStatusCode.NotFound,
                             $"Order with id {orderId} not found.");
 
-            if (order.UserId != User.GetUserId() && !User.IsInRole(ApiRoles.Admin))
+            if (order.UserId != User.GetUserId() && !User.HasPermission(AdminScreens.Orders, PermissionAction.Update))
                 throw new ErrorModelException(GlobalErrorCode.OrderAccessForbidden, HttpStatusCode.Forbidden,
                     $"Order with id {orderId} belongs to another user.");
         }

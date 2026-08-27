@@ -1,9 +1,15 @@
 /**
  * Auth domain types and the wire DTOs of `api/Auth` / `api/Users`.
  *
- * A leaf module: it imports nothing, so every other auth file (and every feature) can depend on
- * it without creating a cycle.
+ * A leaf module: the only things it imports are `EmployeeJobRole` (`shared/types/employeeRole.ts`),
+ * `LanguageCode` (`shared/types/language.ts`) and `AccessLevel` (`./screens`), all three themselves
+ * zero-import leaves — so every other auth file (and every feature) can still depend on this module
+ * without creating a cycle.
  */
+
+import type { EmployeeJobRole } from '@/shared/types/employeeRole'
+import type { LanguageCode } from '@/shared/types/language'
+import type { AccessLevel } from './screens'
 
 /* -------------------------------------------------------------------------- */
 /*  Roles                                                                      */
@@ -51,7 +57,25 @@ export interface AuthUser {
   id: number
   username: string
   email: string
-  role: RoleType
+  /**
+   * `null` for an account on a CUSTOM role: such a role has `UserRole.Type = null` server-side, so
+   * the token carries no `role` claim at all. It means "the role is not one of the four built-in
+   * tiers", NOT "no role" — and it is emphatically not a reason to reject the token (doing so used
+   * to sign the user out on every reload). Compare it against `RoleType` only where a BUILT-IN tier
+   * is genuinely the question (SuperAdmin, «Исполнитель»); everything else asks `shared/auth`'s
+   * matrix predicates.
+   */
+  role: RoleType | null
+  /**
+   * Does this account reach anything under `/admin` at all? Written ONLY from an access token
+   * (`is_admin` claim, or a non-empty `perms`) — the same four write sites as `isSuperAdmin`
+   * (ADR 011, ADR 024).
+   *
+   * It exists for the PUBLIC site, which renders one «Админ-панель» link and must not fetch the
+   * whole permission matrix to decide about it. Inside `/admin` nothing reads this: there the
+   * resolved matrix is loaded and authoritative.
+   */
+  hasPanelAccess?: boolean
   firstName?: string
   lastName?: string | null
   phoneNumber?: string
@@ -63,6 +87,15 @@ export interface AuthUser {
    * asking `canManageAdmins(user)` in `permissions.ts` over reading the field at a call site.
    */
   isSuperAdmin?: boolean
+  /**
+   * May this account sign in as somebody else — the `can_impersonate` claim (spec 014 §2.3).
+   *
+   * Same discipline as `isSuperAdmin`/`hasPanelAccess`: written ONLY from an access token (the
+   * backend emits the claim only when the role carries the privilege or the account is SuperAdmin),
+   * never from a DTO — no DTO carries it. Absent and `false` mean the same thing; ask
+   * `canImpersonate(user)` from `permissions.ts` rather than reading the field at a call site.
+   */
+  canImpersonate?: boolean
 }
 
 /**
@@ -87,6 +120,15 @@ export interface AuthState {
 export interface LoginRequest {
   usernameOrEmail: string
   password: string
+  /**
+   * «Запомнить меня» (spec 014 §4). A PER-SESSION choice, not an account setting: `true` gives the
+   * 14-day refresh window and a persistent cookie, `false` (the backend's own default, and the
+   * form's) gives a 1-hour sliding inactivity window and a session cookie.
+   *
+   * Required rather than optional so the single call site has to state which it means — the two
+   * answers have very different security consequences to leave to an implicit default.
+   */
+  rememberMe: boolean
 }
 
 export interface RegisterRequest {
@@ -117,9 +159,20 @@ export interface UserInfoModel {
   email: string
   phoneNumber: string
   roleId: number
-  role: RoleType
+  /** `null` for a custom role — see `AuthUser.role`. */
+  role: RoleType | null
+  /** The role row's name. THE source of a role caption in the UI: with user-created roles, the
+   * `RoleType` enum no longer describes a role completely (a custom one has no enum value at all),
+   * so `roleLabels[user.role]` is not a valid substitute. */
+  roleName: string
   isEmailVerified: boolean
   isLocked: boolean
+  /** Default job role for the assignment popup (Задача D) — `null` when never set, valid for any
+   * account (not only `RoleType.Employee`), the profile field carries no such restriction. */
+  defaultJobRole: EmployeeJobRole | null
+  /** Язык писем этого получателя (редизайн 2026-08-23). Решает, какая языковая версия шаблона
+   * ему уйдёт. Non-nullable: «языка нет» — не состояние, у поля есть безопасный дефолт. */
+  preferredLanguage: LanguageCode
 }
 
 export interface LoginResultModel {
@@ -165,6 +218,22 @@ export interface ChangeRoleRequest {
   roleId: number
 }
 
+/** `PATCH api/Users/SetJobRole` — sets/clears the profile's default job role (Задача D). `null` is
+ * a valid, explicit "снять роль по умолчанию" — the real gate ("нельзя назначить без роли") lives
+ * on the assignment endpoint itself, not here. */
+export interface SetUserJobRoleModel {
+  userId: number
+  jobRole: EmployeeJobRole | null
+}
+
+/** `PATCH api/Users/SetPreferredLanguage` — язык писем пользователя (редизайн 2026-08-23). По нему
+ * notification-сервис выбирает языковую версию шаблона. Non-nullable: значение вне enum сервер не
+ * отбивает ошибкой, а роняет в дефолт (`Russian`) — см. `UserPreferredLanguageUpdateService`. */
+export interface SetUserPreferredLanguageModel {
+  userId: number
+  preferredLanguage: LanguageCode
+}
+
 /**
  * `UserDetailInfoModel` — returned only by `GET api/Users/{id}` (B13). A flat sibling of
  * `UserInfoModel`, not an extension of it on the wire (the backend DTO isn't a subclass either,
@@ -183,9 +252,17 @@ export interface UserDetailInfoModel {
   email: string
   phoneNumber: string | null
   roleId: number
-  role: RoleType
+  /** `null` for a custom role — see `UserInfoModel.role`. */
+  role: RoleType | null
+  /** The role row's name — the only caption the UI should print. See `UserInfoModel.roleName`. */
+  roleName: string
   isEmailVerified: boolean
   isLocked: boolean
+  /** Default job role for the assignment popup (Задача D) — `null` when never set. */
+  defaultJobRole: EmployeeJobRole | null
+  /** Язык писем этого получателя (редизайн 2026-08-23). Решает, какая языковая версия шаблона
+   * ему уйдёт. Non-nullable: «языка нет» — не состояние, у поля есть безопасный дефолт. */
+  preferredLanguage: LanguageCode
   /** Last authenticated request, throttled server-side to at most once per 5 minutes (B7).
    * `null` when the account has never made one since the field was introduced. */
   lastActiveAtUtc: string | null
@@ -216,4 +293,37 @@ export interface LoginHistoryEntryModel {
   userAgent: string
   /** ISO-8601, UTC, no zone suffix guaranteed — parse before formatting. */
   loggedInAtUtc: string
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Resolved permissions (GET api/Auth/MyPermissions)                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One screen's resolved access — the role's level with the account's personal override applied,
+ * then capped to what the screen actually supports (backend `AdminScreens.CapLevel`).
+ *
+ * ONE level, not four booleans, since spec 014 §1: each level implies every action below it. The
+ * permission store still exposes the familiar four-flag `ScreenPermission` to the rest of the app —
+ * it derives them from this level with the same `level >= action` rule the backend enforces.
+ */
+export interface MyScreenPermissionModel {
+  screenKey: string
+  level: AccessLevel
+}
+
+/**
+ * `GET api/Auth/MyPermissions` — the frontend's permission contract (ADR 024).
+ *
+ * Read fresh from the database on every call, unlike the `perms` claim baked into the access token:
+ * the claim is lossy (screens with `canView = false` are dropped from it) and is an internal token
+ * format, not an API contract.
+ */
+export interface MyPermissionsModel {
+  /** System Admin — full access, short-circuits every matrix check. */
+  isAdmin: boolean
+  /** ADR 011's flag. Carried here so one request answers both questions; NOT part of the matrix. */
+  isSuperAdmin: boolean
+  /** EVERY key of the backend registry, including the ones resolved to `canView: false`. */
+  screens: MyScreenPermissionModel[]
 }

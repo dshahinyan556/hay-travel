@@ -13,7 +13,7 @@ using System.Net;
 namespace ATTours.BusinessServices.Services.UpdateServices
 {
     // Админское управление строками уже существующего заказа: добавить/убрать/поправить
-    // предоплату и "детали для выполнения" (ADR 019, checklist-orders-redesign.txt Фаза 1).
+    // предоплату (ADR 019, checklist-orders-redesign.txt Фаза 1).
     // Права владельца здесь не проверяются — эндпоинты только для админа (см. контроллер).
     public class OrderLineService : RepositoryCoreBase<Order, ATToursContextFactory>
     {
@@ -100,10 +100,10 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                        ?? throw new ErrorModelException(GlobalErrorCode.OrderLineNotFound, HttpStatusCode.NotFound,
                            $"Order line with id {model.Id} not found.");
 
+            // "Детали для выполнения" здесь больше не правятся: они переехали на исполнителя
+            // (OrderLineEmployeeUpdateService, редизайн 2026-08-23).
             line.RequiresPrepayment = model.RequiresPrepayment;
             line.PrepaymentAmount = model.PrepaymentAmount;
-            line.PickupDetails = model.PickupDetails;
-            line.NavigatorLink = model.NavigatorLink;
 
             await Context.SaveChangesAsync(cancellationToken);
         }

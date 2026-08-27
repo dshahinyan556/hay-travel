@@ -65,7 +65,7 @@ export function Field({
           {error}
         </p>
       ) : warning ? (
-        <p role="alert" className="text-xs font-medium text-amber-700">
+        <p role="alert" className="text-xs font-medium text-neutral-600">
           {warning}
         </p>
       ) : null}

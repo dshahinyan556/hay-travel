@@ -1,6 +1,8 @@
 import { Card } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import { LanguageCode, TourTranslationType, TourType } from '@/features/admin/lib/enums'
 import type { TourInfoModel } from '@/shared/types/attours'
+import { dashboardCopy } from '../lib/dashboardCopy'
 
 interface StatCardsProps {
   tours: TourInfoModel[]
@@ -30,16 +32,19 @@ interface Stat {
  * Presentational: it receives `tours` and computes the aggregates for render only.
  */
 export function StatCards({ tours }: StatCardsProps) {
+  // Only the CAPTIONS follow the interface language — what each counter counts (including the
+  // English-title check below) is data logic and stays as it is.
+  const copy = useCopy(dashboardCopy).stats
   const total = tours.length
   const tourCount = tours.filter((t) => t.type === TourType.Tour).length
   const excursionCount = tours.filter((t) => t.type === TourType.Excursion).length
   const missingEn = tours.filter((t) => !hasEnglishTitle(t)).length
 
   const stats: Stat[] = [
-    { label: 'Всего позиций', value: total },
-    { label: 'Туров', value: tourCount, dotClassName: 'bg-brand-600' },
-    { label: 'Экскурсий', value: excursionCount, dotClassName: 'bg-indigo-500' },
-    { label: 'Без EN-перевода', value: missingEn, warn: true },
+    { label: copy.total, value: total },
+    { label: copy.tours, value: tourCount, dotClassName: 'bg-neutral-900' },
+    { label: copy.excursions, value: excursionCount, dotClassName: 'border border-neutral-400' },
+    { label: copy.missingEn, value: missingEn, warn: true },
   ]
 
   return (
@@ -48,11 +53,11 @@ export function StatCards({ tours }: StatCardsProps) {
         <Card
           key={stat.label}
           padding="sm"
-          className={stat.warn ? 'border-amber-200 bg-amber-50' : ''}
+          className={stat.warn ? 'border-neutral-900 bg-neutral-50' : ''}
         >
           <div
             className={`flex items-center gap-1.5 text-xs font-medium ${
-              stat.warn ? 'text-amber-800' : 'text-neutral-500'
+              stat.warn ? 'text-neutral-900' : 'text-neutral-500'
             }`}
           >
             {stat.dotClassName ? (
@@ -60,11 +65,7 @@ export function StatCards({ tours }: StatCardsProps) {
             ) : null}
             {stat.label}
           </div>
-          <div
-            className={`mt-1.5 text-3xl font-bold tabular-nums ${
-              stat.warn ? 'text-amber-800' : 'text-neutral-900'
-            }`}
-          >
+          <div className="mt-1.5 text-3xl font-bold tabular-nums text-neutral-900">
             {stat.value}
           </div>
         </Card>

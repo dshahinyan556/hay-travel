@@ -6,9 +6,13 @@
  * filtering in the browser is both simpler and instant.
  */
 
-import type { RoleType, UserInfoModel } from '@/shared/auth'
+import type { UserInfoModel } from '@/shared/auth'
 
-export type RoleFilter = 'all' | RoleType
+/**
+ * A ROLE ID, not a `RoleType`: roles are user-created now, and a custom one has no tier at all —
+ * filtering by tier would silently lump every custom role together under "no role".
+ */
+export type RoleFilter = 'all' | number
 export type UserStatusFilter = 'all' | 'verified' | 'unverified' | 'locked'
 
 export interface UserFilters {
@@ -31,7 +35,7 @@ export function filterUsers(users: UserInfoModel[], filters: UserFilters): UserI
 
   return users.filter((user) => {
     if (query !== '' && !haystack(user).includes(query)) return false
-    if (filters.role !== 'all' && user.role !== filters.role) return false
+    if (filters.role !== 'all' && user.roleId !== filters.role) return false
     if (filters.status === 'verified' && !user.isEmailVerified) return false
     if (filters.status === 'unverified' && user.isEmailVerified) return false
     if (filters.status === 'locked' && !user.isLocked) return false

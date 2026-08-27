@@ -1,42 +1,49 @@
 import { useState } from 'react'
 import { uploadImage } from '@/features/admin/api/uploads'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { adminUiCopy } from './adminUiCopy'
+import { validateImageFile, type ImageValidationErrorCode } from './imageUploadValidation'
 
-// Клиентская копия дефолтов backend `UploadSettings` (appsettings.json "Upload") — сверять
-// вручную при их смене там, отдельного эндпоинта под эти лимиты нет. Проверка здесь только
-// ради быстрой обратной связи до отправки; окончательное решение всегда за бэком.
-const MAX_FILE_SIZE_BYTES = 8_000_000
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-
-function validationError(file: File): string | null {
-  if (!ALLOWED_TYPES.includes(file.type)) return 'Только JPEG, PNG или WebP.'
-  if (file.size > MAX_FILE_SIZE_BYTES) return 'Файл больше 8 МБ.'
-  return null
-}
+/** Why the upload failed, or `null` while it hasn't. Kept as a CODE in state and turned into a
+ * sentence at render time, so a visible error re-reads in the new language when the interface
+ * language is switched instead of staying frozen in the one it was raised in. */
+type UploadErrorCode = ImageValidationErrorCode | 'failed'
 
 /** Upload state + action for one image field/row. `onUploaded` fires with the server URL on
  * success — the caller decides what to do with it (same setter as manual URL typing). */
-export function useImageUpload(onUploaded: (url: string) => void) {
+export function useImageUpload(onUploaded: (url: string) => void): {
+  isUploading: boolean
+  error: string | null
+  upload: (file: File) => Promise<void>
+} {
+  const copy = useCopy(adminUiCopy).images
   const [isUploading, setIsUploading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [errorCode, setErrorCode] = useState<UploadErrorCode | null>(null)
 
   async function upload(file: File) {
-    const clientError = validationError(file)
+    const clientError = validateImageFile(file)
     if (clientError) {
-      setError(clientError)
+      setErrorCode(clientError)
       return
     }
 
-    setError(null)
+    setErrorCode(null)
     setIsUploading(true)
     try {
       const { url } = await uploadImage(file)
       onUploaded(url)
     } catch {
-      setError('Не удалось загрузить файл.')
+      setErrorCode('failed')
     } finally {
       setIsUploading(false)
     }
   }
 
-  return { isUploading, error, upload }
+  const errorMessage: Record<UploadErrorCode, string> = {
+    type: copy.errorFileType,
+    size: copy.errorFileSize,
+    failed: copy.errorUploadFailed,
+  }
+
+  return { isUploading, error: errorCode === null ? null : errorMessage[errorCode], upload }
 }

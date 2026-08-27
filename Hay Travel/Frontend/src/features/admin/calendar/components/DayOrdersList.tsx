@@ -1,5 +1,7 @@
+import { OrderStatusBadge, type OrderStatusBadgeTone } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import { OrderStatus } from '@/shared/types/booking'
-import { calendarCopy, guestsUnit, ordersUnit } from '../lib/calendarCopy'
+import { calendarCopy } from '../lib/calendarCopy'
 import type { CalendarOrderLine } from '../lib/calendarModel'
 
 export interface DayOrdersListProps {
@@ -11,24 +13,16 @@ export interface DayOrdersListProps {
   tourTitle: (tourId: number) => string
 }
 
-const statusLabels: Record<OrderStatus, string> = {
-  [OrderStatus.Open]: calendarCopy.statusOpen,
-  [OrderStatus.Hold]: calendarCopy.statusHold,
-  [OrderStatus.Approved]: calendarCopy.statusApproved,
-  [OrderStatus.Rejected]: calendarCopy.statusRejected,
-  [OrderStatus.ReadyForAssignment]: calendarCopy.statusReadyForAssignment,
-  [OrderStatus.PendingPayment]: calendarCopy.statusPendingPayment,
-  [OrderStatus.Completed]: calendarCopy.statusCompleted,
-}
-
-const statusClasses: Record<OrderStatus, string> = {
-  [OrderStatus.Open]: 'bg-amber-50 text-amber-700',
-  [OrderStatus.Hold]: 'bg-neutral-100 text-neutral-500',
-  [OrderStatus.Approved]: 'bg-emerald-50 text-emerald-700',
-  [OrderStatus.Rejected]: 'bg-rose-50 text-rose-700',
-  [OrderStatus.ReadyForAssignment]: 'bg-sky-50 text-sky-700',
-  [OrderStatus.PendingPayment]: 'bg-amber-50 text-amber-700',
-  [OrderStatus.Completed]: 'bg-brand-50 text-brand-800',
+/** Same tone mapping as `orders/lib/ordersCopy.ts`'s `statusBadgeTone` — kept as a local literal
+ * rather than a cross-feature import (calendar doesn't otherwise reach into the orders feature). */
+const statusTones: Record<OrderStatus, OrderStatusBadgeTone> = {
+  [OrderStatus.Open]: 'neutral',
+  [OrderStatus.Hold]: 'muted',
+  [OrderStatus.Approved]: 'strong',
+  [OrderStatus.Rejected]: 'muted',
+  [OrderStatus.ReadyForAssignment]: 'neutral',
+  [OrderStatus.PendingPayment]: 'neutral',
+  [OrderStatus.Completed]: 'strong',
 }
 
 /**
@@ -41,10 +35,12 @@ const statusClasses: Record<OrderStatus, string> = {
  * there it's the only total on the card.
  */
 export function DayOrdersList({ orders, tourTitle }: DayOrdersListProps) {
+  const copy = useCopy(calendarCopy)
+
   if (orders.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-neutral-200 px-4 py-8 text-center text-sm text-neutral-500">
-        {calendarCopy.noOrders}
+        {copy.noOrders}
       </p>
     )
   }
@@ -64,7 +60,7 @@ export function DayOrdersList({ orders, tourTitle }: DayOrdersListProps) {
           <section key={tourId}>
             <h4 className="text-sm font-semibold text-neutral-900">{tourTitle(tourId)}</h4>
             <p className="mt-0.5 text-xs text-neutral-500">
-              {ordersUnit(tourLines.length)} · {guestsUnit(guests)}
+              {copy.ordersUnit(tourLines.length)} · {copy.guestsUnit(guests)}
             </p>
 
             <ul className="mt-2 flex flex-col gap-2">
@@ -79,21 +75,21 @@ export function DayOrdersList({ orders, tourTitle }: DayOrdersListProps) {
                     <span className="font-semibold break-words text-neutral-900">
                       {line.userFullName.trim() || line.userEmail}
                     </span>
-                    <span
-                      className={`w-fit shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusClasses[line.status]}`}
-                    >
-                      {statusLabels[line.status]}
-                    </span>
+                    <OrderStatusBadge
+                      className="w-fit shrink-0"
+                      label={copy.statusLabels[line.status]}
+                      tone={statusTones[line.status]}
+                    />
                   </div>
                   <p className="mt-1 text-xs text-neutral-500">
-                    {guestsUnit(line.guestCount)} · Заказ №{line.orderNumber} ·{' '}
+                    {copy.guestsUnit(line.guestCount)} · {copy.orderNumber(line.orderNumber)} ·{' '}
                     {/* The backend stores `Kind=Utc` correctly since 2026-08-11, so the browser
                         converts to local time on its own. */}
-                    {new Date(line.createdAtUtc).toLocaleString('ru-RU')}
+                    {copy.formatDateTime(line.createdAtUtc)}
                   </p>
                   <a
                     href={`mailto:${line.userEmail}`}
-                    className="mt-1 inline-block text-xs break-all text-brand-700 hover:underline"
+                    className="mt-1 inline-block text-xs break-all text-neutral-700 hover:underline"
                   >
                     {line.userEmail}
                   </a>

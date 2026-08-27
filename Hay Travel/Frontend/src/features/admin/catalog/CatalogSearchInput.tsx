@@ -17,7 +17,7 @@ export function CatalogSearchInput({ value, onChange, placeholder }: CatalogSear
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={placeholder}
-        className="w-full rounded-lg border border-neutral-300 bg-white py-2 pl-9 pr-3 text-sm text-neutral-900 transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] placeholder:text-neutral-400 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+        className="w-full rounded-lg border border-neutral-300 bg-white py-2 pl-9 pr-3 text-sm text-neutral-900 transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] placeholder:text-neutral-400 focus:border-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/15"
       />
     </div>
   )

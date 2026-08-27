@@ -12,6 +12,12 @@ const KEYS: Record<RoleType, TranslationKey> = {
   [RoleType.Employee]: 'auth.role.employee',
 }
 
-export function roleLabelKey(role: RoleType): TranslationKey {
-  return KEYS[role]
+/**
+ * `null` means the account is on a CUSTOM role (its `UserRole.Type` is null, so the token carries
+ * no role claim). The public `AuthUser` does not know that role's NAME and deliberately should not:
+ * the internal names of an agency's roles are not customer-facing. A neutral "Сотрудник"/"Staff" is
+ * the honest label here; the admin panel, which does have the name, shows `user.roleName`.
+ */
+export function roleLabelKey(role: RoleType | null): TranslationKey {
+  return role === null ? 'auth.role.custom' : KEYS[role]
 }

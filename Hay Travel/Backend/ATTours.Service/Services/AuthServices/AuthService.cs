@@ -2,8 +2,10 @@ using ArmeniaTours.DataLayer;
 using ATTours.BusinessServices.Email;
 using ATTours.BusinessServices.Geo;
 using ATTours.BusinessServices.Security;
+using ATTours.BusinessServices.Services.Authorization;
 using ATTours.BusinessServices.Services.ValidationServices;
 using ATTours.Common.DTO.Auth;
+using ATTours.Common.DTO.Authorization;
 using ATTours.Common.Entities;
 using ATTours.Common.Enums;
 using ATTours.Common.Settings;
@@ -13,6 +15,7 @@ using ATTours.ContextRepository.RepositoryAbstraction.Relational;
 using ATTours.ContextRepository.RepositoryImplementation.Relational;
 using ATTours.Exceptions;
 using ATTours.Helper.Enums;
+using ATTours.Helper.Security;
 using AutoMapper;
 using System.Net;
 
@@ -50,9 +53,11 @@ namespace ATTours.BusinessServices.Services.AuthServices
         private readonly IJwtTokenService jwtTokenService;
         private readonly IEmailSender emailSender;
         private readonly IGeoIpLookup geoIpLookup;
+        private readonly IAccessTokenRevocationRegistry accessTokenRevocationRegistry;
 
         public AuthService(IMapper mapper, IPasswordHasher passwordHasher, IJwtTokenService jwtTokenService,
-            IEmailSender emailSender, IGeoIpLookup geoIpLookup)
+            IEmailSender emailSender, IGeoIpLookup geoIpLookup,
+            IAccessTokenRevocationRegistry accessTokenRevocationRegistry)
             : base(CommonSettings.Instance.ATToursConnectionString)
         {
             this.mapper = mapper;
@@ -60,6 +65,7 @@ namespace ATTours.BusinessServices.Services.AuthServices
             this.jwtTokenService = jwtTokenService;
             this.emailSender = emailSender;
             this.geoIpLookup = geoIpLookup;
+            this.accessTokenRevocationRegistry = accessTokenRevocationRegistry;
         }
 
         #region Repositories
@@ -80,6 +86,9 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
         private IEntityRepository<LoginHistory>? loginHistoryRepository;
         private IEntityRepository<LoginHistory> LoginHistoryRepository => loginHistoryRepository ??= new EntityRepository<LoginHistory>(Context);
+
+        private IEntityRepository<ImpersonationEvent>? impersonationEventRepository;
+        private IEntityRepository<ImpersonationEvent> ImpersonationEventRepository => impersonationEventRepository ??= new EntityRepository<ImpersonationEvent>(Context);
 
         #endregion
 
@@ -200,14 +209,18 @@ namespace ATTours.BusinessServices.Services.AuthServices
             user.FailedLoginAttempts = 0;
             user.LockedUntil = null;
 
-            var refreshToken = jwtTokenService.CreateRefreshToken();
+            // Длина окна сессии — выбор пользователя на этом входе (ADR 029): 14 дней с
+            // «запомнить меня» и час неактивности без него. Выбор посессионный, на аккаунте
+            // не хранится, поэтому живёт на самой строке токена.
+            var refreshToken = jwtTokenService.CreateRefreshToken(model.RememberMe);
             await RefreshTokenRepository.AddAsync(new RefreshToken
             {
                 UserId = user.Id,
                 TokenHash = refreshToken.TokenHash,
                 ExpiresAtUtc = refreshToken.ExpiresAtUtc,
                 CreatedAtUtc = now,
-                CreatedByIp = requestContext.IpAddress
+                CreatedByIp = requestContext.IpAddress,
+                RememberMe = model.RememberMe
             }, cancellationToken);
 
             // История входов (C1, 2026-08-09) — только здесь: ротация refresh-токена
@@ -230,7 +243,7 @@ namespace ATTours.BusinessServices.Services.AuthServices
             // запись в историю входов фиксируются вместе.
             await UserRepository.SaveChangesAsync(cancellationToken);
 
-            var accessToken = jwtTokenService.CreateAccessToken(user);
+            var accessToken = jwtTokenService.CreateAccessToken(user, await ResolvePermissionsAsync(user, cancellationToken));
             var result = new LoginResultModel
             {
                 AccessToken = accessToken.AccessToken,
@@ -239,7 +252,7 @@ namespace ATTours.BusinessServices.Services.AuthServices
                 ForceChangePassword = user.ForceToChangePass
             };
 
-            return new LoginOutcome(result, new IssuedRefreshToken(refreshToken.Token, refreshToken.ExpiresAtUtc));
+            return new LoginOutcome(result, new IssuedRefreshToken(refreshToken.Token, refreshToken.ExpiresAtUtc, model.RememberMe));
         }
 
         // Дев-бэкдор (см. IAuthService.DevLoginAsync) — та же выдача токенов, что и
@@ -255,18 +268,21 @@ namespace ATTours.BusinessServices.Services.AuthServices
                     "Account has been deleted.");
 
             var now = DateTime.UtcNow;
-            var refreshToken = jwtTokenService.CreateRefreshToken();
+
+            // Дев-сессия всегда короткая: «запомнить меня» через бэкдор не предлагается.
+            var refreshToken = jwtTokenService.CreateRefreshToken(rememberMe: false);
             await RefreshTokenRepository.AddAsync(new RefreshToken
             {
                 UserId = user.Id,
                 TokenHash = refreshToken.TokenHash,
                 ExpiresAtUtc = refreshToken.ExpiresAtUtc,
                 CreatedAtUtc = now,
-                CreatedByIp = requestContext.IpAddress
+                CreatedByIp = requestContext.IpAddress,
+                RememberMe = false
             }, cancellationToken);
             await UserRepository.SaveChangesAsync(cancellationToken);
 
-            var accessToken = jwtTokenService.CreateAccessToken(user);
+            var accessToken = jwtTokenService.CreateAccessToken(user, await ResolvePermissionsAsync(user, cancellationToken));
             var result = new LoginResultModel
             {
                 AccessToken = accessToken.AccessToken,
@@ -275,7 +291,7 @@ namespace ATTours.BusinessServices.Services.AuthServices
                 ForceChangePassword = false
             };
 
-            return new LoginOutcome(result, new IssuedRefreshToken(refreshToken.Token, refreshToken.ExpiresAtUtc));
+            return new LoginOutcome(result, new IssuedRefreshToken(refreshToken.Token, refreshToken.ExpiresAtUtc, false));
         }
 
         public async Task<RefreshOutcome> RefreshAsync(string? refreshToken, RequestContextModel requestContext, CancellationToken cancellationToken = default)
@@ -325,7 +341,9 @@ namespace ATTours.BusinessServices.Services.AuthServices
                 throw await RevokeAndRejectAsync(storedToken, now, GlobalErrorCode.EmailNotVerified,
                     "Email is not verified.", cancellationToken);
 
-            var rotatedToken = jwtTokenService.CreateRefreshToken();
+            // Окно считается заново от «сейчас» и той же длины, что выбрал пользователь на
+            // входе (ADR 029) — сессия скользит, пока ей пользуются.
+            var rotatedToken = jwtTokenService.CreateRefreshToken(storedToken.RememberMe);
 
             storedToken.RevokedAtUtc = now;
             storedToken.ReplacedByTokenHash = rotatedToken.TokenHash;
@@ -336,13 +354,25 @@ namespace ATTours.BusinessServices.Services.AuthServices
                 TokenHash = rotatedToken.TokenHash,
                 ExpiresAtUtc = rotatedToken.ExpiresAtUtc,
                 CreatedAtUtc = now,
-                CreatedByIp = requestContext.IpAddress
+                CreatedByIp = requestContext.IpAddress,
+                // Оба поля — свойства СЕССИИ, а не отдельного токена: без переноса
+                // «запомнить меня» схлопнулось бы до часа, а баннер impersonation
+                // пропал бы на первой же ротации (spec 014 §3.3, §4.3).
+                RememberMe = storedToken.RememberMe,
+                ImpersonatedByUserId = storedToken.ImpersonatedByUserId
             }, cancellationToken);
 
             await RefreshTokenRepository.SaveChangesAsync(cancellationToken);
 
-            var accessToken = jwtTokenService.CreateAccessToken(storedToken.User);
-            return new RefreshOutcome(accessToken, new IssuedRefreshToken(rotatedToken.Token, rotatedToken.ExpiresAtUtc));
+            // Права перерезолвливаются на КАЖДОЙ ротации (§0.2): именно это, а не отдельный
+            // форс-релогин, применяет изменения матрицы/override у уже залогиненных
+            // пользователей — максимум через один TTL access-токена.
+            var accessToken = jwtTokenService.CreateAccessToken(user,
+                await ResolvePermissionsAsync(user, cancellationToken),
+                storedToken.ImpersonatedByUserId);
+
+            return new RefreshOutcome(accessToken,
+                new IssuedRefreshToken(rotatedToken.Token, rotatedToken.ExpiresAtUtc, storedToken.RememberMe));
         }
 
         public async Task LogoutAsync(string? refreshToken, CancellationToken cancellationToken = default)
@@ -361,6 +391,151 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
             storedToken.RevokedAtUtc = DateTime.UtcNow;
             await RefreshTokenRepository.SaveChangesAsync(cancellationToken);
+        }
+
+        #endregion
+
+        #region Impersonation (spec 014 §3, ADR 028/030)
+
+        // «Войти как пользователь». Односторонняя операция: возврата в свой аккаунт нет —
+        // сессии админа гасятся здесь же, обратно он попадает только обычным логином
+        // (требование бизнеса, ADR 028). Живёт в AuthService, потому что это ровно смена
+        // состояния аутентификации: отзыв сессий + выдача токенов.
+        public async Task<LoginOutcome> ImpersonateAsync(int actingUserId, int targetUserId,
+            RequestContextModel requestContext, CancellationToken cancellationToken = default)
+        {
+            var actingUser = await UserRepository.AsQueryable()
+                                                 .Include(x => x.Role)
+                                                 .SingleOrDefaultAsync(x => x.Id == actingUserId && !x.IsDeleted, cancellationToken)
+                             ?? throw InvalidCredentials();
+
+            var targetUser = await UserRepository.AsQueryable()
+                                                 .Include(x => x.Role)
+                                                 .SingleOrDefaultAsync(x => x.Id == targetUserId, cancellationToken);
+
+            // Тот же код и статус, что у остального UsersController для «нет такого юзера».
+            if (targetUser is null || targetUser.IsDeleted)
+                throw new ErrorModelException(GlobalErrorCode.RelationalEntityNotFound, HttpStatusCode.NotFound,
+                    $"User with id {targetUserId} not found.");
+
+            if (targetUserId == actingUserId)
+                throw new ErrorModelException(GlobalErrorCode.CannotImpersonateSelf, HttpStatusCode.BadRequest,
+                    "You cannot impersonate yourself.");
+
+            // Защита от эскалации привилегий (ADR 028): роль с can_impersonate — это не
+            // право «стать кем угодно». Не-SuperAdmin может входить только в «обычные»
+            // аккаунты; иначе низкодоверенная роль дотянулась бы до SuperAdmin'а.
+            // Проверяем по БД, а не по claim'ам токена — как GuardRoleChange.
+            if (!actingUser.IsSuperAdmin &&
+                (targetUser.IsSuperAdmin || targetUser.Role?.CanManageAdmins == true || targetUser.Role?.CanImpersonate == true))
+                throw new ErrorModelException(GlobalErrorCode.ImpersonationTargetNotAllowed, HttpStatusCode.Forbidden,
+                    "You are not allowed to impersonate this user.");
+
+            var now = DateTime.UtcNow;
+
+            // Состояние цели проверяется ЗДЕСЬ, теми же кодами и в том же порядке, что в
+            // LoginAsync/RefreshAsync (блокировка, затем почта). Без этого вход в
+            // заблокированный/неподтверждённый аккаунт выдавал бы рабочую сессию, а падал
+            // бы только на первой ротации в RefreshAsync — непрозрачно для админа.
+            // Статус — 400, а НЕ 401/403 как на логине: отказ относится к цели, а не к
+            // вызывающему; 401 фронт админки трактует как «мой токен мёртв» (§8) и вышел бы
+            // из сессии, 403 — как «нет права impersonate».
+            // Порядок относительно гарда эскалации намеренный: он идёт раньше, чтобы
+            // не-SuperAdmin не мог по коду ошибки узнать состояние привилегированной учётки.
+            if (targetUser.LockedUntil.HasValue && targetUser.LockedUntil.Value > now)
+                throw new ErrorModelException(GlobalErrorCode.AccountLocked, HttpStatusCode.BadRequest,
+                    "Target account is temporarily locked.");
+
+            if (!targetUser.IsEmailVerified)
+                throw new ErrorModelException(GlobalErrorCode.EmailNotVerified, HttpStatusCode.BadRequest,
+                    "Target account email is not verified.");
+
+            // Сессия impersonation'а всегда короткая: «запомнить меня» для чужого аккаунта
+            // не имеет смысла (spec 014 §3.3).
+            var refreshToken = jwtTokenService.CreateRefreshToken(rememberMe: false);
+
+            using (var transaction = TransactionsHelper.CreateAsyncTransactionScope())
+            {
+                // Сессия админа перестаёт существовать на сервере.
+                await RevokeAllRefreshTokensAsync(actingUserId, now, null, cancellationToken);
+
+                await RefreshTokenRepository.AddAsync(new RefreshToken
+                {
+                    UserId = targetUserId,
+                    TokenHash = refreshToken.TokenHash,
+                    ExpiresAtUtc = refreshToken.ExpiresAtUtc,
+                    CreatedAtUtc = now,
+                    CreatedByIp = requestContext.IpAddress,
+                    RememberMe = false,
+                    ImpersonatedByUserId = actingUserId
+                }, cancellationToken);
+
+                await ImpersonationEventRepository.AddAsync(new ImpersonationEvent
+                {
+                    ImpersonatorUserId = actingUserId,
+                    TargetUserId = targetUserId,
+                    CreatedAtUtc = now,
+                    IpAddress = requestContext.IpAddress,
+                    UserAgent = requestContext.UserAgent
+                }, cancellationToken);
+
+                // Мгновенный отзыв уже выданных access-токенов админа (ADR 030): отзыва
+                // refresh-токенов мало — stateless JWT прожил бы ещё до 15 минут в другой
+                // вкладке. Запись в реестр — in-memory и вне транзакции; при откате коммита
+                // она лишь заставит самого админа перелогиниться (fail-safe направление,
+                // лишних прав не даёт никогда).
+                accessTokenRevocationRegistry.Revoke(actingUserId, now,
+                    now.AddMinutes(JwtSettings.Instance.AccessTokenMinutes));
+
+                await RefreshTokenRepository.SaveChangesAsync(cancellationToken);
+                transaction.Complete();
+            }
+
+            var accessToken = jwtTokenService.CreateAccessToken(targetUser,
+                await ResolvePermissionsAsync(targetUser, cancellationToken),
+                impersonatedByUserId: actingUserId);
+
+            var result = new LoginResultModel
+            {
+                AccessToken = accessToken.AccessToken,
+                ExpiresInSeconds = accessToken.ExpiresInSeconds,
+                User = mapper.Map<UserInfoModel>(targetUser),
+                // Чужой аккаунт админ не «чинит»: форсить смену пароля в этой сессии нечего.
+                ForceChangePassword = false
+            };
+
+            return new LoginOutcome(result, new IssuedRefreshToken(refreshToken.Token, refreshToken.ExpiresAtUtc, false));
+        }
+
+        #endregion
+
+        #region Permissions
+
+        // Свежий (из БД, не из токена) резолв прав текущего пользователя для гардов фронта
+        // (architecture-flexible-roles.md §3.3, §4.1). Enforcement на бэке при этом остаётся
+        // по claim'у токена — UI просто перерисовывается, не дожидаясь ротации.
+        public async Task<MyPermissionsModel> GetMyPermissionsAsync(int userId, CancellationToken cancellationToken = default)
+        {
+            var user = await UserRepository.AsQueryable()
+                                           .Include(x => x.Role)
+                                           .SingleOrDefaultAsync(x => x.Id == userId && !x.IsDeleted, cancellationToken)
+                       ?? throw InvalidCredentials();
+
+            var resolved = await ResolvePermissionsAsync(user, cancellationToken);
+
+            var result = mapper.Map<MyPermissionsModel>(resolved);
+            // Вне матрицы прав по решению 10 чек-листа — доклеивается отдельным полем.
+            result.IsSuperAdmin = user.IsSuperAdmin;
+
+            return result;
+        }
+
+        // Резолвер держит собственный контекст (как и остальные сервисы, создаваемые через
+        // `new`), поэтому живёт ровно на время вызова и не может закрыть контекст AuthService.
+        private static async Task<ResolvedPermissionSet> ResolvePermissionsAsync(User user, CancellationToken cancellationToken)
+        {
+            using var resolver = new PermissionResolutionService(cancellationToken);
+            return await resolver.ResolveAsync(user.Id, user.RoleId, user.IsSuperAdmin);
         }
 
         #endregion

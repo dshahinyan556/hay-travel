@@ -1,5 +1,7 @@
 import { Card, Checkbox } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import { readLocalized } from '@/features/admin/catalog/lib/catalogMapper'
+import { tourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
 import type { RegionInfoModel } from '@/shared/types/attours'
 import type { TourRegionFormState } from '@/features/admin/types/form'
 
@@ -18,21 +20,24 @@ interface RegionPickerProps {
  * notes — there's nothing to type ahead of.
  */
 export function RegionPicker({ regions, selected, onToggle }: RegionPickerProps) {
+  const copy = useCopy(tourFormCopy)
   const sorted = [...regions].sort((a, b) => a.sortOrder - b.sortOrder)
   const isSelected = (regionId: number) => selected.some((r) => r.regionId === regionId)
 
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-sm font-semibold text-neutral-700">Регионы</span>
+      <span className="text-sm font-semibold text-neutral-700">{copy.regions.label}</span>
       {sorted.length === 0 ? (
-        <p className="text-xs text-neutral-500">Список регионов пуст.</p>
+        <p className="text-xs text-neutral-500">{copy.regions.empty}</p>
       ) : (
         <Card padding="sm" className="!bg-neutral-50">
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
             {sorted.map((region) => (
               <Checkbox
                 key={region.id}
-                label={readLocalized(region.translations).ru || region.slug}
+                // A region's name is content, but the panel shows it in ITS language when the
+                // data has one (ADR 021, decision 5) — `slug` only when neither is filled in.
+                label={copy.localizedName(readLocalized(region.translations)) || region.slug}
                 checked={isSelected(region.id)}
                 onChange={() => onToggle(region.id)}
               />

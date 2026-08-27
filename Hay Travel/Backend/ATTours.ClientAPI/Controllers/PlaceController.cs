@@ -3,12 +3,13 @@ using ATTours.BusinessServices.Services.DeleteServices;
 using ATTours.BusinessServices.Services.InfoServices;
 using ATTours.BusinessServices.Services.UpdateServices;
 using ATTours.ClientAPI.Authorization;
+using ATTours.Common.Authorization;
 using ATTours.Common.Dto.Init;
 using ATTours.Common.DTO.Info;
 using ATTours.Common.Entities;
+using ATTours.Common.Enums;
 using ATTours.Common.Extensions;
 using AutoMapper;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ATTours.ClientAPI.Controllers
@@ -20,11 +21,11 @@ namespace ATTours.ClientAPI.Controllers
     [Route("api/[controller]")]
     public class PlaceController(IMapper mapper) : Controller
     {
-        // Чтение каталога доступно и тур-менеджеру: из этих точек он собирает маршрут
-        // в редакторе тура. Правка самого каталога — только админ.
+        // Права по ключу "catalog.places": в сиде чтение есть у тур-менеджера (из этих
+        // точек он собирает маршрут в редакторе тура), правка каталога — у админа.
         [HttpGet]
         [Route("GetAll")]
-        [Authorize(Roles = ApiRoles.TourManagerOrAdmin)]
+        [RequiresPermission(AdminScreens.CatalogPlaces, PermissionAction.View)]
         public async Task<List<PlaceInfoModel>> GetAllAsync()
         {
             using var info = new PlaceInfo();
@@ -34,7 +35,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpPost]
         [Route("Create")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.CatalogPlaces, PermissionAction.Create)]
         public async Task<PlaceInfoModel> CreateAsync([FromBody] PlaceCreateModel model)
         {
             var entity = mapper.Map<Place>(model);
@@ -47,7 +48,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpPut]
         [Route("Update")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.CatalogPlaces, PermissionAction.Update)]
         public async Task<PlaceInfoModel> UpdateAsync([FromBody] PlaceInfoModel model)
         {
             var entity = mapper.Map<Place>(model);
@@ -60,7 +61,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpDelete]
         [Route("Delete")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.CatalogPlaces, PermissionAction.Delete)]
         public async Task DeleteAsync([FromQuery] int id)
         {
             using var deletionService = new PlaceDeletionService();
