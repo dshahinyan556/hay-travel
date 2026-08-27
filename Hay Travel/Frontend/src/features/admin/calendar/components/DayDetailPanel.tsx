@@ -1,9 +1,11 @@
 import { useMemo, useRef } from 'react'
 import { parseISODate } from '@/shared/lib/date'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { SidePanel } from '@/features/admin/ui/SidePanel'
 import type { TourInfoModel } from '@/shared/types/attours'
 import type { CalendarDayModel, ClosureRuleInfoModel, DayOfWeekCode } from '@/shared/types/booking'
-import { calendarCopy, monthLabelsGenitive, weekdayLabelsFull } from '../lib/calendarCopy'
+import { calendarCopy, type CalendarCopy } from '../lib/calendarCopy'
 import { tourTitleResolver, type CalendarOrderLine } from '../lib/calendarModel'
 import { DayClosureControls } from './DayClosureControls'
 import { DayOrdersList } from './DayOrdersList'
@@ -21,18 +23,23 @@ export interface DayDetailPanelProps {
   /** Бэкдейтинг запрещён везде (B12, 2026-08-13) — прошедший день остаётся открываемым
    * (история заказов читается), но его availability-контролы заблокированы. */
   isPast: boolean
+  /** `calendar.Create` && `calendar.Delete` — see `DayClosureControls.canManage`. */
+  canManage: boolean
+  /** Why the closure block is read-only when `canManage` is false. */
+  readOnlyHint: string
   onClose: () => void
   onToggleClosure: (tourIds: (number | null)[], close: boolean, reason: string | null) => void
 }
 
-/** "12 августа 2026, среда" — genitive month, which is what a date reads like in Russian. */
-function formatFullDate(dateISO: string): string {
+/** "12 августа 2026, среда" / "12 August 2026, Wednesday" — genitive month, which is what a date
+ * reads like in Russian (English has no genitive, so its list is the plain one). */
+function formatFullDate(dateISO: string, copy: CalendarCopy): string {
   const date = parseISODate(dateISO)
   if (date === null) return dateISO
   // `getDay()` is Sunday-first, which is exactly `System.DayOfWeek` — the same numbering
-  // `weekdayLabelsFull` is keyed by.
-  const weekday = weekdayLabelsFull[date.getDay() as DayOfWeekCode]
-  return `${date.getDate()} ${monthLabelsGenitive[date.getMonth()]} ${date.getFullYear()}, ${weekday}`
+  // `copy.weekdayFull` is keyed by.
+  const weekday = copy.weekdayFull[date.getDay() as DayOfWeekCode]
+  return `${date.getDate()} ${copy.monthsGenitive[date.getMonth()]} ${date.getFullYear()}, ${weekday}`
 }
 
 /**
@@ -51,15 +58,20 @@ export function DayDetailPanel({
   rules,
   pending,
   isPast,
+  canManage,
+  readOnlyHint,
   onClose,
   onToggleClosure,
 }: DayDetailPanelProps) {
+  const copy = useCopy(calendarCopy)
+  const { locale } = useLocale()
+
   // `SidePanel` stays mounted through its slide-out; `dateISO` is already `null` by then, and a
   // heading that blanks mid-animation looks like a bug. Remember the last real one.
   const lastTitle = useRef('')
-  if (dateISO !== null) lastTitle.current = formatFullDate(dateISO)
+  if (dateISO !== null) lastTitle.current = formatFullDate(dateISO, copy)
 
-  const tourTitle = useMemo(() => tourTitleResolver(tours), [tours])
+  const tourTitle = useMemo(() => tourTitleResolver(tours, locale, copy), [tours, locale, copy])
 
   return (
     <SidePanel open={open} onClose={onClose} title={lastTitle.current}>
@@ -72,15 +84,17 @@ export function DayDetailPanel({
             rules={rules}
             pending={pending}
             isPast={isPast}
+            canManage={canManage}
+            readOnlyHint={readOnlyHint}
             onToggle={onToggleClosure}
           />
 
           <section className="border-t border-neutral-200 pt-5">
-            <h3 className="text-sm font-bold text-neutral-900">{calendarCopy.ordersTitle}</h3>
+            <h3 className="text-sm font-bold text-neutral-900">{copy.ordersTitle}</h3>
             <div className="mt-3">
               {day === null ? (
                 <p className="rounded-xl border border-dashed border-neutral-200 px-4 py-8 text-center text-sm text-neutral-500">
-                  {calendarCopy.noDayData}
+                  {copy.noDayData}
                 </p>
               ) : (
                 <DayOrdersList orders={orders} tourTitle={tourTitle} />

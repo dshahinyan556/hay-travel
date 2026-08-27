@@ -1,5 +1,9 @@
 import type { TourInfoModel } from '@/shared/types/attours'
-import { TourThumb, TypeBadge, tourTitleRu } from '@/features/admin/ui/TourTableParts'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
+import { adminCommonCopy } from '@/features/admin/lib/adminCommonCopy'
+import { TourThumb, TypeBadge, tourTitle } from '@/features/admin/ui/TourTableParts'
+import { productsCopy } from '../lib/productsCopy'
 
 export type ProductsView = 'active' | 'featured' | 'archived'
 
@@ -13,12 +17,21 @@ interface ProductsTableProps {
   /** Active view only: false once 6 tours are already featured — disables the heart button on
    * tours that aren't featured yet (removing an already-featured one is always allowed). */
   canFeatureMore: boolean
-  /** Role gate for `DeleteTour` (Admin only) — hides the permanent-delete action in the archive
-   * view. A TourManager can still archive and restore, which is reversible. */
+  /** `products.Delete` — hides the permanent-delete action in the archive view. Archiving and
+   * restoring stay available on `products.Update`, being reversible. */
   canDelete: boolean
-  /** Role gate for `SetFeatured`/`ReorderFeatured` (Admin only) — hides the heart toggle and the
-   * reorder controls. */
+  /**
+   * `products.Update` — hides the heart toggle and the reorder controls.
+   *
+   * Featuring is an UPDATE, not a category of its own: the backend moved `SetFeatured` and
+   * `ReorderFeatured` under `products.Update` (§0.3), and the two must agree or the UI offers a
+   * control that answers 403.
+   */
   canFeature: boolean
+  /** `products.Update` — the publish toggle and archive/restore. Separate prop from `canFeature`
+   * even though both currently resolve from the same flag: they gate different endpoints, and
+   * collapsing them would hide that if either ever moves. */
+  canUpdate: boolean
   /** Open a product for editing (row click / title click). */
   onOpen: (tour: TourInfoModel) => void
   /** Active view: toggle publication. */
@@ -48,16 +61,17 @@ function PublishToggle({
   pending: boolean
   onToggle: () => void
 }) {
+  const copy = useCopy(productsCopy).table
   return (
     <button
       type="button"
       role="switch"
       aria-checked={isActive}
-      aria-label={isActive ? 'Снять с публикации' : 'Опубликовать'}
+      aria-label={isActive ? copy.unpublish : copy.publish}
       disabled={pending}
       onClick={onToggle}
-      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 disabled:cursor-not-allowed disabled:opacity-60 ${
-        isActive ? 'bg-brand-600' : 'bg-neutral-300'
+      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30 disabled:cursor-not-allowed disabled:opacity-60 ${
+        isActive ? 'bg-neutral-950' : 'bg-neutral-300'
       }`}
     >
       <span
@@ -113,6 +127,7 @@ function FeaturedToggle({
   disabled: boolean
   onToggle: () => void
 }) {
+  const copy = useCopy(productsCopy).table
   return (
     <button
       type="button"
@@ -122,9 +137,9 @@ function FeaturedToggle({
       }}
       disabled={disabled}
       aria-pressed={isFeatured}
-      title={isFeatured ? 'Убрать из избранного' : 'Добавить в избранное'}
+      title={isFeatured ? copy.unfeature : copy.feature}
       className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors disabled:cursor-not-allowed disabled:opacity-30 ${
-        isFeatured ? 'text-rose-600 hover:bg-rose-50' : 'text-neutral-400 hover:bg-neutral-100'
+        isFeatured ? 'text-neutral-900 hover:bg-neutral-100' : 'text-neutral-400 hover:bg-neutral-100'
       }`}
     >
       {isFeatured ? '♥' : '♡'}
@@ -148,6 +163,7 @@ export function ProductsTable({
   canFeatureMore,
   canDelete,
   canFeature,
+  canUpdate,
   onOpen,
   onTogglePublish,
   onToggleFeatured,
@@ -156,6 +172,10 @@ export function ProductsTable({
   onRestore,
   onDelete,
 }: ProductsTableProps) {
+  const copy = useCopy(productsCopy).table
+  const common = useCopy(adminCommonCopy)
+  // Read once here rather than per row: `tourTitle` is called inside the `.map()` below.
+  const { locale } = useLocale()
   const isActiveView = view === 'active'
   // Without `canFeature` the featured view isn't reachable (its tab is hidden) — but guard the
   // column here too, so the reorder controls can never render without the permission to use them.
@@ -166,18 +186,22 @@ export function ProductsTable({
       <table className="w-full min-w-[720px] border-collapse">
         <thead>
           <tr className="bg-neutral-50 text-left text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-            <th className="w-[70px] px-4 py-2.5 font-semibold">Фото</th>
-            <th className="px-4 py-2.5 font-semibold">Заголовок (RU)</th>
-            <th className="w-[130px] px-4 py-2.5 font-semibold">Тип</th>
-            <th className="w-20 px-4 py-2.5 text-right font-semibold">Дней</th>
-            {isActiveView && <th className="w-[130px] px-4 py-2.5 font-semibold">Публикация</th>}
-            {isFeaturedView && <th className="w-24 px-4 py-2.5 font-semibold">Порядок</th>}
-            <th className="w-[190px] px-4 py-2.5 text-right font-semibold">Действия</th>
+            <th className="w-[70px] px-4 py-2.5 font-semibold">{copy.colPhoto}</th>
+            <th className="px-4 py-2.5 font-semibold">{copy.colTitle}</th>
+            <th className="w-[130px] px-4 py-2.5 font-semibold">{copy.colType}</th>
+            <th className="w-20 px-4 py-2.5 text-right font-semibold">{copy.colDays}</th>
+            {isActiveView && (
+              <th className="w-[130px] px-4 py-2.5 font-semibold">{copy.colPublication}</th>
+            )}
+            {isFeaturedView && (
+              <th className="w-24 px-4 py-2.5 font-semibold">{copy.colOrder}</th>
+            )}
+            <th className="w-[190px] px-4 py-2.5 text-right font-semibold">{copy.colActions}</th>
           </tr>
         </thead>
         <tbody>
           {tours.map((tour, index) => {
-            const { text: title, empty } = tourTitleRu(tour)
+            const { text: title, empty } = tourTitle(tour, locale)
             const rowPending = pendingId === tour.id
             return (
               <tr
@@ -215,15 +239,15 @@ export function ProductsTable({
                     <div className="flex items-center gap-2">
                       <PublishToggle
                         isActive={tour.isActive}
-                        pending={rowPending || isBusy}
+                        pending={rowPending || isBusy || !canUpdate}
                         onToggle={() => onTogglePublish(tour)}
                       />
                       <span
                         className={`text-xs font-semibold ${
-                          tour.isActive ? 'text-brand-700' : 'text-neutral-400'
+                          tour.isActive ? 'text-neutral-900' : 'text-neutral-400'
                         }`}
                       >
-                        {tour.isActive ? 'На сайте' : 'Скрыт'}
+                        {tour.isActive ? copy.published : copy.hidden}
                       </span>
                     </div>
                   </td>
@@ -255,33 +279,37 @@ export function ProductsTable({
                             onToggle={() => onToggleFeatured(tour)}
                           />
                         )}
-                        <RowAction
-                          onClick={() => onArchive(tour)}
-                          disabled={isBusy}
-                          label="🗄 В архив"
-                        />
+                        {canUpdate && (
+                          <RowAction
+                            onClick={() => onArchive(tour)}
+                            disabled={isBusy}
+                            label={copy.archive}
+                          />
+                        )}
                       </>
                     )}
                     {isFeaturedView && (
                       <RowAction
                         onClick={() => onToggleFeatured(tour)}
                         disabled={isBusy}
-                        label="✕ Убрать"
+                        label={copy.removeFromFeatured}
                         tone="danger"
                       />
                     )}
                     {view === 'archived' && (
                       <>
-                        <RowAction
-                          onClick={() => onRestore(tour)}
-                          disabled={isBusy}
-                          label="↩ Восстановить"
-                        />
+                        {canUpdate && (
+                          <RowAction
+                            onClick={() => onRestore(tour)}
+                            disabled={isBusy}
+                            label={copy.restore}
+                          />
+                        )}
                         {canDelete && (
                           <RowAction
                             onClick={() => onDelete(tour)}
                             disabled={isBusy}
-                            label="Удалить"
+                            label={common.delete}
                             tone="danger"
                           />
                         )}

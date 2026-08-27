@@ -1,8 +1,11 @@
 import type { ReactNode } from 'react'
 import { DragHandle, SortableList, SuggestInput } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import type { Localized, LocalizedListItem } from '@/features/admin/types/form'
 import type { LangKey } from '@/features/admin/tour-form/reducer/tourFormReducer'
 import { AddButton, RemoveButton } from '@/features/admin/ui/RepeaterControls'
+import { adminUiCopy } from '@/features/admin/ui/adminUiCopy'
+import { tourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
 
 interface LocalizedListEditorProps {
   /** Section heading, e.g. "Точки маршрута". */
@@ -62,6 +65,10 @@ export function LocalizedListEditor({
   onChangeText,
   renderExtra,
 }: LocalizedListEditorProps) {
+  const copy = useCopy(tourFormCopy).listEditor
+  // The RU|EN columns are CONTENT languages, not the interface locale — only their captions
+  // follow the interface language, and those are the same ones `TranslationGroup` uses.
+  const translation = useCopy(adminUiCopy).translation
   const ruSuggestions = suggestions?.map((s) => s.ru).filter(Boolean) ?? []
   const enSuggestions = suggestions?.map((s) => s.en).filter(Boolean) ?? []
   const pickSuggestion = (key: string, label: string, lang: LangKey) => {
@@ -100,7 +107,7 @@ export function LocalizedListEditor({
                 ref={sortable.setNodeRef}
                 style={sortable.style}
                 className={`relative flex items-start gap-2 rounded-lg border bg-neutral-50 p-2 ${
-                  sortable.isDragging ? 'z-10 border-brand-300 shadow-md' : 'border-neutral-200'
+                  sortable.isDragging ? 'z-10 border-neutral-400 shadow-md' : 'border-neutral-200'
                 }`}
               >
                 <div className="pt-0.5">
@@ -108,7 +115,7 @@ export function LocalizedListEditor({
                     ref={sortable.setActivatorNodeRef}
                     {...sortable.attributes}
                     {...sortable.listeners}
-                    label={`Перетащить ${itemNoun} ${index + 1}, чтобы изменить порядок`}
+                    label={copy.drag(itemNoun, index + 1)}
                   />
                 </div>
                 <span className="w-4 shrink-0 pt-2 text-center text-xs tabular-nums text-neutral-400">
@@ -121,8 +128,8 @@ export function LocalizedListEditor({
                       onChange={(value) => onChangeText(item.key, 'ru', value)}
                       onPick={(label) => pickSuggestion(item.key, label, 'ru')}
                       suggestions={ruSuggestions}
-                      aria-label={`${title} ${index + 1} — Русский`}
-                      placeholder="Русский"
+                      aria-label={translation.fieldInLang(`${title} ${index + 1}`, translation.langName.ru)}
+                      placeholder={translation.langName.ru}
                       className="text-sm"
                     />
                     <SuggestInput
@@ -130,15 +137,15 @@ export function LocalizedListEditor({
                       onChange={(value) => onChangeText(item.key, 'en', value)}
                       onPick={(label) => pickSuggestion(item.key, label, 'en')}
                       suggestions={enSuggestions}
-                      aria-label={`${title} ${index + 1} — English`}
-                      placeholder="English"
+                      aria-label={translation.fieldInLang(`${title} ${index + 1}`, translation.langName.en)}
+                      placeholder={translation.langName.en}
                       className="text-sm"
                     />
                   </div>
                   {renderExtra?.(item, index)}
                 </div>
                 <div className="pt-0.5">
-                  <RemoveButton onClick={() => onRemove(item.key)} label={`Удалить ${itemNoun}`} />
+                  <RemoveButton onClick={() => onRemove(item.key)} label={copy.remove(itemNoun)} />
                 </div>
               </li>
             )}

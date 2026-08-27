@@ -29,6 +29,27 @@ namespace ATTours.Common.Settings
         // нового адреса (фронту ещё предстоит завести этот роут).
         public string EmailChangeConfirmUrlBase => Section[nameof(EmailChangeConfirmUrlBase)] ?? "http://localhost:5173/confirm-email-change";
 
+        // Origin (scheme + host + port), с которого почтовый клиент заберёт /uploads/... .
+        // Хвостового слэша нет. Пусто -> абсолютизация не выполняется (см. OrderNotificationService):
+        // относительный src (картинка не видна) честнее, чем абсолютный src на чужой домен.
+        //
+        // Фолбэк на origin из VerifyUrlBase — потому что по смыслу это всегда публичный сайт.
+        // Логирования здесь нет сознательно: ApplicationSettingsBase логгера не имеет,
+        // предупреждение пишет потребитель.
+        public string PublicMediaBaseUrl
+        {
+            get
+            {
+                var configured = Section[nameof(PublicMediaBaseUrl)];
+                if (!string.IsNullOrWhiteSpace(configured))
+                    return configured.TrimEnd('/');
+
+                return Uri.TryCreate(VerifyUrlBase, UriKind.Absolute, out var verifyUri)
+                    ? verifyUri.GetLeftPart(UriPartial.Authority)
+                    : string.Empty;
+            }
+        }
+
         // Флоу заказов (B12, 2026-08-13): куда падает уведомление о новой брони. Без
         // отдельно заданного адреса уходит на FromEmail — тот же ящик, с которого сейчас
         // шлётся вся остальная почта сайта.

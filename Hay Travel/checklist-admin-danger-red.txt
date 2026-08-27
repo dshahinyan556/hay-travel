@@ -1,0 +1,61 @@
+Задача: отменить решение из checklist-admin-monochrome.txt ЧАСТИЧНО — только для
+danger/error/invalid состояний. Решено с Давидом 2026-08-22 (AskUserQuestion, вариант "Отменить
+решение"): danger-кнопки/error/invalid → красный (rose-*), остальное (навигация, статусы заказов,
+скидки, "избранное", verified/locked... — см. ниже) остаётся ч/б, как решили вчера.
+
+Источник истины: git diff (несохранённые изменения — monochrome-конверсия ещё не закоммичена),
+все "-" строки с rose- = что было ДО конверсии. Восстанавливаю точечно эти строки, ничего
+больше не трогаю (в этих файлах много несвязанных правок — i18n-миграция на useCopy и т.д.).
+
+[x] shared/ui/Button.tsx — danger / outline-danger варианты → rose
+[x] shared/ui/Field.tsx — required * и error-текст → rose-700
+[x] shared/ui/Input.tsx, Textarea.tsx, Select.tsx (admin-ветка), DatePicker.tsx —
+    error-рамка/focus-ring → rose-500/600 (DatePicker: только error-ветка, discountRibbonClasses
+    НЕ трогаю — это скидочная лента, не danger)
+[x] shared/ui/ActionsMenu.tsx — danger item → rose (мёртвый код, но для консистентности)
+[x] admin/layout/AdminErrorBoundary.tsx — ТОЛЬКО tone==='rose' ветка (404/403/500) → rose;
+    tone==='amber' (сессия истекла) остаётся ч/б — не danger/invalid, отдельная семантика
+[x] Error-баннеры (role="alert", border-rose-200 bg-rose-50 text-rose-700) в:
+    CalendarPage.tsx, BulkClosurePanel.tsx, ExpenseTemplateForm.tsx, NoteTemplateForm.tsx,
+    PlaceForm.tsx, TagForm.tsx, TourForm.tsx, OrderDetailPage.tsx (только error, notice/success
+    баннер НЕ трогаю), ProductsPage.tsx, UserDetailPage.tsx, UsersPage.tsx
+[x] Delete-кнопки в списках каталога (text-rose-700 hover:bg-rose-50) в:
+    ExpenseTemplatesTab.tsx, NoteTemplatesTab.tsx, PlacesTab.tsx, TagsTab.tsx
+[x] RegionsTab.tsx — error-текст → rose-600
+[x] OrderLinesGrid.tsx — ТОЛЬКО кнопка removeSelected (danger) → rose; discountBadge <td>
+    (скидка %) НЕ трогаю — не danger
+[x] ProductsTable.tsx — ТОЛЬКО RowAction tone==='danger' → rose; FeaturedToggle (сердечко
+    "избранное") НЕ трогаю — не danger
+[x] SettingsActions.tsx, FormActions.tsx — isError текст → rose-700
+[x] LocalizedListEditor.tsx, TagPicker.tsx, TourDaysEditor.tsx, TourFormHeader.tsx (required *) —
+    error-текст → rose
+[x] TourDayCard.tsx — hasError span "⚠ проверьте день" → rose-600
+[x] ImageUploadButton.tsx — error-текст → rose-600
+[x] RepeaterControls.tsx — hover-состояние кнопки удаления строки → rose
+[x] TranslationGroup.tsx — required * и error-текст → rose (флаги RU/EN не трогаю, как решено
+    в прошлый раз)
+[x] UserDangerZone.tsx — секция (border/bg/divide) → rose
+[x] UserDetailHeader.tsx, UsersTable.tsx — бейдж isLocked "Заблокирован" → rose (СУЖДЕНИЕ:
+    это не "статус" вроде verified/unverified, а сигнал проблемы — трактую как invalid/danger;
+    если Давид не согласен, легко откатить обратно)
+
+Явно ОСТАЮТСЯ ч/б (не danger/error/invalid, а статусы/декор — по вчерашнему решению):
+- OrderStatus.Rejected (DayOrdersList.tsx, ordersCopy.ts) — статус заказа
+- ClosureRulesTable.tsx — бейдж action Close/не-Close — статус правила закрытия
+- DatePicker.tsx discountRibbonClasses — скидочная лента (промо, не danger)
+- OrderLinesGrid.tsx discountBadge <td> — скидка %, не danger
+- ProductsTable.tsx FeaturedToggle — "избранное" (сердечко), не danger
+- AdminAccessDenied.tsx — иконка была amber (не rose), не входит в объём "danger/invalid"
+
+[x] grep по rose- в features/admin + shared/ui после правок — совпадает точно со списком
+    сознательных исключений (9 мест: ClosureRulesTable x2, DayOrdersList/ordersCopy
+    OrderStatus.Rejected x2, AdminErrorBoundary amber-ветка x2, OrderLinesGrid discountBadge,
+    ProductsTable FeaturedToggle, DatePicker discountRibbon) — больше ничего не пропущено
+[~] npm run tsc — есть ошибки, но ВСЕ предсуществующие и не связаны с этой задачей: разрыв в
+    незавершённом рефакторинге ролей/пермишенов (canManageCatalog/canDeleteTours/... отсутствуют
+    в shared/auth, недостающие пропсы CalendarToolbar/ClosureRulesTable/DayDetailPanel) — те же
+    файлы, что в git status как WIP (RolesController.cs, ScreensController.cs,
+    PermissionClaims.cs). Ни одна ошибка не указывает на строки, которые я менял (только className).
+[ ] Визуальная проверка в браузере — ЗАБЛОКИРОВАНО той же LocalDB-проблемой, что и в
+    checklist-admin-monochrome.txt (см. [[project-orders-redesign-checklist-aug2026]] /
+    memory project-public-site-ux-batch-aug2026). Давиду нужно проверить глазами локально.

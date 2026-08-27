@@ -4,7 +4,14 @@
  * The project's tsconfig has `erasableSyntaxOnly`, which forbids TS `enum`. We model enums
  * as frozen const objects plus a derived value-union type — same call-site ergonomics
  * (`TourType.Tour`), zero runtime enum machinery, fully erasable.
+ *
+ * VALUES AND TYPES ONLY. Human-readable captions for these enums live in `adminEnumsCopy.ts`
+ * (ADR 021): this module is imported by mappers and by the API layer, which must not drag
+ * locale-dependent interface text along with a wire constant.
  */
+
+import { EmployeeJobRole } from '@/shared/types/employeeRole'
+import { LanguageCode } from '@/shared/types/language'
 
 /* -------------------------------------------------------------------------- */
 /*  Tour type                                                                  */
@@ -16,11 +23,6 @@ export const TourType = {
 } as const
 
 export type TourType = (typeof TourType)[keyof typeof TourType]
-
-export const tourTypeLabels: Record<TourType, string> = {
-  [TourType.Tour]: 'Тур',
-  [TourType.Excursion]: 'Экскурсия',
-}
 
 /* -------------------------------------------------------------------------- */
 /*  Tags                                                                       */
@@ -49,25 +51,6 @@ export const TagColor = {
 } as const
 
 export type TagColor = (typeof TagColor)[keyof typeof TagColor]
-
-export const tagColorLabels: Record<TagColor, string> = {
-  [TagColor.Gold]: 'Золотой',
-  [TagColor.Wine]: 'Бордовый',
-  [TagColor.Success]: 'Зелёный',
-  [TagColor.Danger]: 'Красный',
-  [TagColor.Warning]: 'Оранжевый',
-}
-
-/* -------------------------------------------------------------------------- */
-/*  Language                                                                   */
-/* -------------------------------------------------------------------------- */
-
-export const LanguageCode = {
-  Russian: 1,
-  English: 2,
-} as const
-
-export type LanguageCode = (typeof LanguageCode)[keyof typeof LanguageCode]
 
 /* -------------------------------------------------------------------------- */
 /*  Translation field discriminators                                           */
@@ -172,3 +155,25 @@ export const SettingValueType = {
 } as const
 
 export type SettingValueType = (typeof SettingValueType)[keyof typeof SettingValueType]
+
+/* -------------------------------------------------------------------------- */
+/*  Employee job role (Задача D)                                              */
+/* -------------------------------------------------------------------------- */
+
+/** Re-exported for convenience: every admin call site that needs the enum's VALUES (not just the
+ * type) already imports from this module for every other wire enum — see the file doc comment.
+ * The type itself is declared in `shared/types/employeeRole.ts` (a cross-cutting leaf both
+ * `shared/auth/types.ts` and `shared/types/booking.ts` depend on), not redeclared here. */
+export { EmployeeJobRole }
+
+/* -------------------------------------------------------------------------- */
+/*  Language                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/** Re-exported for the same reason as `EmployeeJobRole` above: admin call sites import every wire
+ * enum from this module, and the ~7 existing `LanguageCode` imports keep working unchanged. The
+ * declaration itself moved to `shared/types/language.ts` (redesign 2026-08-23) — it is now a
+ * cross-cutting leaf both `shared/auth/types.ts` (`UserInfoModel.preferredLanguage`) and
+ * `shared/types/booking.ts` (`OrderInfoModel.userPreferredLanguage`) depend on, and `shared`
+ * cannot import from `features`. */
+export { LanguageCode }

@@ -46,15 +46,22 @@ namespace ATTours.DataLayer
         public DbSet<TourNoteTemplateTranslation> TourNoteTemplateTranslations { get; set; }
         public DbSet<User> Users { get; set; }
         public DbSet<UserRole> UserRoles { get; set; }
+        public DbSet<RolePermission> RolePermissions { get; set; }
+        public DbSet<UserPermissionOverride> UserPermissionOverrides { get; set; }
         public DbSet<UserToken> UserTokens { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
         public DbSet<EmailChangeRequest> EmailChangeRequests { get; set; }
         public DbSet<LoginHistory> LoginHistories { get; set; }
+        public DbSet<ImpersonationEvent> ImpersonationEvents { get; set; }
         public DbSet<ExchangeRate> ExchangeRates { get; set; }
         public DbSet<Order> Orders { get; set; }
         public DbSet<OrderLine> OrderLines { get; set; }
+        public DbSet<OrderLineEmployee> OrderLineEmployees { get; set; }
         public DbSet<OrderPayment> OrderPayments { get; set; }
         public DbSet<OrderEvent> OrderEvents { get; set; }
         public DbSet<ClosureRule> ClosureRules { get; set; }
+        public DbSet<EmailTemplate> EmailTemplates { get; set; }
+        public DbSet<NotificationChannel> NotificationChannels { get; set; }
+        public DbSet<NotificationRecipient> NotificationRecipients { get; set; }
     }
 }

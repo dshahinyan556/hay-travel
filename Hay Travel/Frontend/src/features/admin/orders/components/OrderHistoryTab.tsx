@@ -1,6 +1,8 @@
 import { ClockIcon } from '@/shared/ui/icons'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import type { OrderEventInfoModel } from '@/shared/types/booking'
-import { eventTypeTagLabels, ordersCopy } from '../lib/ordersCopy'
+import { formatOrderDateTime, formatOrderDateTimeShort, ordersCopy } from '../lib/ordersCopy'
 
 export interface OrderHistoryTabProps {
   events: OrderEventInfoModel[]
@@ -16,12 +18,15 @@ export interface OrderHistoryTabProps {
  * collapsing to a two-column (rail + text, date moves into the byline) layout below `sm`.
  */
 export function OrderHistoryTab({ events }: OrderHistoryTabProps) {
+  const copy = useCopy(ordersCopy)
+  const { locale } = useLocale()
+
   if (events.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-10 text-center">
         <ClockIcon size={26} className="text-neutral-300" />
-        <p className="text-sm font-semibold text-neutral-900">{ordersCopy.historyEmptyTitle}</p>
-        <p className="max-w-xs text-sm text-neutral-500">{ordersCopy.historyEmptyBody}</p>
+        <p className="text-sm font-semibold text-neutral-900">{copy.historyEmptyTitle}</p>
+        <p className="max-w-xs text-sm text-neutral-500">{copy.historyEmptyBody}</p>
       </div>
     )
   }
@@ -39,13 +44,7 @@ export function OrderHistoryTab({ events }: OrderHistoryTabProps) {
             dateTime={event.createdAtUtc}
             className="col-start-2 row-start-1 hidden text-xs tabular-nums whitespace-nowrap text-neutral-500 sm:col-start-1 sm:block"
           >
-            {new Date(event.createdAtUtc).toLocaleString('ru-RU', {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
+            {formatOrderDateTime(event.createdAtUtc, locale)}
           </time>
           <div className="relative col-start-1 row-span-1 flex justify-center sm:col-start-2">
             <span
@@ -58,21 +57,16 @@ export function OrderHistoryTab({ events }: OrderHistoryTabProps) {
           <div className="col-start-2 text-[13.5px] leading-relaxed text-neutral-900 sm:col-start-3">
             {event.description}
             <span className="ml-2 inline-block rounded-full border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 align-middle text-[9.5px] font-bold tracking-[.1em] text-neutral-500 uppercase">
-              {eventTypeTagLabels[event.type]}
+              {copy.eventTypeTagLabels[event.type]}
             </span>
             <span className="block text-xs text-neutral-500 sm:mt-0.5">
-              {ordersCopy.historyAuthorLabel}:{' '}
+              {copy.historyAuthorLabel}:{' '}
               <span className="font-semibold text-neutral-700">
-                {event.actorFullName?.trim() || ordersCopy.historySystemActor}
+                {event.actorFullName?.trim() || copy.historySystemActor}
               </span>
               <time dateTime={event.createdAtUtc} className="tabular-nums sm:hidden">
                 {' · '}
-                {new Date(event.createdAtUtc).toLocaleString('ru-RU', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
+                {formatOrderDateTimeShort(event.createdAtUtc, locale)}
               </time>
             </span>
           </div>

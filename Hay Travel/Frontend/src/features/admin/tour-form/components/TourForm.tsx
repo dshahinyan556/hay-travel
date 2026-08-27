@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Card, Tabs } from '@/shared/ui'
 import type { TabItem } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import { TourType } from '@/features/admin/lib/enums'
+import { tourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
 import type { CatalogSuggestions, TourFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
 import type { TourFormValidation } from '@/features/admin/tour-form/lib/validation'
@@ -66,6 +68,7 @@ export function TourForm({
   daySources,
   onSubmit,
 }: TourFormProps) {
+  const copy = useCopy(tourFormCopy)
   const isExcursion = state.type === TourType.Excursion
   const singleDay = state.days[0]
   // placeId -> image urls, for the excursion's own "заполнить из другого продукта" gallery
@@ -76,12 +79,14 @@ export function TourForm({
   )
 
   const tabs: TabItem[] = [
-    ...(isExcursion ? [] : [{ id: 'days', label: 'Дни', badge: state.days.length } as TabItem]),
-    { id: 'org', label: 'Организационные детали' },
-    { id: 'restrictions', label: 'Ограничения' },
-    { id: 'included', label: 'Включено' },
-    { id: 'notIncluded', label: 'Не включено' },
-    { id: 'expenses', label: 'Доп. расходы' },
+    ...(isExcursion
+      ? []
+      : [{ id: 'days', label: copy.tabs.days, badge: state.days.length } as TabItem]),
+    { id: 'org', label: copy.tabs.org },
+    { id: 'restrictions', label: copy.tabs.restrictions },
+    { id: 'included', label: copy.tabs.included },
+    { id: 'notIncluded', label: copy.tabs.notIncluded },
+    { id: 'expenses', label: copy.tabs.expenses },
   ]
 
   const [activeTab, setActiveTab] = useState<TabId>('days')
@@ -140,12 +145,12 @@ export function TourForm({
             </div>
 
             <LocalizedListEditor
-              title="Точки маршрута"
-              hint="Порядок точек соответствует маршруту экскурсии."
-              emptyText="Точек маршрута пока нет."
-              addLabel="Добавить точку"
-              itemNoun="точку"
-              itemLabel="Точка маршрута"
+              title={copy.routePoints.title}
+              hint={copy.routePoints.hintExcursion}
+              emptyText={copy.routePoints.empty}
+              addLabel={copy.routePoints.add}
+              itemNoun={copy.routePoints.noun}
+              itemLabel={copy.routePoints.label}
               error={validation.dayRoutePointErrors[singleDay.key]}
               items={singleDay.routePoints}
               suggestions={catalogSuggestions.routePoints}
@@ -169,14 +174,11 @@ export function TourForm({
             {singleDay.routePoints.some(
               (rp) => rp.placeId == null && (rp.text.ru.trim() || rp.text.en.trim()),
             ) && (
-              <p className="text-xs text-neutral-400">
-                Точки без привязки к каталогу — свободный текст, их фото не попадут в галерею
-                автоматически.
-              </p>
+              <p className="text-xs text-neutral-400">{copy.routePoints.unlinkedNoteExcursion}</p>
             )}
 
             <div className="flex flex-col gap-2">
-              <h4 className="text-sm font-semibold text-neutral-800">Галерея</h4>
+              <h4 className="text-sm font-semibold text-neutral-800">{copy.excursion.gallery}</h4>
               <ImageListEditor
                 items={singleDay.gallery}
                 onAdd={() => actions.addGallery(singleDay.key)}
@@ -192,7 +194,12 @@ export function TourForm({
       )}
 
       <Card className="!p-0">
-        <Tabs tabs={tabs} activeId={effectiveTab} onChange={(id) => setActiveTab(id as TabId)} label="Разделы тура" />
+        <Tabs
+          tabs={tabs}
+          activeId={effectiveTab}
+          onChange={(id) => setActiveTab(id as TabId)}
+          label={copy.tabs.label}
+        />
 
         <div className="p-6">
           {effectiveTab === 'days' && !isExcursion && (
@@ -212,12 +219,12 @@ export function TourForm({
 
           {effectiveTab === 'org' && (
             <LocalizedListEditor
-              title="Организационные детали"
-              hint="Например: «Гид на русском», «Трансфер включён»."
-              emptyText="Организационных деталей пока нет."
-              addLabel="Добавить деталь"
-              itemNoun="деталь"
-              itemLabel="Организационная деталь"
+              title={copy.org.title}
+              hint={copy.org.hint}
+              emptyText={copy.org.empty}
+              addLabel={copy.org.add}
+              itemNoun={copy.org.noun}
+              itemLabel={copy.org.label}
               items={state.organizationalDetails}
               suggestions={catalogSuggestions.orgDetails}
               onAdd={actions.addOrgDetail}
@@ -229,12 +236,12 @@ export function TourForm({
 
           {effectiveTab === 'restrictions' && (
             <LocalizedListEditor
-              title="Ограничения"
-              hint="Например: «Возраст 6+», «Не для маломобильных гостей»."
-              emptyText="Ограничений пока нет."
-              addLabel="Добавить ограничение"
-              itemNoun="ограничение"
-              itemLabel="Ограничение"
+              title={copy.restrictions.title}
+              hint={copy.restrictions.hint}
+              emptyText={copy.restrictions.empty}
+              addLabel={copy.restrictions.add}
+              itemNoun={copy.restrictions.noun}
+              itemLabel={copy.restrictions.label}
               items={state.restrictions}
               suggestions={catalogSuggestions.restrictions}
               onAdd={actions.addRestriction}
@@ -246,12 +253,12 @@ export function TourForm({
 
           {effectiveTab === 'included' && (
             <LocalizedListEditor
-              title="Включено"
-              hint="Например: «Проживание», «Завтраки», «Входные билеты»."
-              emptyText="Пунктов «Включено» пока нет."
-              addLabel="Добавить пункт"
-              itemNoun="пункт"
-              itemLabel="Пункт"
+              title={copy.included.title}
+              hint={copy.included.hint}
+              emptyText={copy.included.empty}
+              addLabel={copy.included.add}
+              itemNoun={copy.included.noun}
+              itemLabel={copy.included.label}
               items={state.included}
               suggestions={catalogSuggestions.included}
               onAdd={actions.addIncluded}
@@ -263,12 +270,12 @@ export function TourForm({
 
           {effectiveTab === 'notIncluded' && (
             <LocalizedListEditor
-              title="Не включено"
-              hint="Например: «Авиаперелёт», «Личные расходы», «Страховка»."
-              emptyText="Пунктов «Не включено» пока нет."
-              addLabel="Добавить пункт"
-              itemNoun="пункт"
-              itemLabel="Пункт"
+              title={copy.notIncluded.title}
+              hint={copy.notIncluded.hint}
+              emptyText={copy.notIncluded.empty}
+              addLabel={copy.notIncluded.add}
+              itemNoun={copy.notIncluded.noun}
+              itemLabel={copy.notIncluded.label}
               items={state.notIncluded}
               suggestions={catalogSuggestions.notIncluded}
               onAdd={actions.addNotIncluded}

@@ -91,6 +91,47 @@ namespace ATTours.Helper.Enums
         UserIsNotEmployee = 2027,
         [Description("Order must have at least one line.")]
         OrderMustHaveAtLeastOneLine = 2028,
+        [Description("Employee role is required to assign an employee.")]
+        EmployeeRoleRequired = 2029,
+        [Description("Email template is invalid (empty subject/body or unknown action key).")]
+        EmailTemplateInvalid = 2030,
+        // Чекаут корзины (ADR 025): верхнеуровневый код ответа OrderLinesValidationException —
+        // детали лежат в массиве lines (OrderLinesErrorModel), пер-строчные коды прежние
+        // (2004/2014/2015/2016).
+        [Description("Order has one or more invalid lines.")]
+        OrderHasInvalidLines = 2031,
+        // Лимит числа строк — именованная константа ATTours.Common.Constants.OrderLimits.MaxOrderLines
+        // (зеркало фронтового MAX_CART_ITEMS, spec 008). Здесь литерал только в тексте описания.
+        [Description("Order cannot have more than 10 lines.")]
+        OrderTooManyLines = 2032,
+
+        // Гибкая система ролей и прав (architecture-flexible-roles.md §3.5). Коды сдвинуты
+        // на 2033-2036: 2031/2032 заняты чекаутом корзины (OrderHasInvalidLines/
+        // OrderTooManyLines) — коды уходят наружу числом, дублировать нельзя.
+        //
+        // RoleIsSystem больше нигде не бросается (решение Давида 2026-08-22 — ни одна роль не
+        // защищена от переименования/удаления/правки матрицы). Значение оставлено занятым,
+        // как и AdminRoleImmutable/AdminAccountImmutable выше по файлу — не переиспользовать
+        // под другой смысл, код уходит наружу числом.
+        [Description("Role is a system role and cannot be modified or deleted.")]
+        RoleIsSystem = 2033,
+        [Description("Role has assigned users and cannot be deleted.")]
+        RoleInUse = 2034,
+        [Description("Unknown admin screen key.")]
+        UnknownScreenKey = 2035,
+        [Description("Role name is empty or already taken.")]
+        RoleNameInvalid = 2036,
+        // Уровневая модель прав (ADR 027): уровень должен быть либо None, либо ТОЧНО одним
+        // из применимых к экрану действий (нельзя выдать Update у catalog.regions).
+        [Description("Permission level is not applicable to this screen.")]
+        InvalidPermissionLevel = 2037,
+
+        // Настраиваемые получатели уведомлений (редизайн 2026-08-23).
+        [Description("Notification recipient configuration is invalid.")]
+        NotificationRecipientInvalid = 2038,
+
+        [Description("Order line employee assignment not found.")]
+        OrderLineEmployeeNotFound = 2039,
 
         #endregion
 
@@ -142,6 +183,13 @@ namespace ATTours.Helper.Enums
         AdminAccountImmutable = 2215,
         [Description("Only a super administrator can manage administrator accounts.")]
         SuperAdminPrivilegeRequired = 2216,
+        // Impersonation (spec 014 §5). Отсутствие самого права can_impersonate кода не
+        // требует — [RequiresImpersonate] отдаёт 403 ещё до сервиса; несуществующая цель
+        // переиспользует RelationalEntityNotFound (2003), как и остальной UsersController.
+        [Description("You cannot impersonate yourself.")]
+        CannotImpersonateSelf = 2217,
+        [Description("You are not allowed to impersonate this user.")]
+        ImpersonationTargetNotAllowed = 2218,
         #endregion
 
         #region UploadErrors

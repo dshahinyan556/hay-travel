@@ -4,9 +4,11 @@
  * Backend route base is `api/Tour`. Covers the full lifecycle: create, read, update,
  * publish-toggle and delete.
  *
- * Roles (enforced server-side, mirrored by `shared/auth/permissions`): TourManager+Admin may
- * read/create/update/publish/archive; `DeleteTour`, `SetFeatured` and `ReorderFeatured` are
- * Admin-only and answer 403 for a TourManager, which is why the UI hides those controls.
+ * Permissions (enforced server-side, mirrored by `shared/auth/permissions`): everything here is the
+ * `products` screen key. Reads need `products.View`; `InitTour`/`CreateTour` need `products.Create`;
+ * `UpdateTour`, `SetActive`, `SetArchived`, `SetFeatured` and `ReorderFeatured` all need
+ * `products.Update` (the three toggles moved under Update — §0.3 of the backend architecture — they
+ * are edits to a tour, not a category of their own); `DeleteTour` needs `products.Delete`.
  */
 
 import { authFetch } from '@/shared/auth'

@@ -1,5 +1,7 @@
 import { SortableList } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import { TourType } from '@/features/admin/lib/enums'
+import { tourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
 import type { Localized, PlaceOption, TourDayFormState } from '@/features/admin/types/form'
 import type { DaySource } from '@/features/admin/lib/tourMapper'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
@@ -51,6 +53,7 @@ export function TourDaysEditor({
   placeOptions,
   daySources,
 }: TourDaysEditorProps) {
+  const copy = useCopy(tourFormCopy).days
   const canRemove = days.length > minDaysFor(type)
 
   return (
@@ -62,7 +65,7 @@ export function TourDaysEditor({
       )}
 
       <div className="flex flex-col gap-3">
-        <SortableList items={days} getId={dayId} onReorder={actions.moveDay} itemLabel="День">
+        <SortableList items={days} getId={dayId} onReorder={actions.moveDay} itemLabel={copy.item}>
           {(day, index, sortable) => (
             <TourDayCard
               day={day}
@@ -81,7 +84,7 @@ export function TourDaysEditor({
         </SortableList>
       </div>
 
-      <AddButton onClick={actions.addDay}>Добавить день</AddButton>
+      <AddButton onClick={actions.addDay}>{copy.add}</AddButton>
     </div>
   )
 }

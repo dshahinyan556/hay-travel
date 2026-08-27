@@ -1,11 +1,16 @@
 import { useId, useRef, useState } from 'react'
 import { Popover } from './Popover'
+import { Tooltip } from './Tooltip'
 import { MoreIcon } from './icons'
 
 export interface AdminActionsMenuItem {
   label: string
   onClick: () => void
   disabled?: boolean
+  /** Why the item is unavailable — same contract as `AdminToolbarActionState.hint`: a permanent
+   * reason ("нет прав"), never a transient `pending`. `null` reads the same as omitted. Does not
+   * disable on its own. */
+  hint?: string | null
 }
 
 export interface AdminActionsMenuGroup {
@@ -86,16 +91,26 @@ export function AdminActionsMenu({ groups, label, disabled = false, className = 
                   {group.title}
                 </div>
                 {group.items.map((item, itemIndex) => (
-                  <button
+                  // `w-full` on the button + `w-full` on the wrapper: unwrapped, the button is a
+                  // stretched flex-column child and `w-full` changes nothing; wrapped, the span
+                  // becomes that child and the button has to fill it to keep the same hit area.
+                  <Tooltip
                     key={itemIndex}
-                    type="button"
-                    role="menuitem"
-                    disabled={item.disabled}
-                    onClick={() => select(item)}
-                    className="min-h-9 px-3 py-1.5 text-left text-sm whitespace-nowrap text-neutral-800 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    enabled={Boolean(item.hint)}
+                    content={item.hint}
+                    cursor="not-allowed"
+                    className="w-full"
                   >
-                    {item.label}
-                  </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={item.disabled}
+                      onClick={() => select(item)}
+                      className="min-h-9 w-full px-3 py-1.5 text-left text-sm whitespace-nowrap text-neutral-800 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {item.label}
+                    </button>
+                  </Tooltip>
                 ))}
               </div>
             )

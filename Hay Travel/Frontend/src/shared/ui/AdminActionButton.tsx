@@ -25,9 +25,13 @@ const variantClasses: Record<AdminActionButtonVariant, string> = {
   // don't read as the same weight of action).
   secondary:
     'border border-neutral-300 bg-white text-neutral-900 shadow-[0_1px_1px_rgba(10,10,10,.04)] hover:border-neutral-400 hover:bg-neutral-50 active:translate-y-px active:bg-neutral-100 active:shadow-none',
-  // Cancel — no fill, no border at rest; the lightest-weight action in the row.
+  // Cancel — no fill at rest, the lightest-weight action in the row, but still a visible
+  // neutral-200 outline at every width: without it, the mobile `collapseOnMobile` icon-only form
+  // (no label to anchor it) reads as a floating glyph with no tappable shape, worse still once
+  // `disabled` dims it further. neutral-200 stays a full step lighter than `secondary`'s
+  // neutral-300, so Cancel is still visually the lightest action, just never shapeless.
   ghost:
-    'border border-transparent bg-transparent text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 active:translate-y-px active:bg-neutral-200',
+    'border border-neutral-200 bg-transparent text-neutral-600 hover:border-neutral-300 hover:bg-neutral-100 hover:text-neutral-900 active:translate-y-px active:bg-neutral-200',
   // Delete — outlined with a darker rest-state border than `secondary`, FULL invert to solid
   // black on hover: in a strict b/w palette this is the strongest "careful" signal available
   // without reaching for red (still backed by the delete-confirmation modal, colour is never the

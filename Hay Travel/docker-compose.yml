@@ -34,6 +34,9 @@ services:
       Email__VerifyUrlBase: ${PUBLIC_BASE_URL}/verify-email
       Email__ResetUrlBase: ${PUBLIC_BASE_URL}/reset-password
       Email__EmailChangeConfirmUrlBase: ${PUBLIC_BASE_URL}/confirm-email-change
+      # Origin, с которого почтовый клиент заберёт /uploads/... — тот же публичный домен,
+      # nginx отдаёт этот путь с диска мимо .NET. Новых значений в .env не появляется.
+      Email__PublicMediaBaseUrl: ${PUBLIC_BASE_URL}
       Upload__StoragePath: /app/uploads
     volumes:
       # Бинд-маунт, не named volume: nginx на хосте раздаёт "/uploads/*" напрямую с того же

@@ -9,9 +9,13 @@ import {
   isBeforeDay,
   isSameDay,
   mondayFirstWeekday,
+  MONTHS_GENITIVE,
+  MONTHS_NOMINATIVE,
   parseISODate,
   startOfMonth,
   stripTime,
+  WEEKDAYS_FULL,
+  WEEKDAYS_SHORT,
 } from '@/shared/lib/date'
 import type { Locale } from '@/shared/lib/locale'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
@@ -19,28 +23,10 @@ import { Popover } from './Popover'
 import { Sheet, SHEET_SINGLE_DETENT } from './Sheet'
 import { ChevronDownIcon } from './icons'
 
-const MONTHS_NOMINATIVE: Record<Locale, string[]> = {
-  ru: ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'],
-  en: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
-}
-/** Genitive case for `ru` — "27 июля", not "27 Июль" — for the trigger's formatted display.
- * English has no genitive case, so `en` reuses the nominative list. */
-const MONTHS_GENITIVE: Record<Locale, string[]> = {
-  ru: ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'],
-  en: MONTHS_NOMINATIVE.en,
-}
-const WEEKDAYS_SHORT: Record<Locale, string[]> = {
-  ru: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-  en: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
-}
-const WEEKDAYS_FULL: Record<Locale, string[]> = {
-  ru: ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'],
-  en: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-}
-
-/* All date arithmetic — including the 42-cell grid — now lives in `shared/lib/date`: the admin
-   availability calendar (spec 003) draws the same Monday-first month grid, and one grid
-   implementation is the point. Nothing about this picker's behaviour changed with the move. */
+/* All date arithmetic — including the 42-cell grid — and the month/weekday name lists now live in
+   `shared/lib/date`: the admin availability calendar (spec 003) draws the same Monday-first month
+   grid and prints the same month names, and one implementation of each is the point. Nothing about
+   this picker's behaviour changed with the move. */
 
 /**
  * Resolves the text content of the element `aria-labelledby` points to — see `Select`'s identical
@@ -337,7 +323,7 @@ export function DatePicker({
     ? `border bg-white text-neutral-900 disabled:bg-neutral-100 disabled:text-neutral-400 ${
         error
           ? 'border-rose-500 focus-visible:border-rose-600 focus-visible:ring-rose-600/20'
-          : 'border-neutral-300 hover:border-neutral-400 focus-visible:border-brand-600 focus-visible:ring-brand-600/20'
+          : 'border-neutral-300 hover:border-neutral-400 focus-visible:border-neutral-900 focus-visible:ring-neutral-900/15'
       }`
     : `border bg-panel-raised text-ink disabled:border-disabled-edge disabled:bg-disabled-bg disabled:text-disabled-ink ${
         error ? 'border-danger focus-visible:ring-danger' : 'border-edge-strong hover:border-gold-line focus-visible:ring-focus'
@@ -354,7 +340,7 @@ export function DatePicker({
   // 44px (`h-11`/`w-11`) is this project's minimum tap target — applies here too, not just to
   // form controls, so both the nav buttons and every day cell use it.
   const navButtonClasses = isAdmin
-    ? 'flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30'
+    ? 'flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/20'
     : 'flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus'
 
   /**
@@ -363,7 +349,7 @@ export function DatePicker({
    * `text-panel` does, and why it is not a hardcoded white. The admin surface has no `panel`
    * token, hence its own literal pair.
    */
-  const discountRibbonClasses = isAdmin ? 'bg-rose-600 text-white' : 'bg-danger text-panel'
+  const discountRibbonClasses = isAdmin ? 'bg-neutral-950 text-white' : 'bg-danger text-panel'
 
   function dayClasses(date: Date, dayDisabled: boolean, discounted: boolean): string {
     const inMonth = date.getMonth() === viewMonth.getMonth()
@@ -385,11 +371,11 @@ export function DatePicker({
       return `${base} cursor-not-allowed${strike} ${isAdmin ? 'text-neutral-300' : 'text-ink-muted opacity-50'}`
     }
     if (isAdmin) {
-      return `${base} cursor-pointer focus-visible:ring-brand-600/40 ${
+      return `${base} cursor-pointer focus-visible:ring-neutral-900/30 ${
         selected
-          ? 'bg-brand-700 font-semibold text-white'
+          ? 'bg-neutral-950 font-semibold text-white'
           : isToday
-            ? `font-semibold text-brand-700 ${inMonth ? '' : 'opacity-50'} hover:bg-brand-50`
+            ? `font-semibold text-neutral-900 ring-1 ring-inset ring-neutral-900 ${inMonth ? '' : 'opacity-50'} hover:bg-neutral-100`
             : `text-neutral-900 hover:bg-neutral-100 ${inMonth ? '' : 'opacity-50'}`
       }`
     }

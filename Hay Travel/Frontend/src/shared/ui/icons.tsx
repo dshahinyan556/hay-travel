@@ -215,6 +215,23 @@ export function TrashIcon(props: IconProps) {
   )
 }
 
+/**
+ * Tote bag — the cart entry point in both site headers (spec 008 §8.5).
+ *
+ * Deliberately a soft-shouldered TOTE, not a supermarket trolley: `/cart` collects trip requests
+ * that a manager confirms by phone, it is not a checkout with a card form at the end. The body
+ * tapers slightly toward the bottom so it reads as fabric rather than as a box, and the handle is
+ * a single arc — same 24×24 box, 1.5 stroke, round caps as the rest of the family.
+ */
+export function BagIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4.4 8.5h15.2l-1 11.1a1.9 1.9 0 0 1-1.9 1.7H7.3a1.9 1.9 0 0 1-1.9-1.7Z" />
+      <path d="M8.7 8.5V6.5a3.3 3.3 0 0 1 6.6 0v2" />
+    </Icon>
+  )
+}
+
 /** Floppy disk — "Save" in the admin toolbar (checklist §1). Same geometry contract as the rest
  * of this set: a folded-corner body, the write-shutter at the top, the label area at the bottom. */
 export function SaveIcon(props: IconProps) {
@@ -223,6 +240,15 @@ export function SaveIcon(props: IconProps) {
       <path d="M5 3h11.5L20 6.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" strokeLinejoin="round" />
       <path d="M8 3v5h7V3" />
       <path d="M7.5 21v-6.5h9V21" />
+    </Icon>
+  )
+}
+
+export function RefreshIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 12a8 8 0 0 1 13.66-5.66M20 12a8 8 0 0 1-13.66 5.66" />
+      <path d="M17.5 3v4h-4M6.5 21v-4h4" />
     </Icon>
   )
 }

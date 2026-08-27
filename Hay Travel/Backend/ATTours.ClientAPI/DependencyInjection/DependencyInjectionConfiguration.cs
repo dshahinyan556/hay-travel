@@ -1,8 +1,10 @@
 using ATTours.BusinessServices.Email;
 using ATTours.BusinessServices.Geo;
+using ATTours.BusinessServices.Notifications;
 using ATTours.BusinessServices.Security;
 using ATTours.BusinessServices.Services.AuthServices;
 using ATTours.Common.Settings;
+using ATTours.Helper.Security;
 using Microsoft.Extensions.Logging;
 
 namespace ATTours.ClientAPI.DependencyInjection
@@ -25,6 +27,11 @@ namespace ATTours.ClientAPI.DependencyInjection
             // Stateless и потокобезопасны: work factor BCrypt и ключ подписи читаются один раз.
             services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
             services.AddSingleton<IJwtTokenService, JwtTokenService>();
+
+            // Мгновенный отзыв access-токенов после impersonation (ADR 030). Singleton
+            // ОБЯЗАТЕЛЕН: смысл реестра — одна общая на процесс таблица; scoped-регистрация
+            // давала бы каждому запросу пустую копию, и отзыв не работал бы вообще.
+            services.AddSingleton<IAccessTokenRevocationRegistry, AccessTokenRevocationRegistry>();
 
             services.AddHttpClient(nameof(SendGridEmailSender));
             services.AddHttpClient(nameof(BrevoEmailSender));
@@ -65,6 +72,11 @@ namespace ATTours.ClientAPI.DependencyInjection
             // Scoped: AuthService владеет собственным DbContext и обязан быть освобождён
             // вместе с запросом.
             services.AddScoped<IAuthService, AuthService>();
+
+            // Письма заказов (Задача E). Через DI, а не `new` в контроллере, ровно по тому же
+            // обоснованию, что и IEmailSender (ADR 005): сервису нужен внедрённый singleton
+            // отправителя, реализация которого выбирается по конфигу. Scoped — живёт запрос.
+            services.AddScoped<IOrderNotificationService, OrderNotificationService>();
         }
 
         public static void AddValidators(this IServiceCollection services)

@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { Button, buttonClassName, Spinner } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { adminCommonCopy } from '@/features/admin/lib/adminCommonCopy'
 import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
 import type { Localized } from '@/features/admin/types/localized'
 import { readLocalized } from '@/features/admin/catalog/lib/catalogMapper'
+import { catalogCopy, type CatalogCopy } from '@/features/admin/catalog/lib/catalogCopy'
 import type { ExpenseTemplateInfoModel } from '@/shared/types/attours'
 
 /** No `sortOrder` on purpose: position is set by dragging rows in the list (see
@@ -21,12 +24,12 @@ interface FormErrors {
   nameEn?: string
 }
 
-function validate(values: ExpenseTemplateFormValues): FormErrors {
+function validate(values: ExpenseTemplateFormValues, copy: CatalogCopy): FormErrors {
   const errors: FormErrors = {}
   // Both languages required — same reasoning as PlaceForm (D4-1 pattern): the public site never
   // falls back from an empty EN template to RU.
-  if (values.name.ru.trim() === '') errors.nameRu = 'Обязательное поле.'
-  if (values.name.en.trim() === '') errors.nameEn = 'Обязательное поле.'
+  if (values.name.ru.trim() === '') errors.nameRu = copy.common.requiredField
+  if (values.name.en.trim() === '') errors.nameEn = copy.common.requiredField
   return errors
 }
 
@@ -39,16 +42,18 @@ interface ExpenseTemplateFormProps {
 }
 
 export function ExpenseTemplateForm({ item, isSubmitting, error, onSubmit, onCancel }: ExpenseTemplateFormProps) {
+  const copy = useCopy(catalogCopy)
+  const common = useCopy(adminCommonCopy)
   const [values, setValues] = useState<ExpenseTemplateFormValues>(() => initialValues(item))
   const [attempted, setAttempted] = useState(false)
 
-  const errors = validate(values)
+  const errors = validate(values, copy)
   const shown = attempted ? errors : {}
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setAttempted(true)
-    if (Object.keys(validate(values)).length > 0) return
+    if (Object.keys(validate(values, copy)).length > 0) return
     onSubmit(values)
   }
 
@@ -61,7 +66,7 @@ export function ExpenseTemplateForm({ item, isSubmitting, error, onSubmit, onCan
       )}
 
       <TranslationGroup
-        label="Название"
+        label={copy.common.nameField}
         value={values.name}
         onChange={(lang, value) => setValues((v) => ({ ...v, name: { ...v.name, [lang]: value } }))}
         required
@@ -71,18 +76,18 @@ export function ExpenseTemplateForm({ item, isSubmitting, error, onSubmit, onCan
 
       <div className="mt-2 flex justify-end gap-2.5 border-t border-neutral-200 pt-4">
         <button type="button" onClick={onCancel} disabled={isSubmitting} className={buttonClassName('ghost', 'md')}>
-          Отмена
+          {common.cancel}
         </button>
         <Button type="submit" disabled={isSubmitting} className="min-w-28">
           {isSubmitting ? (
             <span className="inline-flex items-center gap-2">
               <Spinner size="sm" />
-              Сохранение…
+              {copy.common.savingButton}
             </span>
           ) : item ? (
-            'Сохранить'
+            common.save
           ) : (
-            'Добавить'
+            common.add
           )}
         </Button>
       </div>

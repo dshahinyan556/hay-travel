@@ -13,8 +13,21 @@ namespace ATTours.Common.DTO.Auth
         public string Email { get; set; }
         public string PhoneNumber { get; set; }
         public int RoleId { get; set; }
-        public RoleType Role { get; set; }
+
+        // Nullable с гибкими ролями (architecture-flexible-roles.md §3.4): Type есть только
+        // у 4 системных ролей, у кастомной он null. Фронту для отображения нужен RoleName —
+        // enum больше не описывает роль целиком.
+        public RoleType? Role { get; set; }
+        public string RoleName { get; set; }
+
         public bool IsEmailVerified { get; set; }
         public bool IsLocked { get; set; }
+
+        // Рабочая специализация по умолчанию (Задача D) — попапу назначения исполнителя
+        // нужен дефолт прямо из списка сотрудников, без похода за карточкой.
+        public EmployeeJobRole? DefaultJobRole { get; set; }
+
+        // Язык писем пользователя (редизайн 2026-08-23). Non-nullable, дефолт Russian.
+        public LanguageCode PreferredLanguage { get; set; }
     }
 }

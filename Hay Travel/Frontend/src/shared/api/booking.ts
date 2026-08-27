@@ -9,9 +9,9 @@
  * (`apiFetch`), `createOrder` requires a signed-in visitor (`authFetch`, which takes the user id
  * from the token — the body never carries it).
  *
- * No `try/catch` in here on purpose: the error policy differs per caller. `tourDetailLoader`
- * swallows a failed `getClosedDates` (availability must not take the tour page down), while
- * `BookingCard` maps `createOrder`'s error codes to visible copy.
+ * No `try/catch` in here on purpose: the error policy differs per caller. `tourDetailLoader` and
+ * `cartLoader` swallow a failed `getClosedDates` (availability must not take a page down), while
+ * `features/cart`'s checkout maps `createOrder`'s error codes to visible copy.
  */
 
 import { apiFetch } from '@/shared/lib/http'
@@ -30,9 +30,19 @@ export function getClosedDates(tourId: number, from: string, to: string): Promis
   )
 }
 
-/** Creates an order for the SIGNED-IN visitor. Rejects with `ApiError` carrying `errorCode`
- * 2014 (date unavailable) / 2015 (guest count) / 2016 (date in the past), or with
- * `SessionExpiredError` when the session could not be renewed. */
+/**
+ * Creates ONE order carrying the visitor's whole cart, atomically (ADR 025 / spec 013): either
+ * every line is written or none is, and the answer always names exactly one order number.
+ *
+ * Rejects with:
+ *  - `ApiError` carrying `errorCode` 2031 (`OrderHasInvalidLines`) plus a per-line `lines` array
+ *    whose entries hold their own 2004 / 2014 / 2015 / 2016 code — nothing was created;
+ *  - `ApiError` carrying a FLAT 2028 (no lines) / 2032 (more than ten lines) — the request itself
+ *    was malformed, so there is no per-line breakdown;
+ *  - `SessionExpiredError` when the session could not be renewed.
+ *
+ * `features/cart/lib/checkoutErrors.ts` owns the reading of all of that.
+ */
 export function createOrder(model: OrderCreateModel): Promise<OrderInfoModel> {
   return authFetch<OrderInfoModel>('api/Order/Create', {
     method: 'POST',

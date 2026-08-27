@@ -22,12 +22,8 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
                 .HasForeignKey(x => x.TourId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            // Restrict: сотрудник — обычный User (soft-delete), реальных hard-delete не бывает,
-            // но заказ не должен молча остаться без ссылки на исполнителя.
-            builder.HasOne(x => x.Employee)
-                .WithMany()
-                .HasForeignKey(x => x.EmployeeId)
-                .OnDelete(DeleteBehavior.Restrict);
+            // Связь с исполнителем и индекс по нему переехали в OrderLineEmployeeConfiguration
+            // (редизайн 2026-08-23: исполнителей на строке может быть несколько).
 
             builder.Property(x => x.TourDate)
                 .IsRequired();
@@ -45,7 +41,6 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
             // что раньше стоял прямо на Order (OrderCalendarInfo.LoadOrderAggregatesAsync).
             builder.HasIndex(x => x.TourDate);
             builder.HasIndex(x => new { x.TourId, x.TourDate });
-            builder.HasIndex(x => x.EmployeeId);
         }
     }
 }

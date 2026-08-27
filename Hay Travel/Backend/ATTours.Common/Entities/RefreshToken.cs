@@ -25,5 +25,15 @@ namespace ATTours.Common.Entities
 
         // Хеш токена, выданного взамен этого при ротации — нужен для reuse-detection.
         public string ReplacedByTokenHash { get; set; }
+
+        // Выбор «запомнить меня» на момент входа (ADR 029). true -> окно RefreshTokenDays
+        // (14д), false -> окно InactivityMinutes (1ч), скользящее по ротации.
+        // Копируется при ротации.
+        public bool RememberMe { get; set; }
+
+        // Заполнено только у сессии, созданной impersonation'ом: id админа, который вошёл
+        // (spec 014 §3.2). Копируется при ротации (RefreshAsync). Null у обычных сессий.
+        // Аудит-указатель, не FK (полный аудит — в ImpersonationEvent).
+        public int? ImpersonatedByUserId { get; set; }
     }
 }

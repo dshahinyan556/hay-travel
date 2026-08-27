@@ -1,6 +1,8 @@
 using ATTours.BusinessServices.Services.AuthServices;
+using ATTours.ClientAPI.Authorization;
 using ATTours.ClientAPI.Extensions;
 using ATTours.Common.DTO.Auth;
+using ATTours.Common.DTO.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,11 +14,6 @@ namespace ATTours.ClientAPI.Controllers
     [AllowAnonymous]
     public class AuthController(IAuthService authService, IWebHostEnvironment env) : Controller
     {
-        // Refresh-токен живёт только в httpOnly-cookie: он недоступен JavaScript, поэтому
-        // XSS не может его украсть, а Path сужает отправку до самих auth-эндпоинтов.
-        private const string RefreshTokenCookieName = "att_refresh";
-        private const string RefreshTokenCookiePath = "/api/Auth";
-
         [HttpPost]
         [Route("Register")]
         public async Task<MessageResultModel> RegisterAsync([FromBody] RegisterModel model, CancellationToken cancellationToken)
@@ -57,7 +54,7 @@ namespace ATTours.ClientAPI.Controllers
         [Route("RefreshToken")]
         public async Task<AccessTokenModel> RefreshTokenAsync(CancellationToken cancellationToken)
         {
-            var refreshToken = Request.Cookies[RefreshTokenCookieName];
+            var refreshToken = Request.Cookies[RefreshTokenCookie.Name];
 
             // Cookie гасится заранее: при невалидном токене метод бросает исключение и
             // до сюда уже не возвращается, а браузер не должен хранить мёртвую сессию.
@@ -72,10 +69,20 @@ namespace ATTours.ClientAPI.Controllers
         [Route("Logout")]
         public async Task<IActionResult> LogoutAsync(CancellationToken cancellationToken)
         {
-            await authService.LogoutAsync(Request.Cookies[RefreshTokenCookieName], cancellationToken);
+            await authService.LogoutAsync(Request.Cookies[RefreshTokenCookie.Name], cancellationToken);
             ClearRefreshTokenCookie();
             return NoContent();
         }
+
+        // Резолвленный (роль + персональный override) набор прав текущего пользователя —
+        // по нему админка строит гарды роутера и enable/disable кнопок
+        // (architecture-flexible-roles.md §4.1). Всегда свежий из БД: UI не ждёт ротации
+        // access-токена, хотя enforcement на бэке идёт по запечённому в токен набору.
+        [HttpGet]
+        [Route("MyPermissions")]
+        [Authorize]
+        public async Task<MyPermissionsModel> MyPermissionsAsync(CancellationToken cancellationToken)
+            => await authService.GetMyPermissionsAsync(User.GetUserId(), cancellationToken);
 
         [HttpPost]
         [Route("ForgotPassword")]
@@ -97,7 +104,7 @@ namespace ATTours.ClientAPI.Controllers
         [Route("ChangePassword")]
         [Authorize]
         public async Task<MessageResultModel> ChangePasswordAsync([FromBody] ChangePasswordModel model, CancellationToken cancellationToken)
-            => await authService.ChangePasswordAsync(User.GetUserId(), model, Request.Cookies[RefreshTokenCookieName], cancellationToken);
+            => await authService.ChangePasswordAsync(User.GetUserId(), model, Request.Cookies[RefreshTokenCookie.Name], cancellationToken);
 
         // Email-change flow (B8, 2026-08-06). Шаг 1: код на ТЕКУЩИЙ email — без тела.
         [HttpPost]
@@ -129,33 +136,17 @@ namespace ATTours.ClientAPI.Controllers
 
         #region Helpers
 
-        // Обрезка по длинам колонок UserToken.RequestIp/UserAgent: User-Agent приходит
-        // от клиента и вполне может быть длиннее, а падать на этом аудит-полю незачем.
+        // Конфигурация самой cookie — в RefreshTokenCookie (её ставит ещё и UsersController
+        // при impersonation); IssuedRefreshToken.RememberMe решает, сессионная она или
+        // постоянная (ADR 029).
         private RequestContextModel BuildRequestContext()
-            => new(Truncate(HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown", 64),
-                   Truncate(Request.Headers.UserAgent.ToString(), 512));
-
-        private static string Truncate(string value, int maxLength)
-            => value.Length <= maxLength ? value : value[..maxLength];
+            => HttpContext.BuildRequestContext();
 
         private void SetRefreshTokenCookie(IssuedRefreshToken refreshToken)
-            => Response.Cookies.Append(RefreshTokenCookieName, refreshToken.Token, BuildCookieOptions(
-                new DateTimeOffset(refreshToken.ExpiresAtUtc, TimeSpan.Zero)));
+            => RefreshTokenCookie.Set(Response, refreshToken, refreshToken.RememberMe);
 
         private void ClearRefreshTokenCookie()
-            => Response.Cookies.Delete(RefreshTokenCookieName, BuildCookieOptions(null));
-
-        // Domain намеренно не задаётся: браузер привяжет cookie к хосту запроса, что
-        // остаётся верным и при будущем проксировании фронта и API через один origin.
-        private static CookieOptions BuildCookieOptions(DateTimeOffset? expires) => new()
-        {
-            HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Lax,
-            Path = RefreshTokenCookiePath,
-            IsEssential = true,
-            Expires = expires
-        };
+            => RefreshTokenCookie.Clear(Response);
 
         #endregion
     }

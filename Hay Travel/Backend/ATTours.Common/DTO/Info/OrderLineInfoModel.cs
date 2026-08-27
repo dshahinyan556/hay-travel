@@ -18,11 +18,9 @@ namespace ATTours.Common.DTO.Info
         public decimal? DiscountPercent { get; set; }
         public decimal LineTotal { get; set; }
 
-        public int? EmployeeId { get; set; }
-        public string EmployeeFullName { get; set; }
-
-        public string PickupDetails { get; set; }
-        public string NavigatorLink { get; set; }
+        // Исполнители строки (0..N, редизайн 2026-08-23). Пустой список — строка не назначена.
+        // Роль и "детали для выполнения" живут на каждом исполнителе отдельно.
+        public List<OrderLineEmployeeInfoModel> Employees { get; set; } = [];
 
         public List<OrderPaymentInfoModel> Payments { get; set; } = [];
     }

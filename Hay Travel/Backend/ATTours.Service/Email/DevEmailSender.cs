@@ -46,28 +46,37 @@ namespace ATTours.BusinessServices.Email
             return Task.CompletedTask;
         }
 
-        public Task SendNewOrderNotificationAsync(string tourTitle, DateOnly tourDate, int guestCount,
-            string customerName, string customerEmail, CancellationToken cancellationToken = default)
+        public Task SendTransactionalAsync(string toEmail, string toName, string subject, string bodyHtml,
+            EmailAttachment? attachment = null, CancellationToken cancellationToken = default)
         {
-            logger.LogInformation("[DevEmailSender] New order notification for {AdminEmail}: {Tour} on {Date}, {Guests} guests, from {Customer} ({CustomerEmail})",
-                settings.AdminNotificationEmail, tourTitle, tourDate, guestCount, customerName, customerEmail);
+            var recipients = new EmailRecipients
+            {
+                To = [new EmailAddress { Email = toEmail, Name = toName }]
+            };
+
+            return SendTransactionalAsync(recipients, subject, bodyHtml, attachment, cancellationToken);
+        }
+
+        // Письма заказов (Задача E) локально только логируются — вместе с отрендеренным
+        // HTML, иначе шаблон из админки нечем проверить, не подключая провайдера. Все три
+        // списка адресатов печатаются: настроенные админом копии тоже нужно уметь проверить.
+        public Task SendTransactionalAsync(EmailRecipients recipients, string subject, string bodyHtml,
+            EmailAttachment? attachment = null, CancellationToken cancellationToken = default)
+        {
+            var attachmentInfo = attachment is null
+                ? "нет"
+                : $"{attachment.FileName}, {attachment.Content.Length} bytes";
+
+            logger.LogInformation("[DevEmailSender] Transactional email «{Subject}»\nTo: {To}\nCc: {Cc}\nBcc: {Bcc}\nвложение: {Attachment}\n{BodyHtml}",
+                subject, Describe(recipients?.To), Describe(recipients?.Cc), Describe(recipients?.Bcc),
+                attachmentInfo, bodyHtml);
+
             return Task.CompletedTask;
         }
 
-        public Task SendOrderDocumentAsync(string toEmail, string toName, string orderNumber, byte[] pdfDocument,
-            CancellationToken cancellationToken = default)
-        {
-            logger.LogInformation("[DevEmailSender] Order document for {Email}: order {OrderNumber}, {Bytes} bytes",
-                toEmail, orderNumber, pdfDocument.Length);
-            return Task.CompletedTask;
-        }
-
-        public Task SendAssignmentAsync(string toEmail, string toName, string orderNumber, string assignmentDetails,
-            byte[] pdfDocument, CancellationToken cancellationToken = default)
-        {
-            logger.LogInformation("[DevEmailSender] Assignment for {Email}: order {OrderNumber}, {Bytes} bytes\n{Details}",
-                toEmail, orderNumber, pdfDocument.Length, assignmentDetails);
-            return Task.CompletedTask;
-        }
+        private static string Describe(List<EmailAddress>? addresses)
+            => addresses is null || addresses.Count == 0
+                ? "—"
+                : string.Join(", ", addresses.Select(address => $"{address.Name} <{address.Email}>"));
     }
 }

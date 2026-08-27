@@ -2,6 +2,8 @@ import { isRouteErrorResponse, Link, useLocation, useRouteError } from 'react-ro
 import { buttonClassName } from '@/shared/ui'
 import { SessionExpiredError } from '@/shared/auth'
 import { ApiError } from '@/shared/lib/http'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { adminLayoutCopy } from './adminLayoutCopy'
 
 /**
  * `errorElement` for the `/admin` route tree. Modelled on the public
@@ -17,6 +19,7 @@ import { ApiError } from '@/shared/lib/http'
 export function AdminErrorBoundary() {
   const error = useRouteError()
   const location = useLocation()
+  const copy = useCopy(adminLayoutCopy).errorBoundary
 
   if (error instanceof SessionExpiredError) {
     const returnTo = encodeURIComponent(`${location.pathname}${location.search}`)
@@ -24,11 +27,11 @@ export function AdminErrorBoundary() {
       <ErrorPanel
         tone="amber"
         glyph="⏳"
-        title="Сессия истекла"
-        message="Вы слишком долго не выполняли действий или вход был выполнен на другом устройстве. Войдите снова, чтобы продолжить работу."
+        title={copy.sessionExpiredTitle}
+        message={copy.sessionExpiredMessage}
       >
         <Link to={`/auth?returnTo=${returnTo}`} className={buttonClassName('primary', 'md')}>
-          Войти снова
+          {copy.signInAgain}
         </Link>
       </ErrorPanel>
     )
@@ -46,16 +49,12 @@ export function AdminErrorBoundary() {
   // role revoked mid-session would land here, and "сервер не ответил" would be misleading.
   const isForbidden = status === 403
 
-  const title = is404
-    ? 'Раздел не найден'
-    : isForbidden
-      ? 'Недостаточно прав'
-      : 'Не удалось загрузить данные'
+  const title = is404 ? copy.notFoundTitle : isForbidden ? copy.forbiddenTitle : copy.genericTitle
   const message = is404
-    ? 'Похоже, такой страницы админки нет.'
+    ? copy.notFoundMessage
     : isForbidden
-      ? 'У вашей роли нет доступа к этому разделу.'
-      : 'Сервер не ответил. Проверьте соединение и попробуйте снова.'
+      ? copy.forbiddenMessage
+      : copy.genericMessage
 
   return (
     <ErrorPanel tone="rose" glyph="!" title={title} message={message}>
@@ -64,7 +63,7 @@ export function AdminErrorBoundary() {
         onClick={() => window.location.reload()}
         className="inline-flex items-center justify-center rounded-lg bg-neutral-100 px-4 py-2 text-sm font-semibold text-neutral-900 transition-colors hover:bg-neutral-200"
       >
-        Повторить
+        {copy.retry}
       </button>
     </ErrorPanel>
   )
@@ -84,8 +83,8 @@ function ErrorPanel({
   message: string
   children: React.ReactNode
 }) {
-  const badgeClass = tone === 'rose' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
-  const titleClass = tone === 'rose' ? 'text-rose-700' : 'text-amber-800'
+  const badgeClass = tone === 'rose' ? 'bg-rose-100 text-rose-700' : 'bg-neutral-100 text-neutral-700'
+  const titleClass = tone === 'rose' ? 'text-rose-700' : 'text-neutral-800'
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-neutral-50 p-6">

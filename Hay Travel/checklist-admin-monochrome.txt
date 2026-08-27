@@ -1,0 +1,81 @@
+Задача: вся админка (/admin) — строго чёрно-белая палитра, в стиле OrderDetailPage/AdminActionButton
+(инверсия в чёрный вместо цвета, никакого brand-*/rose-*/emerald-*/amber-*/sky-*/indigo-*/blue-*).
+Решено с Давидом 2026-08-21/22:
+- Функциональные цвета (error/success/danger/статусы заказов) — тоже в ч/б, не исключение.
+- Охват — вся админка сразу, не по частям.
+- Делаю сам, без субагентов.
+- Исключение по своей инициативе: RU/EN флаги в TranslationGroup.tsx (декоративный флаг, не статус) — оставляю как есть.
+
+[x] shared/ui примитивы (используются только внутри /admin, безопасно перекрасить без surface-гейта):
+    [x] Button.tsx — primary/danger/outline-danger
+    [x] Field.tsx — required *, error/warning текст
+    [x] Input.tsx / Textarea.tsx — error/focus рамки
+    [x] Select.tsx — admin-ветка (error/focus/selected)
+    [x] DatePicker.tsx — admin-ветка (focus/выбранный день/ribbon)
+    [x] ActionsMenu.tsx — danger item (мёртвый код, заменён AdminActionsMenu, но перекрашен для консистентности)
+    [x] Tabs.tsx — active tab/badge
+    [x] Checkbox.tsx — accent-color
+    [x] HelpButton.tsx — admin-ветка focus ring
+    [x] SortableList.tsx (DragHandle) — hover
+    [x] SuggestInput.tsx — highlighted option
+    [x] UnsavedChangesModal.tsx — проверить
+
+[x] layout
+    [x] AdminSidebar.tsx — active nav item, лого-градиент
+    [x] AdminLayout.tsx — лого-градиент
+    [x] AdminAccessDenied.tsx — иконка
+    [x] AdminErrorBoundary.tsx — rose/amber tone badges
+
+[x] dashboard
+    [x] DashboardPage.tsx
+    [x] StatCards.tsx — warn-карточка, точки легенды
+
+[x] orders (закончить начатое в OrderDetailPage)
+    [x] OrderDetailPage.tsx — error/success баннеры
+    [x] OrdersPage.tsx
+    [x] OrderRow.tsx
+    [x] OrderHeader.tsx
+    [x] OrderLinesGrid.tsx
+    [x] OrderPaymentTab.tsx
+    [x] ordersCopy.ts — статусы заказа (5 состояний)
+    [x] components/DayOrdersList.tsx (calendar) — тот же статус-маппинг, синхронизировать
+
+[x] tour-form
+    [x] TourForm.tsx, TourFormHeader.tsx, TourDayCard.tsx, TourDaysEditor.tsx,
+        TagPicker.tsx, LocalizedListEditor.tsx, FillDayFromProductModal.tsx, TourTypeToggle.tsx
+
+[x] calendar
+    [x] CalendarPage.tsx, CalendarDayCell.tsx, CalendarToolbar.tsx, ClosureRulesTable.tsx,
+        BulkClosurePanel.tsx, DayClosureControls.tsx
+
+[x] catalog (tags/places/regions/note-templates/expense-templates) — единый паттерн
+    [x] tags/TagsTab.tsx, tags/TagForm.tsx
+    [x] places/PlacesTab.tsx, places/PlaceForm.tsx
+    [x] regions/RegionsTab.tsx
+    [x] note-templates/NoteTemplatesTab.tsx, note-templates/NoteTemplateForm.tsx
+    [x] expense-templates/ExpenseTemplatesTab.tsx, expense-templates/ExpenseTemplateForm.tsx
+    [x] CatalogSearchInput.tsx
+
+[x] products
+    [x] ProductsPage.tsx, ProductsTable.tsx, ProductsToolbar.tsx
+
+[x] users
+    [x] UsersPage.tsx, UserDetailPage.tsx, UserDetailHeader.tsx, UsersTable.tsx, UserDangerZone.tsx
+
+[x] settings
+    [x] SettingsActions.tsx, SettingField.tsx
+
+[x] admin/ui общие мелкие компоненты
+    [x] RepeaterControls.tsx, ImageUploadButton.tsx, ImageListEditor.tsx, TourTableParts.tsx,
+        TranslationGroup.tsx (только required-asterisk/error, флаги не трогаю)
+
+[x] Финальная проверка: grep по brand-|rose-|emerald-|amber-|sky-|indigo-|blue- в features/admin — 0 совпадений
+    (кроме TranslationGroup.tsx флагов, ActionsMenu.tsx мёртвый — уже перекрашен)
+[x] npm run build / tsc — без ошибок
+[ ] Визуальная проверка в браузере: dashboard, orders (list+detail), tour-form, calendar, catalog, products, users, settings
+    ЗАБЛОКИРОВАНО 2026-08-22: локальный backend не поднимается — LocalDB "SQL Server process
+    failed to start" (тот же исторический трап, см. память project-public-site-ux-batch-aug2026,
+    [[project-big-update-july-2026]]). Не долблюсь в это сам (agents.md про незацикливание) —
+    нужно либо вручную поднять LocalDB у Давида, либо смотреть глазами на его машине.
+[ ] Мобильная адаптивность — не трогаю вёрстку, только цвета, но быстро свериться (тоже требует
+    живого браузера — см. пункт выше)

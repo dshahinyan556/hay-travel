@@ -36,17 +36,10 @@ namespace ATTours.Common.Entities
         // раньше жил в OrderCreationService/OrderPayment.TotalAmount.
         public decimal LineTotal { get; set; }
 
-        // Кто выполняет бронь по этой строке. Nullable — назначается отдельным действием
-        // ("Назначить"), не обязателен при создании заказа. FK на User с RoleType.Employee,
-        // но на уровне БД это обычный User — enum-проверку роли делает сервис (см. Фазу 2).
-        public int? EmployeeId { get; set; }
-        public User Employee { get; set; }
-
-        // "Детали для выполнения" (Давид, 2026-08-16): где забрать клиента + ссылка навигатора,
-        // на КАЖДУЮ строку отдельно (мульти-строчные заказы редкость, но структура должна их
-        // поддерживать). Уходят исполнителю письмом при "Назначить" (Фаза 5.2).
-        public string PickupDetails { get; set; }
-        public string NavigatorLink { get; set; }
+        // Исполнители строки (0..N). Пустая коллекция — строка не назначена (редизайн
+        // 2026-08-23: плоские EmployeeId/EmployeeRole/PickupDetails/NavigatorLink уехали
+        // на OrderLineEmployee, у каждого исполнителя своя роль и свои детали).
+        public HashSet<OrderLineEmployee> Employees { get; set; } = [];
 
         public HashSet<OrderPayment> Payments { get; set; } = [];
     }

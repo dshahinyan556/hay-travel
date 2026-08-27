@@ -1,8 +1,11 @@
 import { Card, Checkbox, DatePicker, Field, Input } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { TourType } from '@/features/admin/lib/enums'
 import type { TourFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
 import { computeTotalPrice, formatTotalPrice } from '@/features/admin/tour-form/lib/price'
+import { tourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
 import { ImageUrlField } from '@/features/admin/ui/ImageUrlField'
 import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
 import type { RegionInfoModel, TagInfoModel } from '@/shared/types/attours'
@@ -52,6 +55,8 @@ export function TourFormHeader({
   regions,
   tags,
 }: TourFormHeaderProps) {
+  const { locale } = useLocale()
+  const copy = useCopy(tourFormCopy).header
   const isExcursion = state.type === TourType.Excursion
   const totalPrice = computeTotalPrice(state.days)
   const singleDay = state.days[0]
@@ -62,7 +67,7 @@ export function TourFormHeader({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex flex-col gap-2">
             <span className="text-sm font-semibold text-neutral-700">
-              Тип позиции
+              {copy.type}
               <span aria-hidden="true" className="ml-0.5 text-rose-700">
                 *
               </span>
@@ -72,7 +77,7 @@ export function TourFormHeader({
 
           {isExcursion && singleDay ? (
             <div className="w-40">
-              <Field label="Цена, ֏" htmlFor="excursion-price" error={excursionPriceError}>
+              <Field label={copy.price} htmlFor="excursion-price" error={excursionPriceError}>
                 <Input
                   id="excursion-price"
                   type="text"
@@ -86,18 +91,18 @@ export function TourFormHeader({
             </div>
           ) : (
             <div className="flex flex-col items-end gap-0.5">
-              <span className="text-2xl font-bold tabular-nums text-brand-800">
-                {formatTotalPrice(totalPrice)}
+              <span className="text-2xl font-bold tabular-nums text-neutral-900">
+                {formatTotalPrice(totalPrice, locale)}
               </span>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-                Цена · сумма дней
+                {copy.totalCaption}
               </span>
             </div>
           )}
         </div>
 
         <ImageUrlField
-          label="Главная картинка — URL"
+          label={copy.mainImage}
           value={state.mainImageUrl}
           onChange={actions.setMainImageUrl}
           required
@@ -105,26 +110,26 @@ export function TourFormHeader({
         />
 
         <TranslationGroup
-          label="Заголовок"
+          label={copy.title}
           required
           value={state.title}
           error={titleRuError}
           onChange={(lang, value) => actions.setLocalized('title', lang, value)}
         />
         <TranslationGroup
-          label="Краткое описание"
+          label={copy.shortDescription}
           multiline
           value={state.shortDescription}
           onChange={(lang, value) => actions.setLocalized('shortDescription', lang, value)}
         />
         <TranslationGroup
-          label="Описание"
+          label={copy.description}
           multiline
           value={state.description}
           onChange={(lang, value) => actions.setLocalized('description', lang, value)}
         />
         <TranslationGroup
-          label="Длительность"
+          label={copy.duration}
           value={state.duration}
           onChange={(lang, value) => actions.setLocalized('duration', lang, value)}
         />
@@ -134,28 +139,28 @@ export function TourFormHeader({
         <TagPicker tags={tags} selected={state.tags} onToggle={actions.toggleTag} />
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-semibold text-neutral-700">Публикация</span>
+          <span className="text-sm font-semibold text-neutral-700">{copy.publication}</span>
           <Checkbox
-            label="Активен — виден на сайте"
+            label={copy.isActive}
             checked={state.isActive}
             onChange={(e) => actions.setIsActive(e.target.checked)}
           />
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-semibold text-neutral-700">Оплата</span>
+          <span className="text-sm font-semibold text-neutral-700">{copy.payment}</span>
           <Checkbox
-            label="Требуется предоплата"
+            label={copy.requiresPrepayment}
             checked={state.requiresPrepayment}
             onChange={(e) => actions.setRequiresPrepayment(e.target.checked)}
           />
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-semibold text-neutral-700">Скидка</span>
+          <span className="text-sm font-semibold text-neutral-700">{copy.discount}</span>
           <div className="flex flex-wrap items-start gap-3">
             <div className="w-32">
-              <Field label="Размер, %" htmlFor="tour-discount-percent" error={discountPercentError}>
+              <Field label={copy.discountPercent} htmlFor="tour-discount-percent" error={discountPercentError}>
                 <Input
                   id="tour-discount-percent"
                   type="text"
@@ -168,7 +173,7 @@ export function TourFormHeader({
               </Field>
             </div>
             <div className="w-full sm:w-52">
-              <Field label="Дата начала" htmlFor="tour-discount-start-date" error={discountStartDateError}>
+              <Field label={copy.discountStartDate} htmlFor="tour-discount-start-date" error={discountStartDateError}>
                 <DatePicker
                   id="tour-discount-start-date"
                   value={state.discountStartDate}
@@ -182,7 +187,7 @@ export function TourFormHeader({
               </Field>
             </div>
             <div className="w-full sm:w-52">
-              <Field label="Действует до" htmlFor="tour-discount-valid-until" error={discountValidUntilError}>
+              <Field label={copy.discountValidUntil} htmlFor="tour-discount-valid-until" error={discountValidUntilError}>
                 <DatePicker
                   id="tour-discount-valid-until"
                   value={state.discountValidUntil}
@@ -193,10 +198,7 @@ export function TourFormHeader({
               </Field>
             </div>
           </div>
-          <p className="text-xs text-neutral-400">
-            Скидка действует с даты начала по дату окончания включительно. После даты окончания
-            она перестаёт применяться сама — снимать вручную не нужно.
-          </p>
+          <p className="text-xs text-neutral-400">{copy.discountHint}</p>
         </div>
       </div>
     </Card>

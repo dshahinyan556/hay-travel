@@ -1,52 +1,37 @@
 import { useState } from 'react'
 import { Tabs, type TabItem } from '@/shared/ui'
-import { sectionCopyFor } from '@/features/admin/settings/lib/settingsCopy'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { sectionCopyFor, settingsCopy } from '@/features/admin/settings/lib/settingsCopy'
 import type { SettingFieldState, SettingsFormState } from '@/features/admin/settings/types'
 import type { SettingsValidation } from '@/features/admin/settings/lib/validation'
 import type { SettingsFormActions } from '@/features/admin/settings/hooks/useSettingsForm'
 import { SettingsSectionCard } from './SettingsSectionCard'
-import { SettingsActions } from './SettingsActions'
 
 interface SettingsFormProps {
   state: SettingsFormState
   actions: SettingsFormActions
   validation: SettingsValidation
-  dirtyCount: number
-  canSubmit: boolean
-  hasAttemptedSubmit: boolean
-  isSubmitting: boolean
-  error: string | null
-  savedAt: Date | null
   onSubmit: () => void
 }
 
 /**
- * Presentational orchestrator: one tab per section (same `Tabs` primitive as the catalog page),
- * plus the sticky bottom action bar.
+ * Presentational orchestrator: one tab per section (same `Tabs` primitive as the catalog page).
  *
  * Tabs hide the other sections' fields behind a single "Сохранить" button — the risk being the
  * admin forgets what they changed on a tab they've since left. `SettingsActions` covers that: its
- * "Изменено N полей" counter lives in the sticky bottom bar, outside the tab content, so it stays
- * visible no matter which tab is active — the admin never loses sight of pending changes, and
- * "Сохранить" always saves every section, not just the open one.
+ * "Изменено N полей" counter lives in the pinned bottom bar, OUTSIDE this form (it is now
+ * `SetupFormLayout`'s `footer`, rendered by `SettingsPage`), so it stays visible no matter which
+ * tab is active — the admin never loses sight of pending changes, and "Сохранить" always saves
+ * every section, not just the open one. The `<form>` is kept even though its submit button now
+ * sits outside it: that is what still makes Enter-in-a-field save.
  *
  * Owns only which tab is active; the field values themselves still live in `useSettingsForm`.
  */
-export function SettingsForm({
-  state,
-  actions,
-  validation,
-  dirtyCount,
-  canSubmit,
-  hasAttemptedSubmit,
-  isSubmitting,
-  error,
-  savedAt,
-  onSubmit,
-}: SettingsFormProps) {
+export function SettingsForm({ state, actions, validation, onSubmit }: SettingsFormProps) {
+  const copy = useCopy(settingsCopy)
   const tabs: TabItem[] = state.sections.map((section) => ({
     id: String(section.group),
-    label: sectionCopyFor(section.group).title,
+    label: sectionCopyFor(copy, section.group).title,
   }))
   const [activeGroup, setActiveGroup] = useState(state.sections[0]?.group)
   const activeSection = state.sections.find((s) => s.group === activeGroup) ?? state.sections[0]
@@ -68,13 +53,13 @@ export function SettingsForm({
           tabs={tabs}
           activeId={String(activeSection?.group ?? '')}
           onChange={(id) => setActiveGroup(Number(id))}
-          label="Разделы настроек"
+          label={copy.tabsLabel}
         />
       </div>
 
       {activeSection &&
         (() => {
-          const copy = sectionCopyFor(activeSection.group)
+          const section = sectionCopyFor(copy, activeSection.group)
           // `keys` is the source of order; a key can only be missing if the mapper and the
           // section list disagreed, which cannot happen — both are built in one pass.
           const fields = activeSection.keys
@@ -84,25 +69,14 @@ export function SettingsForm({
           return (
             <SettingsSectionCard
               key={activeSection.group}
-              title={copy.title}
-              description={copy.description}
+              title={section.title}
+              description={section.description}
               fields={fields}
               validation={validation}
               actions={actions}
             />
           )
         })()}
-
-      <SettingsActions
-        dirtyCount={dirtyCount}
-        isValid={validation.isValid}
-        hasAttemptedSubmit={hasAttemptedSubmit}
-        canSubmit={canSubmit}
-        isSubmitting={isSubmitting}
-        error={error}
-        savedAt={savedAt}
-        onSubmit={onSubmit}
-      />
     </form>
   )
 }

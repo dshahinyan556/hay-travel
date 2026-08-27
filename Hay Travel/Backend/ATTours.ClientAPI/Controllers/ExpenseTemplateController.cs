@@ -3,12 +3,13 @@ using ATTours.BusinessServices.Services.DeleteServices;
 using ATTours.BusinessServices.Services.InfoServices;
 using ATTours.BusinessServices.Services.UpdateServices;
 using ATTours.ClientAPI.Authorization;
+using ATTours.Common.Authorization;
 using ATTours.Common.Dto.Init;
 using ATTours.Common.DTO.Info;
 using ATTours.Common.Entities;
+using ATTours.Common.Enums;
 using ATTours.Common.Extensions;
 using AutoMapper;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ATTours.ClientAPI.Controllers
@@ -18,11 +19,11 @@ namespace ATTours.ClientAPI.Controllers
     [Route("api/[controller]")]
     public class ExpenseTemplateController(IMapper mapper) : Controller
     {
-        // Чтение каталога доступно и тур-менеджеру: из этих шаблонов он набирает доп. расходы
-        // в редакторе тура. Правка самого каталога — только админ.
+        // Права по ключу "catalog.expense-templates": в сиде чтение есть у тур-менеджера
+        // (из этих шаблонов он набирает доп. расходы в редакторе тура), правка — у админа.
         [HttpGet]
         [Route("GetAll")]
-        [Authorize(Roles = ApiRoles.TourManagerOrAdmin)]
+        [RequiresPermission(AdminScreens.CatalogExpenseTemplates, PermissionAction.View)]
         public async Task<List<ExpenseTemplateInfoModel>> GetAllAsync()
         {
             using var info = new ExpenseTemplateInfo();
@@ -32,7 +33,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpPost]
         [Route("Create")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.CatalogExpenseTemplates, PermissionAction.Create)]
         public async Task<ExpenseTemplateInfoModel> CreateAsync([FromBody] ExpenseTemplateCreateModel model)
         {
             var entity = mapper.Map<ExpenseTemplate>(model);
@@ -45,7 +46,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpPut]
         [Route("Update")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.CatalogExpenseTemplates, PermissionAction.Update)]
         public async Task<ExpenseTemplateInfoModel> UpdateAsync([FromBody] ExpenseTemplateInfoModel model)
         {
             var entity = mapper.Map<ExpenseTemplate>(model);
@@ -58,7 +59,7 @@ namespace ATTours.ClientAPI.Controllers
 
         [HttpDelete]
         [Route("Delete")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.CatalogExpenseTemplates, PermissionAction.Delete)]
         public async Task DeleteAsync([FromQuery] int id)
         {
             using var deletionService = new ExpenseTemplateDeletionService();

@@ -34,6 +34,9 @@ import type {
 } from '@/features/admin/tour-form/reducer/tourFormReducer'
 import { validateTourForm } from '@/features/admin/tour-form/lib/validation'
 import type { TourFormValidation } from '@/features/admin/tour-form/lib/validation'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { tourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
+import type { TourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
 
 /**
  * Bound action creators — a thin, stable façade over `dispatch`.
@@ -122,12 +125,10 @@ export interface UseTourFormResult {
   isDirty: boolean
 }
 
-/** Turn any thrown value from the save call into a user-facing Russian message. */
-function submitErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return `Не удалось сохранить: сервер вернул ошибку (${error.status}). Данные формы сохранены — попробуйте ещё раз.`
-  }
-  return 'Не удалось сохранить: проверьте соединение и попробуйте ещё раз. Данные формы сохранены.'
+/** Turn any thrown value from the save call into a user-facing message. Pure — the copy comes
+ * from the hook, which is where the locale is known. */
+function submitErrorMessage(copy: TourFormCopy['submitError'], error: unknown): string {
+  return error instanceof ApiError ? copy.server(error.status) : copy.network
 }
 
 /** Persist the form to the backend according to `mode`. Resolves once everything is saved. */
@@ -148,6 +149,7 @@ export function useTourForm(
   mode: TourFormMode = { kind: 'create' },
 ): UseTourFormResult {
   const navigate = useNavigate()
+  const copy = useCopy(tourFormCopy)
   const [state, dispatch] = useReducer(tourFormReducer, initialState, normalizeInitialState)
   // Snapshot of the normalized initial state, captured once on mount — never a dep of anything,
   // so later renders can't shift the baseline out from under `isDirty`.
@@ -237,7 +239,9 @@ export function useTourForm(
     [state],
   )
 
-  const rawValidation = useMemo(() => validateTourForm(state), [state])
+  // `copy.validation` is a stable object per locale (see `defineCopy`), so this only recomputes
+  // on a real state change or a language switch.
+  const rawValidation = useMemo(() => validateTourForm(state, copy.validation), [state, copy.validation])
   // Errors stay hidden until the first submit attempt — a blank required field shouldn't
   // greet the admin in red before they've had a chance to type anything. `isValid` itself
   // stays live throughout so the Save button is correctly disabled from the start.
@@ -262,7 +266,7 @@ export function useTourForm(
     persist(state, mode)
       .then(() => navigate('/admin/products'))
       .catch((err: unknown) => {
-        setError(submitErrorMessage(err))
+        setError(submitErrorMessage(copy.submitError, err))
         setIsSubmitting(false)
       })
   }

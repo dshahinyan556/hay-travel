@@ -1,9 +1,11 @@
 import { useMemo } from 'react'
 import { Field, Input } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import type { Localized, PlaceOption, RoutePointFormState, TourDayFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
 import type { DaySource } from '@/features/admin/lib/tourMapper'
 import { hasFillableDayContent } from '@/features/admin/lib/tourMapper'
+import { tourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
 import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
 import { ImageListEditor } from '@/features/admin/ui/ImageListEditor'
 import { LocalizedListEditor } from './LocalizedListEditor'
@@ -19,7 +21,8 @@ interface TourDayFieldsProps {
   /** Missing-route-point error for this day, if any. */
   routePointError?: string
   actions: TourFormActions
-  /** "Цена дня, ֏" inside a multi-day accordion vs. plain "Цена, ֏" for a flat single day. */
+  /** Overrides the day-price caption. Defaults to the accordion's "Цена дня, ֏"/"Day price, ֏";
+   * a flat single day passes the plain "Цена, ֏"/"Price, ֏" instead. */
   priceLabel?: string
   /** Existing route-point catalog entries offered as autocomplete. */
   routePointSuggestions: Localized[]
@@ -41,11 +44,12 @@ export function TourDayFields({
   priceError,
   routePointError,
   actions,
-  priceLabel = 'Цена дня, ֏',
+  priceLabel,
   routePointSuggestions,
   placeOptions,
   daySources,
 }: TourDayFieldsProps) {
+  const copy = useCopy(tourFormCopy)
   const hasUnlinkedPoint = day.routePoints.some(
     (rp) => rp.placeId == null && (rp.text.ru.trim() || rp.text.en.trim()),
   )
@@ -66,7 +70,7 @@ export function TourDayFields({
       </div>
 
       <div className="max-w-56">
-        <Field label={priceLabel} htmlFor={`day-price-${day.key}`} error={priceError}>
+        <Field label={priceLabel ?? copy.days.price} htmlFor={`day-price-${day.key}`} error={priceError}>
           <Input
             id={`day-price-${day.key}`}
             type="text"
@@ -80,36 +84,36 @@ export function TourDayFields({
       </div>
 
       <TranslationGroup
-        label="Заголовок"
+        label={copy.header.title}
         required
         value={day.title}
         error={titleError}
         onChange={(lang, value) => actions.setDayLocalized(day.key, 'title', lang, value)}
       />
       <TranslationGroup
-        label="Краткое описание"
+        label={copy.header.shortDescription}
         value={day.shortDescription}
         onChange={(lang, value) => actions.setDayLocalized(day.key, 'shortDescription', lang, value)}
       />
       <TranslationGroup
-        label="Описание"
+        label={copy.header.description}
         multiline
         value={day.description}
         onChange={(lang, value) => actions.setDayLocalized(day.key, 'description', lang, value)}
       />
       <TranslationGroup
-        label="Длительность"
+        label={copy.header.duration}
         value={day.duration}
         onChange={(lang, value) => actions.setDayLocalized(day.key, 'duration', lang, value)}
       />
 
       <LocalizedListEditor
-        title="Точки маршрута"
-        hint="Порядок точек соответствует маршруту дня."
-        emptyText="Точек маршрута пока нет."
-        addLabel="Добавить точку"
-        itemNoun="точку"
-        itemLabel="Точка маршрута"
+        title={copy.routePoints.title}
+        hint={copy.routePoints.hintDay}
+        emptyText={copy.routePoints.empty}
+        addLabel={copy.routePoints.add}
+        itemNoun={copy.routePoints.noun}
+        itemLabel={copy.routePoints.label}
         error={routePointError}
         items={day.routePoints}
         suggestions={routePointSuggestions}
@@ -127,13 +131,11 @@ export function TourDayFields({
         )}
       />
       {hasUnlinkedPoint && (
-        <p className="text-xs text-neutral-400">
-          Точки без привязки к каталогу — свободный текст, их фото не попадут в галерею дня автоматически.
-        </p>
+        <p className="text-xs text-neutral-400">{copy.routePoints.unlinkedNoteDay}</p>
       )}
 
       <div className="flex flex-col gap-2">
-        <h4 className="text-sm font-semibold text-neutral-800">Галерея дня</h4>
+        <h4 className="text-sm font-semibold text-neutral-800">{copy.days.gallery}</h4>
         <ImageListEditor
           items={day.gallery}
           onAdd={() => actions.addGallery(day.key)}

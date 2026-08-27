@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Checkbox, DatePicker, Input, Modal, Textarea } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { SidePanel } from '@/features/admin/ui/SidePanel'
 import { TourType } from '@/features/admin/lib/enums'
 import type { TourInfoModel } from '@/shared/types/attours'
@@ -9,7 +11,7 @@ import {
   type ClosureRuleCreateModel,
   type DayOfWeekCode,
 } from '@/shared/types/booking'
-import { calendarCopy, weekdayLabels, weekdayOrder } from '../lib/calendarCopy'
+import { calendarCopy, weekdayOrder } from '../lib/calendarCopy'
 import { tourTitleResolver } from '../lib/calendarModel'
 import {
   compileBulkForm,
@@ -42,6 +44,8 @@ export interface BulkClosurePanelProps {
  * line and the submitted payload can never disagree — they are the same call.
  */
 export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: BulkClosurePanelProps) {
+  const copy = useCopy(calendarCopy)
+  const { locale } = useLocale()
   const [form, setForm] = useState<BulkClosureForm>(emptyBulkForm)
   const [tourSearch, setTourSearch] = useState('')
   const [scopeAll, setScopeAll] = useState(true)
@@ -56,10 +60,10 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
     setConfirming(false)
   }, [open])
 
-  const tourTitle = useMemo(() => tourTitleResolver(tours), [tours])
+  const tourTitle = useMemo(() => tourTitleResolver(tours, locale, copy), [tours, locale, copy])
   const sortedTours = useMemo(
-    () => [...tours].sort((a, b) => tourTitle(a.id).localeCompare(tourTitle(b.id), 'ru')),
-    [tours, tourTitle],
+    () => [...tours].sort((a, b) => tourTitle(a.id).localeCompare(tourTitle(b.id), locale)),
+    [tours, tourTitle, locale],
   )
   // Only regions that actually have a tour in them — a preset button for an empty region would
   // always produce zero rules. Ordered like the map/catalog (`REGIONS`), not alphabetically.
@@ -79,8 +83,8 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
   // «Все туры» is a SCOPE, expressed as an empty `tourIds` (one global rule), not as "every tour
   // ticked" — so the selection made under «Выбранные туры» is preserved if the admin toggles back.
   const validation = useMemo(
-    () => compileBulkForm(scopeAll ? { ...form, tourIds: [] } : form),
-    [form, scopeAll],
+    () => compileBulkForm(scopeAll ? { ...form, tourIds: [] } : form, copy),
+    [form, scopeAll, copy],
   )
 
   function patch(changes: Partial<BulkClosureForm>) {
@@ -130,11 +134,11 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
 
   return (
     <>
-      <SidePanel open={open} onClose={onClose} title={calendarCopy.bulkTitle}>
+      <SidePanel open={open} onClose={onClose} title={copy.bulkTitle}>
         <div className="flex flex-col gap-5">
           <fieldset>
             <legend className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              {calendarCopy.bulkActionTitle}
+              {copy.bulkActionTitle}
             </legend>
             <div className="mt-1 flex flex-col">
               <label className={radioClass}>
@@ -143,9 +147,9 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
                   name="bulk-action"
                   checked={form.action === ClosureAction.Close}
                   onChange={() => patch({ action: ClosureAction.Close })}
-                  className="h-4 w-4 text-brand-700"
+                  className="h-4 w-4 text-neutral-900"
                 />
-                {calendarCopy.bulkActionClose}
+                {copy.bulkActionClose}
               </label>
               <label className={radioClass}>
                 <input
@@ -153,19 +157,19 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
                   name="bulk-action"
                   checked={form.action === ClosureAction.Open}
                   onChange={() => patch({ action: ClosureAction.Open })}
-                  className="h-4 w-4 text-brand-700"
+                  className="h-4 w-4 text-neutral-900"
                 />
-                {calendarCopy.bulkActionOpen}
+                {copy.bulkActionOpen}
               </label>
               {form.action === ClosureAction.Open && (
-                <p className="text-xs text-neutral-500">{calendarCopy.bulkActionOpenHint}</p>
+                <p className="text-xs text-neutral-500">{copy.bulkActionOpenHint}</p>
               )}
             </div>
           </fieldset>
 
           <fieldset>
             <legend className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              {calendarCopy.bulkModeTitle}
+              {copy.bulkModeTitle}
             </legend>
             <div className="mt-1 flex flex-col">
               {(['range', 'weekly'] as BulkMode[]).map((mode) => (
@@ -175,9 +179,9 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
                     name="bulk-mode"
                     checked={form.mode === mode}
                     onChange={() => patch({ mode })}
-                    className="h-4 w-4 text-brand-700"
+                    className="h-4 w-4 text-neutral-900"
                   />
-                  {mode === 'range' ? calendarCopy.bulkModeRange : calendarCopy.bulkModeWeekly}
+                  {mode === 'range' ? copy.bulkModeRange : copy.bulkModeWeekly}
                 </label>
               ))}
             </div>
@@ -186,14 +190,14 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
           {form.mode === 'weekly' && (
             <fieldset>
               <legend className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                {calendarCopy.bulkWeekdaysTitle}
+                {copy.bulkWeekdaysTitle}
               </legend>
               {/* 4 columns at 360px, 7 once there is room for a full week on one line. */}
               <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-7">
                 {weekdayOrder.map((code) => (
                   <Checkbox
                     key={code}
-                    label={weekdayLabels[code]}
+                    label={copy.weekdayShort[code]}
                     checked={form.weekdays.includes(code)}
                     onChange={(event) => toggleWeekday(code, event.target.checked)}
                   />
@@ -204,11 +208,11 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
 
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              {form.mode === 'range' ? calendarCopy.bulkModeRange : calendarCopy.bulkPeriodTitle}
+              {form.mode === 'range' ? copy.bulkModeRange : copy.bulkPeriodTitle}
             </p>
             <div className="mt-2 flex flex-col gap-2">
               <label className="text-xs text-neutral-500">
-                {calendarCopy.bulkFrom}
+                {copy.bulkFrom}
                 <DatePicker
                   value={form.fromISO}
                   onChange={(value) => patch({ fromISO: value })}
@@ -218,18 +222,18 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
                   // остатка: прошлое не редактируется ни точечно, ни массово.
                   disablePast
                   className="mt-1"
-                  aria-label={calendarCopy.bulkFrom}
+                  aria-label={copy.bulkFrom}
                 />
               </label>
               <label className="text-xs text-neutral-500">
-                {calendarCopy.bulkTo}
+                {copy.bulkTo}
                 <DatePicker
                   value={form.toISO}
                   onChange={(value) => patch({ toISO: value })}
                   surface="admin"
                   disablePast
                   className="mt-1"
-                  aria-label={calendarCopy.bulkTo}
+                  aria-label={copy.bulkTo}
                 />
               </label>
             </div>
@@ -237,7 +241,7 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
 
           <fieldset>
             <legend className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              {calendarCopy.bulkScopeTitle}
+              {copy.bulkScopeTitle}
             </legend>
             <div className="mt-1 flex flex-col">
               <label className={radioClass}>
@@ -246,9 +250,9 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
                   name="bulk-scope"
                   checked={scopeAll}
                   onChange={() => setScopeAll(true)}
-                  className="h-4 w-4 text-brand-700"
+                  className="h-4 w-4 text-neutral-900"
                 />
-                {calendarCopy.bulkScopeAll}
+                {copy.bulkScopeAll}
               </label>
               <label className={radioClass}>
                 <input
@@ -256,9 +260,9 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
                   name="bulk-scope"
                   checked={!scopeAll}
                   onChange={() => setScopeAll(false)}
-                  className="h-4 w-4 text-brand-700"
+                  className="h-4 w-4 text-neutral-900"
                 />
-                {calendarCopy.bulkScopeSelected}
+                {copy.bulkScopeSelected}
               </label>
             </div>
 
@@ -268,15 +272,15 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
                     so "Экскурсии" never becomes an invisible saved criterion. */}
                 <div className="flex flex-wrap gap-1.5">
                   {[
-                    { label: calendarCopy.bulkPresetAll, value: 'all' as const },
-                    { label: calendarCopy.bulkPresetTours, value: TourType.Tour },
-                    { label: calendarCopy.bulkPresetExcursions, value: TourType.Excursion },
+                    { label: copy.bulkPresetAll, value: 'all' as const },
+                    { label: copy.bulkPresetTours, value: TourType.Tour },
+                    { label: copy.bulkPresetExcursions, value: TourType.Excursion },
                   ].map((preset) => (
                     <button
                       key={String(preset.value)}
                       type="button"
                       onClick={() => applyPreset(preset.value)}
-                      className="cursor-pointer rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                      className="cursor-pointer rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/20"
                     >
                       {preset.label}
                     </button>
@@ -286,16 +290,18 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
                 {availableRegions.length > 0 && (
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
-                      {calendarCopy.bulkPresetByRegion}
+                      {copy.bulkPresetByRegion}
                     </span>
                     {availableRegions.map((region) => (
                       <button
                         key={region.slug}
                         type="button"
                         onClick={() => applyRegionPreset(region.slug)}
-                        className="cursor-pointer rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+                        className="cursor-pointer rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/20"
                       >
-                        {region.ru}
+                        {/* `REGIONS` ships both names — a region caption follows the interface
+                            locale like every other label here, it is not admin-entered content. */}
+                        {locale === 'en' ? region.en : region.ru}
                       </button>
                     ))}
                   </div>
@@ -305,24 +311,24 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
                   <Input
                     value={tourSearch}
                     onChange={(event) => setTourSearch(event.target.value)}
-                    placeholder={calendarCopy.bulkTourSearch}
-                    aria-label={calendarCopy.bulkTourSearch}
+                    placeholder={copy.bulkTourSearch}
+                    aria-label={copy.bulkTourSearch}
                     className="flex-1"
                   />
                   {(tourSearch !== '' || form.tourIds.length > 0) && (
                     <button
                       type="button"
                       onClick={resetTourFilters}
-                      className="shrink-0 cursor-pointer rounded-lg px-2 py-1.5 text-xs font-semibold text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/20"
+                      className="shrink-0 cursor-pointer rounded-lg px-2 py-1.5 text-xs font-semibold text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/15"
                     >
-                      {calendarCopy.bulkResetFilters}
+                      {copy.bulkResetFilters}
                     </button>
                   )}
                 </div>
 
                 <div className="max-h-56 overflow-y-auto rounded-lg border border-neutral-200 p-2">
                   {visibleTours.length === 0 ? (
-                    <p className="px-1 py-2 text-sm text-neutral-500">{calendarCopy.bulkNoTours}</p>
+                    <p className="px-1 py-2 text-sm text-neutral-500">{copy.bulkNoTours}</p>
                   ) : (
                     <ul className="flex flex-col gap-0.5">
                       {visibleTours.map((tour) => {
@@ -335,7 +341,7 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
                               label={tourTitle(tour.id)}
                               checked={selected}
                               containerClassName={`w-full rounded-lg px-2 py-1.5 transition-colors ${
-                                selected ? 'bg-brand-50 font-semibold' : 'hover:bg-neutral-100'
+                                selected ? 'bg-neutral-100 font-semibold' : 'hover:bg-neutral-100'
                               }`}
                               onChange={(event) =>
                                 patch({
@@ -357,7 +363,7 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
 
           <div>
             <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              {calendarCopy.bulkReasonTitle}
+              {copy.bulkReasonTitle}
               <Textarea
                 value={form.reason}
                 onChange={(event) => patch({ reason: event.target.value })}
@@ -373,7 +379,7 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
 
           {validation.ok ? (
             <p className="rounded-lg bg-neutral-50 px-3 py-2 text-sm font-medium text-neutral-700">
-              {calendarCopy.bulkPreview(validation.models.length)}
+              {copy.bulkPreview(validation.models.length)}
             </p>
           ) : (
             <p
@@ -393,7 +399,7 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
               disabled={pending}
               className="min-h-11 w-full sm:w-auto"
             >
-              {calendarCopy.bulkCancel}
+              {copy.bulkCancel}
             </Button>
             <Button
               type="button"
@@ -401,7 +407,7 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
               disabled={pending || !validation.ok || validation.models.length === 0}
               className="min-h-11 w-full sm:w-auto"
             >
-              {pending ? calendarCopy.bulkApplying : calendarCopy.bulkApply}
+              {pending ? copy.bulkApplying : copy.bulkApply}
             </Button>
           </div>
         </div>
@@ -410,10 +416,10 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
       <Modal
         open={confirming}
         onClose={() => setConfirming(false)}
-        title={calendarCopy.bulkConfirmTitle}
+        title={copy.bulkConfirmTitle}
       >
         <p className="text-sm text-neutral-600">
-          {validation.ok ? calendarCopy.bulkConfirmBody(validation.models.length) : ''}
+          {validation.ok ? copy.bulkConfirmBody(validation.models.length) : ''}
         </p>
         <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button
@@ -423,7 +429,7 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
             disabled={pending}
             className="min-h-11 w-full sm:w-auto"
           >
-            {calendarCopy.bulkCancel}
+            {copy.bulkCancel}
           </Button>
           <Button
             type="button"
@@ -435,7 +441,7 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
             disabled={pending}
             className="min-h-11 w-full sm:w-auto"
           >
-            {pending ? calendarCopy.bulkApplying : calendarCopy.bulkConfirmAction}
+            {pending ? copy.bulkApplying : copy.bulkConfirmAction}
           </Button>
         </div>
       </Modal>

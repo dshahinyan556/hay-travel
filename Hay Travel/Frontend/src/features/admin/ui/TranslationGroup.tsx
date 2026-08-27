@@ -1,7 +1,10 @@
 import { useId } from 'react'
 import { Input, Textarea } from '@/shared/ui'
 import { HelpButton } from '@/shared/ui/HelpButton'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import type { LangKey, Localized } from '@/features/admin/types/localized'
+import { adminUiCopy } from './adminUiCopy'
+import { LANG_FLAG_CLASS } from './langFlag'
 
 interface TranslationGroupProps {
   /** Field caption shown above the RU/EN pair. */
@@ -21,11 +24,6 @@ interface TranslationGroupProps {
   /** Explanation surfaced through a `HelpButton` next to the legend — same pattern `Field` uses
    * for non-translatable settings (2026-08-14). */
   hint?: string
-}
-
-const langMeta: Record<LangKey, { name: string; flag: string }> = {
-  ru: { name: 'Русский', flag: 'bg-gradient-to-b from-white from-33% via-blue-700 via-33% to-red-600 to-66%' },
-  en: { name: 'English', flag: 'bg-blue-900' },
 }
 
 /**
@@ -98,7 +96,8 @@ interface LangCellProps {
 
 function LangCell({ lang, fieldLabel, value, onChange, multiline, error }: LangCellProps) {
   const id = useId()
-  const meta = langMeta[lang]
+  const copy = useCopy(adminUiCopy).translation
+  const langName = copy.langName[lang]
   const control = multiline ? Textarea : Input
 
   return (
@@ -107,8 +106,8 @@ function LangCell({ lang, fieldLabel, value, onChange, multiline, error }: LangC
         htmlFor={id}
         className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-500"
       >
-        <span aria-hidden="true" className={`h-3 w-4 shrink-0 rounded-[2px] ${meta.flag}`} />
-        {meta.name}
+        <span aria-hidden="true" className={`h-3 w-4 shrink-0 rounded-[2px] ${LANG_FLAG_CLASS[lang]}`} />
+        {langName}
       </label>
       {control === Textarea ? (
         <Textarea
@@ -116,7 +115,7 @@ function LangCell({ lang, fieldLabel, value, onChange, multiline, error }: LangC
           value={value}
           onChange={(e) => onChange(e.target.value)}
           error={Boolean(error)}
-          aria-label={`${fieldLabel} — ${meta.name}`}
+          aria-label={copy.fieldInLang(fieldLabel, langName)}
           className="min-h-[52px]"
         />
       ) : (
@@ -125,7 +124,7 @@ function LangCell({ lang, fieldLabel, value, onChange, multiline, error }: LangC
           value={value}
           onChange={(e) => onChange(e.target.value)}
           error={Boolean(error)}
-          aria-label={`${fieldLabel} — ${meta.name}`}
+          aria-label={copy.fieldInLang(fieldLabel, langName)}
         />
       )}
       {error && (

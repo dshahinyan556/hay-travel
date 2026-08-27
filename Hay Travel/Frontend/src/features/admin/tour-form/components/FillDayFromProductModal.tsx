@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Button, Modal } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import type { DaySource, DaySourceContent } from '@/features/admin/lib/tourMapper'
+import { tourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
 
 interface FillDayFromProductModalProps {
   open: boolean
@@ -27,7 +29,14 @@ export function FillDayFromProductModal({
   hasContent,
   onConfirm,
 }: FillDayFromProductModalProps) {
+  const copy = useCopy(tourFormCopy)
   const [pending, setPending] = useState<DaySource | null>(null)
+
+  /** "Гарни-Гегард, День 2" — the product name in the panel's language plus its day sub-label. */
+  const sourceName = (source: DaySource): string => {
+    const title = copy.localizedName(source.tourTitle) || copy.fill.untitled
+    return source.dayLabel ? `${title}, ${source.dayLabel}` : title
+  }
 
   const close = () => {
     setPending(null)
@@ -45,16 +54,12 @@ export function FillDayFromProductModal({
 
   if (pending) {
     return (
-      <Modal open={open} onClose={close} title="Заменить содержимое дня?">
+      <Modal open={open} onClose={close} title={copy.fill.confirmTitle}>
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-neutral-600">
-            В дне уже есть текст или точки маршрута — заливка из «{pending.tourTitle.ru || pending.tourTitle.en}
-            {pending.dayLabel ? `, ${pending.dayLabel}` : ''}» полностью заменит их. Цена дня и уже добавленные
-            картинки не меняются; для скопированных точек с привязкой к каталогу в галерею добавятся их фото.
-          </p>
+          <p className="text-sm text-neutral-600">{copy.fill.confirmText(sourceName(pending))}</p>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => setPending(null)}>
-              Назад
+              {copy.fill.back}
             </Button>
             <Button
               type="button"
@@ -65,7 +70,7 @@ export function FillDayFromProductModal({
                 close()
               }}
             >
-              Заменить
+              {copy.fill.replace}
             </Button>
           </div>
         </div>
@@ -74,9 +79,9 @@ export function FillDayFromProductModal({
   }
 
   return (
-    <Modal open={open} onClose={close} title="Заполнить день из другого продукта">
+    <Modal open={open} onClose={close} title={copy.fill.title}>
       {sources.length === 0 ? (
-        <p className="text-sm text-neutral-500">Других продуктов пока нет.</p>
+        <p className="text-sm text-neutral-500">{copy.fill.empty}</p>
       ) : (
         <ul className="flex max-h-80 flex-col gap-1 overflow-y-auto">
           {sources.map((source) => (
@@ -84,10 +89,10 @@ export function FillDayFromProductModal({
               <button
                 type="button"
                 onClick={() => pick(source)}
-                className="w-full cursor-pointer rounded-lg border border-neutral-200 px-3 py-2 text-left text-sm transition-colors hover:border-brand-300 hover:bg-brand-50"
+                className="w-full cursor-pointer rounded-lg border border-neutral-200 px-3 py-2 text-left text-sm transition-colors hover:border-neutral-400 hover:bg-neutral-100"
               >
                 <span className="font-medium text-neutral-900">
-                  {source.tourTitle.ru || source.tourTitle.en || 'Без названия'}
+                  {copy.localizedName(source.tourTitle) || copy.fill.untitled}
                 </span>
                 {source.dayLabel && <span className="text-neutral-500"> · {source.dayLabel}</span>}
               </button>

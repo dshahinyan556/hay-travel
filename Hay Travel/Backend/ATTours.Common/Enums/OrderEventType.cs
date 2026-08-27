@@ -13,6 +13,8 @@ namespace ATTours.Common.Enums
         LineUpdated = 6,
         EmployeeAssigned = 7,
         SentToClient = 8,
-        PaymentAdded = 9
+        PaymentAdded = 9,
+        // Снятие исполнителя со строки/всех строк заказа (Задача D).
+        EmployeeUnassigned = 10
     }
 }

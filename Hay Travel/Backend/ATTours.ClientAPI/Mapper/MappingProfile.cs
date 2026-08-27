@@ -1,5 +1,9 @@
+using ATTours.BusinessServices.Notifications;
+using ATTours.Common.Authorization;
+using ATTours.Common.Constants;
 using ATTours.Common.Dto.Init;
 using ATTours.Common.DTO.Auth;
+using ATTours.Common.DTO.Authorization;
 using ATTours.Common.DTO.Info;
 using ATTours.Common.DTO.Init;
 using ATTours.Common.DTO.Request;
@@ -299,6 +303,32 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value))
                 .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
 
+            // ============= Mappings for NOTIFICATION SETTINGS =============
+            // Раздел «Настройки уведомлений» (редизайн 2026-08-23). Сшивку события с
+            // каналами/шаблоном/получателями делает NotificationSettingsInfo, маппер только
+            // разворачивает готовый NotificationEventView в DTO — плюс подпись события и
+            // список плейсхолдеров из код-реестра (то же осознанное исключение, что у
+            // SiteSetting выше: реестр статичен, без DI и без состояния).
+
+            CreateMap<NotificationEventView, NotificationEventInfoModel>()
+                .ForMember(dest => dest.DisplayName, opt => opt.Ignore())
+                .AfterMap((src, dest) => dest.DisplayName = EmailPlaceholders.DisplayName(src.EventKey));
+
+            CreateMap<NotificationPlatformView, NotificationPlatformInfoModel>();
+
+            // Шаблон отдаётся вместе с каталогом токенов своего события — редактор должен
+            // знать, что можно вставлять, а ActionKey наружу из вложенного DTO не едет.
+            CreateMap<EmailTemplate, NotificationTemplateInfoModel>()
+                .ForMember(dest => dest.AvailablePlaceholders, opt => opt.Ignore())
+                .AfterMap((src, dest) => dest.AvailablePlaceholders = EmailPlaceholders.WrappedTokensFor(src.ActionKey));
+
+            // UserFullName/UserEmail денормализуются из загруженного User (см.
+            // NotificationSettingsInfo) — грид показывает их read-only.
+            CreateMap<NotificationRecipient, NotificationRecipientInfoModel>()
+                .ForMember(dest => dest.UserFullName, opt => opt.Ignore())
+                .ForMember(dest => dest.UserEmail, opt => opt.Ignore())
+                .AfterMap((src, dest) => ApplyNotificationRecipientDenormalizedFields(src, dest));
+
             // ============= Mappings for REGION =============
 
             // Region -> RegionInfoModel. TourCount не заполняется здесь: он приходит
@@ -523,14 +553,19 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Total, opt => opt.Ignore())
                 .AfterMap((src, dest) => ApplyOrderDenormalizedFields(src, dest));
 
-            // OrderLine -> OrderLineInfoModel. TourTitle/TourMainImageUrl/EmployeeFullName
-            // денормализуются так же, как раньше делал Order -> OrderInfoModel (D-1, 2026-08-16
-            // логика) — требует загруженных Tour.Translations и Employee (см. OrderInfo).
+            // OrderLine -> OrderLineInfoModel. TourTitle/TourMainImageUrl денормализуются так
+            // же, как раньше делал Order -> OrderInfoModel (D-1, 2026-08-16 логика) — требует
+            // загруженного Tour.Translations (см. OrderInfo). Employees мапится по имени.
             CreateMap<OrderLine, OrderLineInfoModel>()
                 .ForMember(dest => dest.TourTitle, opt => opt.Ignore())
                 .ForMember(dest => dest.TourMainImageUrl, opt => opt.Ignore())
-                .ForMember(dest => dest.EmployeeFullName, opt => opt.Ignore())
                 .AfterMap((src, dest) => ApplyOrderLineDenormalizedFields(src, dest));
+
+            // OrderLineEmployee -> OrderLineEmployeeInfoModel. ФИО денормализуется из
+            // загруженного Employee (см. OrderInfo) — тем же приёмом, что у строки заказа.
+            CreateMap<OrderLineEmployee, OrderLineEmployeeInfoModel>()
+                .ForMember(dest => dest.EmployeeFullName, opt => opt.Ignore())
+                .AfterMap((src, dest) => ApplyOrderLineEmployeeDenormalizedFields(src, dest));
 
             // OrderPayment -> OrderPaymentInfoModel (плоско, свой Id теперь едет наружу —
             // проводка сама по себе адресуема, в отличие от старого 1:1-снапшота ADR 014).
@@ -576,7 +611,10 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
             CreateMap<User, UserInfoModel>()
                 .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
                 .ForMember(dest => dest.RoleId, opt => opt.MapFrom(src => src.RoleId))
+                // Role теперь RoleType? — у кастомной роли Type = null, и её описывает
+                // только RoleName (architecture-flexible-roles.md §3.4).
                 .ForMember(dest => dest.Role, opt => opt.MapFrom(src => src.Role.Type))
+                .ForMember(dest => dest.RoleName, opt => opt.MapFrom(src => src.Role.Name))
                 .ForMember(dest => dest.IsEmailVerified, opt => opt.MapFrom(src => src.IsEmailVerified))
                 .ForMember(dest => dest.IsLocked,
                     opt => opt.MapFrom(src => src.LockedUntil.HasValue && src.LockedUntil.Value > DateTime.UtcNow));
@@ -587,6 +625,7 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
                 .ForMember(dest => dest.RoleId, opt => opt.MapFrom(src => src.RoleId))
                 .ForMember(dest => dest.Role, opt => opt.MapFrom(src => src.Role.Type))
+                .ForMember(dest => dest.RoleName, opt => opt.MapFrom(src => src.Role.Name))
                 .ForMember(dest => dest.IsEmailVerified, opt => opt.MapFrom(src => src.IsEmailVerified))
                 .ForMember(dest => dest.IsLocked,
                     opt => opt.MapFrom(src => src.LockedUntil.HasValue && src.LockedUntil.Value > DateTime.UtcNow))
@@ -599,6 +638,53 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
             // и навигация User наружу не едут — список запрашивается по конкретному
             // пользователю, чей id клиенту уже известен.
             CreateMap<LoginHistory, LoginHistoryModel>();
+
+            // ============= Mappings for ROLES & PERMISSIONS =============
+            // Гибкая система прав (architecture-flexible-roles.md §3.4), уровневая модель
+            // (ADR 027): одно поле Level вместо четырёх независимых флагов.
+
+            CreateMap<RolePermission, ScreenPermissionModel>();
+
+            CreateMap<UserPermissionOverride, ScreenOverrideModel>();
+
+            CreateMap<ScreenDefinition, ScreenDefinitionModel>()
+                .ForMember(dest => dest.Actions, opt => opt.MapFrom(src => src.Actions));
+
+            CreateMap<ResolvedScreenPermission, MyScreenPermissionModel>();
+
+            // IsSuperAdmin в резолвленном наборе нет — он не часть матрицы (решение 10) и
+            // доклеивается в AuthService.GetMyPermissionsAsync из самой сущности User.
+            CreateMap<ResolvedPermissionSet, MyPermissionsModel>()
+                .ForMember(dest => dest.IsSuperAdmin, opt => opt.Ignore());
+
+            // UserCount проставляет контроллер (отдельный дешёвый count-запрос, а не
+            // Include всех пользователей роли).
+            CreateMap<UserRole, RoleInfoModel>()
+                .ForMember(dest => dest.UserCount, opt => opt.Ignore())
+                .ForMember(dest => dest.Permissions, opt => opt.Ignore())
+                // Матрица разворачивается по ВСЕМУ реестру экранов: недостающая в БД строка
+                // приходит как «все false», чтобы фронт строил полную таблицу без догадок.
+                .AfterMap((src, dest) =>
+                {
+                    var byScreen = (src.Permissions ?? [])
+                        .Where(permission => permission.ScreenKey is not null)
+                        .GroupBy(permission => permission.ScreenKey, StringComparer.OrdinalIgnoreCase)
+                        .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+                    dest.Permissions = AdminScreens.All
+                        .Select(definition =>
+                        {
+                            var stored = byScreen.GetValueOrDefault(definition.Key);
+                            return new ScreenPermissionModel
+                            {
+                                ScreenKey = definition.Key,
+                                // Нет строки в БД -> None (нет доступа), тот же deny by
+                                // default, что и в резолвере.
+                                Level = stored?.Level ?? AccessLevel.None
+                            };
+                        })
+                        .ToList();
+                });
 
             // ============= Mappings for translations =============
 
@@ -855,6 +941,18 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ToList();
         }
 
+        // Карточка пользователя-получателя: грид показывает ФИО и адрес, но редактировать
+        // их там нельзя — они принадлежат учётке, а не настройке уведомления.
+        private static void ApplyNotificationRecipientDenormalizedFields(NotificationRecipient source,
+            NotificationRecipientInfoModel destination)
+        {
+            if (source.User is null)
+                return;
+
+            destination.UserFullName = $"{source.User.FirstName} {source.User.LastName}".Trim();
+            destination.UserEmail = source.User.Email;
+        }
+
         // Денормализованные поля заказа: карточка пользователя + агрегаты по строкам
         // (DiscountTotal/Total — мокап "summary-strip"). Требует загруженного User.
         private static void ApplyOrderDenormalizedFields(Order source, OrderInfoModel destination)
@@ -863,6 +961,9 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
             {
                 destination.UserEmail = source.User.Email;
                 destination.UserFullName = $"{source.User.FirstName} {source.User.LastName}".Trim();
+                // Язык клиента нужен резолверу получателя «Клиент заказа», чтобы выбрать
+                // языковую версию письма без второго похода в БД.
+                destination.UserPreferredLanguage = source.User.PreferredLanguage;
             }
 
             if (source.Lines is null)
@@ -875,8 +976,8 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
             destination.Total = source.Lines.Sum(line => line.LineTotal);
         }
 
-        // Денормализованные поля строки заказа: заголовок/обложка тура + ФИО исполнителя.
-        // Требует загруженных Tour.Translations и Employee (см. OrderInfo).
+        // Денормализованные поля строки заказа: заголовок/обложка тура.
+        // Требует загруженного Tour.Translations (см. OrderInfo).
         private static void ApplyOrderLineDenormalizedFields(OrderLine source, OrderLineInfoModel destination)
         {
             if (source.Tour is not null)
@@ -884,7 +985,12 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 destination.TourMainImageUrl = source.Tour.MainImageUrl;
                 destination.TourTitle = ResolveTourTitle(source.Tour);
             }
+        }
 
+        // ФИО исполнителя на строке. Требует загруженного Employee (см. OrderInfo).
+        private static void ApplyOrderLineEmployeeDenormalizedFields(OrderLineEmployee source,
+            OrderLineEmployeeInfoModel destination)
+        {
             if (source.Employee is not null)
                 destination.EmployeeFullName = $"{source.Employee.FirstName} {source.Employee.LastName}".Trim();
         }

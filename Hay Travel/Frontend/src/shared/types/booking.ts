@@ -20,14 +20,34 @@
  * Enums are frozen const objects + a value-union (`erasableSyntaxOnly` forbids TS `enum` — same
  * convention as `features/admin/lib/enums.ts` and `shared/auth/types.ts`).
  *
+ * `EmployeeJobRole` (Задача D) is imported, not redeclared here, from its own zero-import leaf
+ * (`shared/types/employeeRole.ts`) — `shared/auth/types.ts`'s `User.defaultJobRole` needs the same
+ * type, and neither of these two leaf modules imports the other.
+ *
  * ── Order became multi-line (ADR 019, 2026-08-16) ─────────────────────────────────────────────
  * `Order` is now a header (status/number/owner/currency) over a list of `OrderLine`s, each
  * carrying its own tour/date/guests/money/employee/fulfillment details. `OrderPayment` became a
- * ledger of transactions per line, not a 1:1 money snapshot of the whole order (see ADR 019). A
- * booking from the PUBLIC site is still always exactly one line — `OrderCreateModel` is unchanged
- * — multi-line is an admin-only capability (adding lines to an existing order, see
- * `OrderLineCreateModel`).
+ * ledger of transactions per line, not a 1:1 money snapshot of the whole order (see ADR 019).
+ *
+ * ── The public site posts a MULTI-LINE order too (ADR 025, 2026-08-22) ────────────────────────
+ * `OrderCreateModel` used to be a single flat `{ tourId, tourDate, guestCount }`, because a public
+ * booking was always exactly one line. The cart ended that: the whole cart becomes ONE order with
+ * N lines, created atomically by one request (`{ lines: [...] }`). A rejection of any single line
+ * creates nothing at all and comes back as `OrderLinesErrorModel` — top-level `errorCode` 2031
+ * plus a per-line breakdown. `OrderLineCreateModel` (admin "add a line to an existing order")
+ * is a different endpoint and is unaffected.
+ *
+ * ── Мульти-исполнители на строке (редизайн 2026-08-23) ────────────────────────────────────────
+ * У строки заказа больше нет одного исполнителя: плоские `employeeId`/`employeeRole`/
+ * `pickupDetails`/`navigatorLink` заменены списком `employees: OrderLineEmployeeInfoModel[]`
+ * (0..N), и «детали для выполнения» — у каждого исполнителя свои, плюс двуязычный комментарий.
+ * Следом переписаны и запросы: `OrderLineUpdateModel` похудел до предоплаты, назначение стало
+ * мультивыбором с аддитивной upsert-семантикой, снятие — адресным по `employeeId`, а правку
+ * деталей одного исполнителя делает новый `OrderLineEmployeeUpdateModel`.
  */
+
+import type { EmployeeJobRole } from './employeeRole'
+import type { LanguageCode } from './language'
 
 export const OrderStatus = {
   /** Just created (site booking OR added manually in admin), no line requires prepayment yet. */
@@ -105,10 +125,32 @@ export interface OrderPaymentInfoModel {
   createdAtUtc: string
 }
 
+/** Один исполнитель на одной строке заказа (редизайн 2026-08-23). Заменяет плоские
+ * `employeeId`/`employeeRole`/`pickupDetails`/`navigatorLink`, которые были на самой строке:
+ * у строки теперь 0..N исполнителей, и «детали для выполнения» — у каждого свои.
+ * `id` — идентификатор ЭТОЙ связки (`OrderLineEmployee`), не строки и не пользователя;
+ * именно он адресует `PUT api/Order/UpdateLineEmployee`. */
+export interface OrderLineEmployeeInfoModel {
+  id: number
+  employeeId: number
+  /** Денормализовано сервером — второй запрос за именем не нужен. */
+  employeeFullName: string | null
+  /** Снапшот роли на момент назначения. Назначения без роли не существует. */
+  employeeRole: EmployeeJobRole
+  /** «Где забрать клиента». `null`/пусто — поле НЕ появится ни в PDF, ни в письме. */
+  pickupDetails: string | null
+  /** Ссылка на навигатор/карты. Правило пустоты — то же. */
+  navigatorLink: string | null
+  /** Свободный комментарий исполнителю, RU-версия. */
+  comment: string | null
+  /** EN-версия комментария. Пусто — англоязычному исполнителю уйдёт `comment`. */
+  commentEn: string | null
+}
+
 /**
- * One line of an order — its own tour/date/guests/money/employee/fulfillment details (ADR 019).
- * `tourTitle`/`tourMainImageUrl`/`employeeFullName` are denormalized server-side so the list and
- * detail screens never need a second request to resolve them.
+ * One line of an order — its own tour/date/guests/money/fulfillment details (ADR 019).
+ * `tourTitle`/`tourMainImageUrl` are denormalized server-side so the list and detail screens never
+ * need a second request to resolve them.
  */
 export interface OrderLineInfoModel {
   id: number
@@ -131,13 +173,8 @@ export interface OrderLineInfoModel {
   /** `priceSnapshot` with `discountPercent` applied — this line's contribution to `Order.total`. */
   lineTotal: number
 
-  employeeId: number | null
-  employeeFullName: string | null
-
-  /** "Где забрать клиента" — free text, admin-entered, `null` until set. */
-  pickupDetails: string | null
-  /** Navigator/maps link — free text, admin-entered, `null` until set. */
-  navigatorLink: string | null
+  /** 0..N исполнителей строки. Пустой список — строка не назначена. */
+  employees: OrderLineEmployeeInfoModel[]
 
   payments: OrderPaymentInfoModel[]
 }
@@ -154,6 +191,8 @@ export interface OrderInfoModel {
   /** Denormalized for the admin list — no second request to resolve the customer. */
   userEmail: string
   userFullName: string
+  /** Язык клиента — тем же полем сервер выбирает языковую версию письма «Клиенту заказа». */
+  userPreferredLanguage: LanguageCode
   status: OrderStatus
   /** Only meaningful while `status === Rejected`; `null` otherwise. */
   rejectReason: string | null
@@ -182,14 +221,40 @@ export interface OrderUpdateModel {
   guestCount: number
 }
 
-/** `POST api/Order/Create`. No `userId`: the server takes it from the token, never from the body
- * (IDOR guard). No money and no status either — both are server-side. Always creates exactly one
- * line. */
-export interface OrderCreateModel {
+/** Одна позиция корзины в теле `POST api/Order/Create` (spec 013). */
+export interface OrderCreateLineModel {
   tourId: number
   /** `YYYY-MM-DD`. */
   tourDate: string
   guestCount: number
+}
+
+/** `POST api/Order/Create` (ADR 025). Создаёт ОДИН заказ с N строками, атомарно: либо все строки,
+ * либо ни одной. No `userId`: сервер берёт владельца из токена, никогда из тела (IDOR guard).
+ * 1..10 строк; пустой список — 2028, больше десяти — 2032. */
+export interface OrderCreateModel {
+  lines: OrderCreateLineModel[]
+}
+
+/** Один пункт пер-строчного отказа валидации. `index` — 0-based позиция строки В ОТПРАВЛЕННОМ
+ * массиве `lines`, порядок сервер сохраняет. */
+export interface OrderLineErrorItem {
+  index: number
+  tourId: number
+  /** `YYYY-MM-DD`. */
+  tourDate: string
+  /** Пер-строчный `GlobalErrorCode`: 2004 / 2014 / 2015 / 2016. */
+  errorCode: number
+}
+
+/** Тело ответа 400 при `errorCode === 2031` (`OrderHasInvalidLines`) — расширение обычного
+ * `ErrorModel` массивом строк. Отказ ФОРМЫ запроса (2028 / 2032) приходит обычным `ErrorModel`
+ * без `lines`. */
+export interface OrderLinesErrorModel {
+  httpStatusCode: number
+  message: string
+  errorCode: number
+  lines: OrderLineErrorItem[]
 }
 
 /** `POST api/Order/AddLine` — admin adds a line to an existing order. */
@@ -203,14 +268,13 @@ export interface OrderLineCreateModel {
   prepaymentAmount: number
 }
 
-/** `PUT api/Order/UpdateLine` — admin edits one line's prepayment + fulfillment details. Employee
- * assignment is a separate endpoint (`OrderAssignEmployeeModel`) — it has its own bulk semantics. */
+/** `PUT api/Order/UpdateLine` — admin edits one line's prepayment, and nothing else. «Детали для
+ * выполнения» переехали на исполнителя (`OrderLineEmployeeUpdateModel`, редизайн 2026-08-23), а
+ * назначение всегда было отдельным эндпоинтом (`OrderAssignEmployeeModel`) со своей bulk-логикой. */
 export interface OrderLineUpdateModel {
   id: number
   requiresPrepayment: boolean
   prepaymentAmount: number
-  pickupDetails: string | null
-  navigatorLink: string | null
 }
 
 /** `PATCH api/Order/SetStatus` — replaces the old Confirm/Cancel pair (ADR 019, 7 statuses). Any
@@ -222,16 +286,50 @@ export interface OrderStatusUpdateModel {
   rejectReason: string | null
 }
 
-/** `PATCH api/Order/AssignEmployee`. `lineId: null` assigns EVERY line of the order at once (the
- * "назначить на все строки" bulk action) — each line can still be re-assigned individually
- * afterwards with a follow-up call carrying that line's id. `sendEmail` (default `true` server-side
- * when omitted) controls whether the assignment PDF+email fires — `false` is the assign-popup's
- * silent "Назначить" button, `true`/omitted is "Назначить и отправить письмо". */
+/** Один пункт мультивыбора попапа назначения. Роль обязательна: сервер отбивает 0
+ * (`EmployeeRoleRequired`, 2029). */
+export interface OrderAssignEmployeeItem {
+  employeeId: number
+  employeeRole: EmployeeJobRole
+}
+
+/** `PATCH api/Order/AssignEmployee`. `lineId: null` — на ВСЕ строки заказа.
+ *
+ * Семантика — АДДИТИВНЫЙ upsert, не «заменить набор»: не перечисленные здесь исполнители со
+ * строки НЕ снимаются (для этого есть `unassignEmployee` с конкретным `employeeId`). Повторный
+ * вызов с тем же человеком меняет ему роль и (при `sendEmail`) переотправляет письмо.
+ * Пустой `employees` — 400. */
 export interface OrderAssignEmployeeModel {
   orderId: number
-  employeeId: number
   lineId: number | null
+  employees: OrderAssignEmployeeItem[]
+  /** `false` — тихое «Назначить», `true`/опущено — «Назначить и отправить письмо». Письмо
+   * уходит только при совпадении намерения И включённого канала события. */
   sendEmail?: boolean
+}
+
+/** `PATCH api/Order/UnassignEmployee` (Задача D) — separate from `AssignEmployee`, not that model
+ * with nullable fields: assignment's `employeeRole` stays required, this is the only way to clear
+ * an assignment. Idempotent on an already-unassigned line (no error, no email, no journal entry).
+ * No `sendEmail` flag — the unassignment email is governed only by the `order.unassign_employee`
+ * notification-setting toggle (Задача E), there is no per-call silent variant. */
+export interface OrderUnassignEmployeeModel {
+  orderId: number
+  /** `null` — все строки заказа. */
+  lineId: number | null
+  /** `null` — снять ВСЕХ исполнителей с целевых строк; задан — только этого человека.
+   * Это `User.id`, а не `OrderLineEmployeeInfoModel.id`. */
+  employeeId: number | null
+}
+
+/** `PUT api/Order/UpdateLineEmployee` — «детали для выполнения» ОДНОГО исполнителя ОДНОЙ строки.
+ * `id` — `OrderLineEmployeeInfoModel.id`. Роль здесь не правится: её меняет assign (upsert). */
+export interface OrderLineEmployeeUpdateModel {
+  id: number
+  pickupDetails: string | null
+  navigatorLink: string | null
+  comment: string | null
+  commentEn: string | null
 }
 
 /** Order-history audit log entry type (`docs/specs/007-order-event-log-backend.md`) — read-only,
@@ -246,6 +344,8 @@ export const OrderEventType = {
   EmployeeAssigned: 7,
   SentToClient: 8,
   PaymentAdded: 9,
+  /** Снятие исполнителя со строки/всех строк заказа (Задача D). */
+  EmployeeUnassigned: 10,
 } as const
 
 export type OrderEventType = (typeof OrderEventType)[keyof typeof OrderEventType]

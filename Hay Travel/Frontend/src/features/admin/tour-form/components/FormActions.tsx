@@ -1,5 +1,7 @@
 import { Link } from 'react-router'
 import { Button, Spinner, buttonClassName } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { tourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
 
 interface FormActionsProps {
   isSubmitting: boolean
@@ -26,12 +28,9 @@ export function FormActions({
   submitError,
   onSubmit,
 }: FormActionsProps) {
+  const copy = useCopy(tourFormCopy).actions
   const showInvalidWarning = hasAttemptedSubmit && !isValid
-  const note = submitError
-    ? submitError
-    : showInvalidWarning
-      ? 'Проверьте форму: заполните обязательные поля (отмечены *).'
-      : 'Черновик не сохраняется автоматически.'
+  const note = submitError ? submitError : showInvalidWarning ? copy.invalidNote : copy.draftNote
   const isError = Boolean(submitError) || showInvalidWarning
 
   return (
@@ -40,16 +39,16 @@ export function FormActions({
         {note}
       </p>
       <Link to="/admin/products" className={buttonClassName('ghost', 'md')}>
-        Отмена
+        {copy.cancel}
       </Link>
       <Button type="button" onClick={onSubmit} disabled={isSubmitting} className="min-w-32">
         {isSubmitting ? (
           <span className="inline-flex items-center gap-2">
             <Spinner size="sm" />
-            Сохранение…
+            {copy.saving}
           </span>
         ) : (
-          'Сохранить'
+          copy.save
         )}
       </Button>
     </div>

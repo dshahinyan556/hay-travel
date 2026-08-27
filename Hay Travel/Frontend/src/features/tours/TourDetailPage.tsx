@@ -13,8 +13,8 @@ import { KindChip, Reveal, TourCard } from '@/shared/ui'
 import { CheckIcon, ClockIcon, CloseIcon, MapPinIcon, TagIcon } from '@/shared/ui/icons'
 import { TourGallery } from './components/TourGallery'
 import { TourItinerary } from './components/TourItinerary'
+import { getBookingWindow } from '@/shared/booking'
 import { BookingCard } from './components/BookingCard'
-import { getBookingWindow } from './lib/bookingWindow'
 
 export async function tourDetailLoader({ params }: LoaderFunctionArgs) {
   const tour = await getTourInfo(params.id!)

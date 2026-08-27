@@ -10,6 +10,9 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
         {
             builder.ToTable(nameof(User));
 
+            // PreferredLanguage настраивать не нужно (int по конвенции); дефолт для уже
+            // существующих строк задаётся миграцией (defaultValue: 1 = Russian).
+
             builder.Property(x => x.FirstName)
                 .IsRequired()
                 .HasMaxLength(128);

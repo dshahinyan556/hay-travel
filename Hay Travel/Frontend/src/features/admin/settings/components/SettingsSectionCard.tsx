@@ -1,6 +1,7 @@
 import { useId } from 'react'
 import { Card } from '@/shared/ui'
-import { hintFor, labelFor } from '@/features/admin/settings/lib/settingsCopy'
+import { useCopy } from '@/shared/i18n/defineCopy'
+import { hintFor, labelFor, settingsCopy } from '@/features/admin/settings/lib/settingsCopy'
 import type { SettingFieldState } from '@/features/admin/settings/types'
 import type { SettingsValidation } from '@/features/admin/settings/lib/validation'
 import type { SettingsFormActions } from '@/features/admin/settings/hooks/useSettingsForm'
@@ -23,6 +24,7 @@ export function SettingsSectionCard({
   validation,
   actions,
 }: SettingsSectionCardProps) {
+  const copy = useCopy(settingsCopy)
   const titleId = useId()
 
   return (
@@ -39,8 +41,8 @@ export function SettingsSectionCard({
           <SettingField
             key={field.key}
             field={field}
-            label={labelFor(field.key)}
-            hint={hintFor(field.key)}
+            label={labelFor(copy, field.key)}
+            hint={hintFor(copy, field.key)}
             errors={validation.errors[field.key]}
             warning={validation.warnings[field.key]}
             onChangeValue={(value) => actions.setValue(field.key, value)}

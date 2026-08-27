@@ -1,12 +1,13 @@
 using ATTours.BusinessServices.Services.InfoServices;
 using ATTours.BusinessServices.Services.UpdateServices;
 using ATTours.ClientAPI.Authorization;
+using ATTours.Common.Authorization;
 using ATTours.Common.DTO.Info;
 using ATTours.Common.DTO.Request;
 using ATTours.Common.Entities;
+using ATTours.Common.Enums;
 using ATTours.Common.Extensions;
 using AutoMapper;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ATTours.ClientAPI.Controllers
@@ -22,7 +23,7 @@ namespace ATTours.ClientAPI.Controllers
         // (у него GetRegionsClient). Тур-менеджеру доступна: регионы выбираются в редакторе тура.
         [HttpGet]
         [Route("GetAll")]
-        [Authorize(Roles = ApiRoles.TourManagerOrAdmin)]
+        [RequiresPermission(AdminScreens.CatalogRegions, PermissionAction.View)]
         public async Task<List<RegionInfoModel>> GetAllAsync()
         {
             using var info = new RegionInfo();
@@ -35,7 +36,7 @@ namespace ATTours.ClientAPI.Controllers
         // Правит только RegionTranslationType.Blurb (RU+EN) у одного региона.
         [HttpPut]
         [Route("UpdateBlurb")]
-        [Authorize(Roles = ApiRoles.Admin)]
+        [RequiresPermission(AdminScreens.CatalogRegions, PermissionAction.Update)]
         public async Task UpdateBlurbAsync([FromBody] UpdateRegionBlurbModel model)
         {
             using var updateService = new RegionBlurbUpdateService();

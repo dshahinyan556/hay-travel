@@ -1,12 +1,20 @@
 /**
- * Public-site UI dictionary — RU is the source of truth (`ru`); TypeScript enforces that `en`
- * defines exactly the same key set (`Record<TranslationKey, string>` below), so a key added to one
- * without the other is a build error rather than a silently-blank string on the missing side.
+ * UI dictionary of the PUBLIC site plus the built-in copy of the `shared/ui` primitives — RU is the
+ * source of truth (`ru`); TypeScript enforces that `en` defines exactly the same key set
+ * (`Record<TranslationKey, string>` below), so a key added to one without the other is a build
+ * error rather than a silently-blank string on the missing side.
  *
- * Scope is the PUBLIC site only (`app/layout`, `features/home|tours|regions|auth`, the `shared/ui`
- * primitives they use). The admin panel stays Russian-only by design (`Hay Travel/CLAUDE.md`) and
- * never renders `LanguageSwitch`, so it never reads this dictionary in practice even though
- * `LocaleProvider` technically wraps it too (simplest place to mount the provider once).
+ * Scope: `app/layout`, `features/home|tours|regions|auth`, and the `ui.*` keys of the `shared/ui`
+ * primitives themselves — including the admin-facing ones (`AdminToolbar` default labels, `Select`
+ * placeholders, `SortableList` drag announcements), because a shared primitive must not import a
+ * feature's copy module.
+ *
+ * The admin panel is NOT Russian-only any more — that decision was deliberately reversed, see
+ * ADR 021 (`docs/adr/021-admin-panel-localization.md`). `/admin` is localized, but its copy does
+ * NOT live here: admin strings sit next to their feature, in `features/admin/<module>/lib/` +
+ * `<module>Copy.ts`, as `defineCopy(ru, en)` modules, so they stay inside the lazily-loaded admin
+ * chunk instead of weighing down every public visitor's initial bundle. Both mechanisms are driven
+ * by the same `LocaleProvider`/`useLocale()`, so one switch changes both.
  *
  * Keys are flat, dot-namespaced strings rather than a nested object — greppable, and a missing
  * key is a single failed lookup instead of an optional-chaining trail.
@@ -37,6 +45,12 @@ const ru = {
   // ── Theme toggle ──────────────────────────────────────────────────────────────────────────
   'theme.light': 'Светлая тема',
   'theme.dark': 'Тёмная тема',
+
+  // ── Language switch ───────────────────────────────────────────────────────────────────────
+  /* Ниже 640px обе шапки схлопывают переключатель в ОДНУ кнопку с текущим языком (тап —
+     переключить), чтобы освободить место под иконку корзины. Видимая подпись при этом называет
+     текущий язык, а действие — противоположное, поэтому кнопке нужно собственное имя. */
+  'language.switchTo': 'Переключить на {language}',
 
   // ── Currency switch ───────────────────────────────────────────────────────────────────────
   // Currency NAMES are deliberately not translated: an option row is a symbol plus its ISO code,
@@ -162,35 +176,63 @@ const ru = {
   'booking.guestsMore': 'Больше гостей',
   'booking.total': 'Итого',
   'booking.prepayment': 'Предоплата 20%',
-  'booking.submit': 'Забронировать',
   'booking.submitHint': 'Бронь без оплаты — подтвердим и пришлём детали',
   // 7+ гостей: цена не показывается, кнопка остаётся активной — это единственный путь к действию,
   // о котором просит текст приглашения.
-  'booking.submitLargeGroup': 'Оставить заявку',
   'booking.submitHintLargeGroup': 'Рассчитаем стоимость для вашей группы и свяжемся с вами',
   // Используется ТОЛЬКО если настройка `content.largeGroupInvitation` пустая: иначе блок цены
   // просто исчез бы без объяснения.
   'booking.largeGroupFallback':
     'Для групп от 7 человек мы считаем стоимость индивидуально — оставьте заявку, и мы вернёмся с ценой.',
-  // Ветка `PendingConfirmation` экрана успеха — заказ создан, но менеджер ещё не подтвердил.
-  'booking.submittedTitle': 'Заявка отправлена',
-  'booking.submittedBody': 'Мы свяжемся с вами в течение дня и подтвердим даты. Предоплата — после подтверждения.',
-  'booking.editSubmission': 'Изменить заявку',
-  // Ветка `Confirmed` — сервер вернул уже подтверждённый заказ.
-  'booking.submittedTitleConfirmed': 'Бронь подтверждена',
-  'booking.submittedBodyConfirmed':
-    'Мы написали вам на почту. Детали и предоплата — по договорённости с менеджером.',
-  'booking.orderNumber': 'Заказ №{id}',
-  'booking.submitting': 'Отправляем…',
-  // Бронь только для залогиненных: анонимного не редиректим молча, а объясняем и даём ссылку.
-  'booking.authTitle': 'Нужен вход в аккаунт',
-  'booking.authBody':
-    'Бронирование доступно только авторизованным гостям — так мы сможем показать вам статус заказа.',
-  'booking.authAction': 'Войти и продолжить',
+  /* Ключи ошибок остаются общими: их читает и корзина (пер-строчные причины отказа), и форма
+     тура. Ставшие мёртвыми `booking.submit*`/`booking.submitted*`/`booking.auth*`/
+     `booking.orderNumber`/`booking.editSubmission` удалены вместе с одношаговой бронью
+     (spec 008 §10) — заказ теперь создаётся только на `/cart`. */
   'booking.dateUnavailable': 'Эта дата уже недоступна — выберите другую.',
   'booking.datePast': 'Эта дата уже прошла — выберите другую.',
   'booking.submitFailed': 'Не удалось отправить заявку. Проверьте соединение и попробуйте ещё раз.',
   'booking.sessionExpired': 'Сессия истекла — войдите заново, чтобы завершить бронь.',
+
+  // ── Cart ──────────────────────────────────────────────────────────────────────────────────
+  'cart.nav.aria': 'Корзина, позиций: {count}',
+  'cart.title': 'Корзина',
+  'cart.subtitle': 'Проверьте даты и число гостей — заявку отправим одним нажатием',
+  'cart.addToCart': 'Добавить в корзину',
+  'cart.added.title': 'Добавлено в корзину',
+  'cart.added.titleUpdated': 'Обновлено в корзине',
+  'cart.added.goToCart': 'Перейти в корзину',
+  'cart.added.continue': 'Продолжить выбор',
+  'cart.error.full': 'В корзине максимум 10 позиций — отправьте заявку или удалите лишнее',
+  'cart.error.tooManyLines': 'В одной заявке не больше 10 позиций — удалите лишнее и попробуйте снова',
+  'cart.empty.title': 'Корзина пуста',
+  'cart.empty.body': 'Выберите путешествие, укажите дату и число гостей — они появятся здесь',
+  'cart.empty.action': 'Смотреть путешествия',
+  'cart.line.remove': 'Удалить из корзины',
+  'cart.line.price': 'Стоимость',
+  'cart.line.unavailable': 'Это путешествие больше недоступно — удалите его, чтобы отправить заявку',
+  'cart.line.guestCountInvalid': 'Недопустимое число гостей — измените и попробуйте снова',
+  'cart.summary.total': 'Итого',
+  'cart.summary.itemCount': 'Позиций: {count}',
+  'cart.summary.quoteNote': 'По части позиций стоимость рассчитаем индивидуально',
+  'cart.summary.submit': 'Отправить заявку',
+  'cart.summary.submitting': 'Отправляем…',
+  'cart.summary.blockedUnavailable': 'Удалите недоступные путешествия, чтобы продолжить',
+  'cart.summary.blockedLines': 'Исправьте отмеченные позиции и отправьте заявку снова',
+  'cart.summary.hint': 'Заявка без оплаты — подтвердим и пришлём детали',
+  /* Важная строка: при пер-строчном отказе посетитель обязан понять, что частично ничего не ушло
+     и повторная отправка не создаст дубль. */
+  'cart.summary.rejectedNote': 'Заявка не создана — ни одна позиция не отправлена',
+  'cart.auth.title': 'Нужен вход в аккаунт',
+  'cart.auth.body': 'Войдите — корзина сохранится, ничего выбирать заново не придётся',
+  'cart.auth.action': 'Войти и продолжить',
+  'cart.result.title': 'Заявка отправлена',
+  'cart.result.body':
+    'Мы свяжемся с вами в течение дня и подтвердим даты. Предоплата — после подтверждения.',
+  'cart.result.orderNumberLabel': 'Номер заказа',
+  'cart.result.orderNumber': 'Заказ №{number}',
+  'cart.result.lineCount': 'Позиций в заявке: {count}',
+  'cart.result.lineCountTotal': 'Позиций в заявке: {count} · на сумму {total}',
+  'cart.result.continue': 'Смотреть другие путешествия',
 
   // ── Date picker ───────────────────────────────────────────────────────────────────────────
   'datePicker.placeholder': 'Выберите дату',
@@ -259,6 +301,9 @@ const ru = {
   'auth.password': 'Пароль',
   'auth.confirmPassword': 'Повторите пароль',
   'auth.forgotPassword': 'Забыли пароль?',
+  /** Чекбокс «запомнить меня» на форме входа (spec 014 §4): без него сессия живёт час без
+   * активности и заканчивается вместе с вкладкой, с ним — 14 дней. */
+  'auth.rememberMe': 'Запомнить меня',
   'auth.submitLogin': 'Войти',
   'auth.submitRegister': 'Зарегистрироваться',
   'auth.submitting': 'Отправляем…',
@@ -321,6 +366,8 @@ const ru = {
   'auth.role.tourManager': 'Тур-менеджер',
   'auth.role.admin': 'Администратор',
   'auth.role.employee': 'Исполнитель',
+  // Роль, созданная в панели: у неё нет `RoleType`, а её внутреннее имя — не для клиента.
+  'auth.role.custom': 'Сотрудник',
   'auth.goToPanel': 'Панель',
   'auth.logout': 'Выйти',
 
@@ -379,6 +426,37 @@ const ru = {
   'auth.error.passwordTooShort': 'Пароль должен быть не короче {min} символов.',
   'auth.error.passwordMismatch': 'Пароли не совпадают.',
   'auth.error.usernameTooShort': 'Логин должен быть не короче {min} символов.',
+
+  // ── shared/ui primitives ──────────────────────────────────────────────────────────────────
+  // The built-in copy of the primitives themselves — NOT feature strings. A primitive may not
+  // import a feature's copy module (`shared` → `features` is backwards), so its own defaults live
+  // here and are read with `t()`. Several of these surface only inside `/admin`; that is fine —
+  // it is ~20 keys, and the alternative would be a second dictionary for the same components.
+  'ui.select.placeholder': 'Выберите…',
+  'ui.select.searchPlaceholder': 'Поиск…',
+  'ui.select.noResults': 'Ничего не найдено',
+  'ui.toolbar.cancel': 'Отмена',
+  'ui.toolbar.save': 'Сохранить',
+  'ui.toolbar.add': 'Добавить',
+  'ui.toolbar.delete': 'Удалить',
+  'ui.spinner.loading': 'Загрузка',
+  'ui.help.trigger': 'Справка: {title}',
+  'ui.help.close': 'Закрыть',
+  'ui.unsaved.title': 'Уйти без сохранения?',
+  'ui.unsaved.message':
+    'Изменения ещё не сохранены. Если уйти со страницы сейчас, они будут потеряны.',
+  'ui.unsaved.confirm': 'Уйти',
+  'ui.unsaved.stay': 'Остаться',
+  'ui.sortable.itemFallback': 'Элемент',
+  'ui.sortable.dragHandle': 'Перетащить, чтобы изменить порядок',
+  'ui.sortable.instructions':
+    'Чтобы взять элемент для перемещения, нажмите пробел или Enter. Пока элемент взят, ' +
+    'перемещайте его стрелками вверх и вниз, затем нажмите пробел или Enter ещё раз, чтобы ' +
+    'отпустить на новой позиции, либо Escape, чтобы отменить.',
+  'ui.sortable.dragStart': 'Начато перемещение: «{item}», позиция {index} из {total}.',
+  'ui.sortable.dragOver': '«{item}» перемещён на позицию {index} из {total}.',
+  'ui.sortable.dragEnd': 'Перемещение завершено. «{item}» теперь на позиции {index} из {total}.',
+  'ui.sortable.dragCancel': 'Перемещение отменено. «{item}» остался на позиции {index} из {total}.',
 } as const
 
 export type TranslationKey = keyof typeof ru
@@ -402,6 +480,8 @@ const en: Record<TranslationKey, string> = {
 
   'theme.light': 'Light theme',
   'theme.dark': 'Dark theme',
+
+  'language.switchTo': 'Switch to {language}',
 
   'currency.switchAriaLabel': 'Display currency',
   'currency.optionAriaLabel': '{code}',
@@ -511,28 +591,52 @@ const en: Record<TranslationKey, string> = {
   'booking.guestsMore': 'More guests',
   'booking.total': 'Total',
   'booking.prepayment': '20% prepayment',
-  'booking.submit': 'Book now',
   'booking.submitHint': 'No payment now — we’ll confirm and send the details',
-  'booking.submitLargeGroup': 'Request a quote',
   'booking.submitHintLargeGroup': 'We’ll price your group and get back to you',
   'booking.largeGroupFallback':
     'For groups of 7 and more we quote individually — send a request and we’ll come back with a price.',
-  'booking.submittedTitle': 'Request sent',
-  'booking.submittedBody': 'We’ll get in touch within a day to confirm dates. The deposit is due after confirmation.',
-  'booking.editSubmission': 'Edit request',
-  'booking.submittedTitleConfirmed': 'Booking confirmed',
-  'booking.submittedBodyConfirmed':
-    'We’ve emailed you. Details and the deposit are arranged with your manager.',
-  'booking.orderNumber': 'Order #{id}',
-  'booking.submitting': 'Sending…',
-  'booking.authTitle': 'Sign in to book',
-  'booking.authBody':
-    'Booking is available to signed-in guests only, so you can track your order.',
-  'booking.authAction': 'Sign in and continue',
   'booking.dateUnavailable': 'That date is no longer available — please pick another.',
   'booking.datePast': 'That date is in the past — please pick another.',
   'booking.submitFailed': 'Could not send the request. Check your connection and try again.',
   'booking.sessionExpired': 'Your session expired — sign in again to finish booking.',
+
+  'cart.nav.aria': 'Cart, {count} item(s)',
+  'cart.title': 'Cart',
+  'cart.subtitle': 'Check the dates and guest counts — one tap sends the whole request',
+  'cart.addToCart': 'Add to cart',
+  'cart.added.title': 'Added to cart',
+  'cart.added.titleUpdated': 'Updated in cart',
+  'cart.added.goToCart': 'Go to cart',
+  'cart.added.continue': 'Keep browsing',
+  'cart.error.full': 'The cart holds 10 trips at most — send the request or remove something',
+  'cart.error.tooManyLines': 'One request can hold 10 trips at most — remove something and try again',
+  'cart.empty.title': 'Your cart is empty',
+  'cart.empty.body': 'Pick a trip, choose a date and a guest count — it will show up here',
+  'cart.empty.action': 'Browse trips',
+  'cart.line.remove': 'Remove from cart',
+  'cart.line.price': 'Price',
+  'cart.line.unavailable': 'This trip is no longer available — remove it to send the request',
+  'cart.line.guestCountInvalid': 'Invalid guest count — change it and try again',
+  'cart.summary.total': 'Total',
+  'cart.summary.itemCount': '{count} item(s)',
+  'cart.summary.quoteNote': 'Some of these trips are quoted individually',
+  'cart.summary.submit': 'Send request',
+  'cart.summary.submitting': 'Sending…',
+  'cart.summary.blockedUnavailable': 'Remove the unavailable trips to continue',
+  'cart.summary.blockedLines': 'Fix the marked trips and send the request again',
+  'cart.summary.hint': 'No payment now — we’ll confirm and send the details',
+  'cart.summary.rejectedNote': 'The request was not created — nothing has been sent',
+  'cart.auth.title': 'Sign in to continue',
+  'cart.auth.body': 'Sign in — your cart is kept, nothing has to be picked again',
+  'cart.auth.action': 'Sign in and continue',
+  'cart.result.title': 'Request sent',
+  'cart.result.body':
+    'We’ll get in touch within a day to confirm dates. The deposit is due after confirmation.',
+  'cart.result.orderNumberLabel': 'Order number',
+  'cart.result.orderNumber': 'Order #{number}',
+  'cart.result.lineCount': 'Trips in this request: {count}',
+  'cart.result.lineCountTotal': 'Trips in this request: {count} · {total} in total',
+  'cart.result.continue': 'Browse other trips',
 
   'datePicker.placeholder': 'Pick a date',
   'datePicker.unavailable': 'unavailable',
@@ -591,6 +695,7 @@ const en: Record<TranslationKey, string> = {
   'auth.password': 'Password',
   'auth.confirmPassword': 'Repeat password',
   'auth.forgotPassword': 'Forgot password?',
+  'auth.rememberMe': 'Remember me',
   'auth.submitLogin': 'Log in',
   'auth.submitRegister': 'Sign up',
   'auth.submitting': 'Sending…',
@@ -642,6 +747,7 @@ const en: Record<TranslationKey, string> = {
   'auth.role.tourManager': 'Tour manager',
   'auth.role.admin': 'Administrator',
   'auth.role.employee': 'Employee',
+  'auth.role.custom': 'Staff',
   'auth.goToPanel': 'Panel',
   'auth.logout': 'Log out',
 
@@ -696,6 +802,30 @@ const en: Record<TranslationKey, string> = {
   'auth.error.passwordTooShort': 'The password must be at least {min} characters long.',
   'auth.error.passwordMismatch': 'The passwords do not match.',
   'auth.error.usernameTooShort': 'The username must be at least {min} characters long.',
+
+  'ui.select.placeholder': 'Select…',
+  'ui.select.searchPlaceholder': 'Search…',
+  'ui.select.noResults': 'Nothing found',
+  'ui.toolbar.cancel': 'Cancel',
+  'ui.toolbar.save': 'Save',
+  'ui.toolbar.add': 'Add',
+  'ui.toolbar.delete': 'Delete',
+  'ui.spinner.loading': 'Loading',
+  'ui.help.trigger': 'Help: {title}',
+  'ui.help.close': 'Close',
+  'ui.unsaved.title': 'Leave without saving?',
+  'ui.unsaved.message': 'Your changes are not saved yet. If you leave now, they will be lost.',
+  'ui.unsaved.confirm': 'Leave',
+  'ui.unsaved.stay': 'Stay',
+  'ui.sortable.itemFallback': 'Item',
+  'ui.sortable.dragHandle': 'Drag to reorder',
+  'ui.sortable.instructions':
+    'To pick up an item, press Space or Enter. While holding, move it with the arrow keys, ' +
+    'then press Space or Enter again to drop it in the new position, or Escape to cancel.',
+  'ui.sortable.dragStart': 'Started moving “{item}”, position {index} of {total}.',
+  'ui.sortable.dragOver': '“{item}” moved to position {index} of {total}.',
+  'ui.sortable.dragEnd': 'Move finished. “{item}” is now at position {index} of {total}.',
+  'ui.sortable.dragCancel': 'Move cancelled. “{item}” stayed at position {index} of {total}.',
 }
 
 export const DICTIONARIES = { ru, en } satisfies Record<'ru' | 'en', Record<TranslationKey, string>>

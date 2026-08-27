@@ -1,12 +1,15 @@
 import { useId, useRef } from 'react'
 import { Spinner } from '@/shared/ui'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import { useImageUpload } from './useImageUpload'
+import { adminUiCopy } from './adminUiCopy'
 
 interface ImageUploadButtonProps {
   onUploaded: (url: string) => void
   /** Icon-only square button for list rows (matches `RemoveButton`/`DragHandle` sizing) instead
    * of the labelled version used beside a single `ImageUrlField`. */
   compact?: boolean
+  /** Accessible name and visible caption. Defaults to the localised "Загрузить файл". */
   label?: string
 }
 
@@ -23,9 +26,11 @@ function UploadIcon() {
 /** File picker disguised as a button: a hidden `<input type="file">` triggered by a visible
  * button, wired to `useImageUpload`. Used by both `ImageUrlField` (single image) and
  * `ImageListEditor` (repeater row, `compact`) so the two share one upload implementation. */
-export function ImageUploadButton({ onUploaded, compact = false, label = 'Загрузить файл' }: ImageUploadButtonProps) {
+export function ImageUploadButton({ onUploaded, compact = false, label }: ImageUploadButtonProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const id = useId()
+  const copy = useCopy(adminUiCopy).images
+  const resolvedLabel = label ?? copy.upload
   const { isUploading, error, upload } = useImageUpload(onUploaded)
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -49,16 +54,16 @@ export function ImageUploadButton({ onUploaded, compact = false, label = 'Заг
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={isUploading}
-        aria-label={label}
-        title={label}
+        aria-label={resolvedLabel}
+        title={resolvedLabel}
         className={
           compact
-            ? 'flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-neutral-200 bg-white text-neutral-500 transition-colors hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40'
-            : 'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-neutral-600 transition-colors hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40'
+            ? 'flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-neutral-200 bg-white text-neutral-500 transition-colors hover:border-neutral-400 hover:bg-neutral-100 hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-40'
+            : 'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-neutral-600 transition-colors hover:border-neutral-400 hover:bg-neutral-100 hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-40'
         }
       >
         {isUploading ? <Spinner size="sm" /> : <UploadIcon />}
-        {!compact && <span>{isUploading ? 'Загрузка…' : label}</span>}
+        {!compact && <span>{isUploading ? copy.uploading : resolvedLabel}</span>}
       </button>
       {error && <span className="text-xs text-rose-600">{error}</span>}
     </div>

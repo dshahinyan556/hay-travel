@@ -63,8 +63,13 @@ namespace ATTours.BusinessServices.Services.CreateServices
                                         GuestCount = x.GuestCount,
                                         RequiresPrepayment = x.RequiresPrepayment,
                                         PrepaymentAmount = x.PrepaymentAmount,
-                                        PickupDetails = x.PickupDetails,
-                                        NavigatorLink = x.NavigatorLink
+                                        // Заполненность деталей теперь считается по
+                                        // исполнителям строки: плоских полей на OrderLine
+                                        // больше нет (редизайн 2026-08-23).
+                                        HasPickupDetails = x.Employees.Any(assignment =>
+                                            assignment.PickupDetails != null && assignment.PickupDetails != ""),
+                                        HasNavigatorLink = x.Employees.Any(assignment =>
+                                            assignment.NavigatorLink != null && assignment.NavigatorLink != "")
                                     })
                                     .FirstOrDefaultAsync(cancellationToken);
 
@@ -141,8 +146,11 @@ namespace ATTours.BusinessServices.Services.CreateServices
         public int GuestCount { get; set; }
         public bool RequiresPrepayment { get; set; }
         public decimal PrepaymentAmount { get; set; }
-        public string? PickupDetails { get; set; }
-        public string? NavigatorLink { get; set; }
+
+        // Не сами тексты, а факт их наличия: журнал печатает «указано»/«не указано»,
+        // а деталей теперь несколько (по одной карточке на исполнителя).
+        public bool HasPickupDetails { get; set; }
+        public bool HasNavigatorLink { get; set; }
     }
 
     public class OrderEventPaymentContext

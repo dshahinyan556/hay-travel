@@ -1,7 +1,9 @@
 /**
- * Admin Availability API — `api/Availability`, `[Authorize(Roles = "Admin")]` on the whole
- * controller except `GetClosedDates` (public, and therefore living in `shared/api/booking.ts`
- * instead). Every call here 403s for a TourManager; mirrored client-side by `canManageCalendar`.
+ * Admin Availability API — `api/Availability`, gated by the `calendar` screen key on every endpoint
+ * except `GetClosedDates` (public, and therefore living in `shared/api/booking.ts` instead).
+ * Reading the calendar and the rules needs `calendar.View`, creating rules `calendar.Create`,
+ * deleting them `calendar.Delete`. There is no `calendar.Update` — see the ADR 012 note below.
+ * Mirrored client-side by `canView/canCreate/canDelete(AdminScreen.Calendar)`.
  *
  * Closure state is stored as RULES, not as materialized dates (ADR 012): `GetCalendar` returns the
  * server's resolved answer per day, and there is no "update rule" endpoint by design — a rule is

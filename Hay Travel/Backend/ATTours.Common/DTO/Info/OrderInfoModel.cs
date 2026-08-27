@@ -12,6 +12,11 @@ namespace ATTours.Common.DTO.Info
         public string UserEmail { get; set; }
         // FirstName + LastName одной строкой.
         public string UserFullName { get; set; }
+
+        // Язык клиента — нужен резолверу получателя "Клиент заказа", чтобы выбрать
+        // языковую версию письма без второго похода в БД.
+        public LanguageCode UserPreferredLanguage { get; set; }
+
         public OrderStatus Status { get; set; }
         public string RejectReason { get; set; }
         public DateTime CreatedAtUtc { get; set; }

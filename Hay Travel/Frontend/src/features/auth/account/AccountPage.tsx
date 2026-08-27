@@ -119,7 +119,7 @@ export function AccountPage() {
         <div className="flex flex-col gap-2.5 border-t border-edge pt-5">
           {/* Staff only — for everyone else this link does not exist, same rule the header's user
               menu applies. */}
-          {canOpenAdminPanel(user.role) && (
+          {canOpenAdminPanel(user) && (
             <Link
               to="/admin"
               className="w-full rounded-full bg-gold-fill px-5 py-3 text-center text-sm font-medium text-gold-on transition-colors hover:bg-gold-fill-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-panel focus-visible:outline-none"

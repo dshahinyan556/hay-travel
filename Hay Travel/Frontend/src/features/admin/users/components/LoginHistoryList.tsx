@@ -1,6 +1,10 @@
 import type { LoginHistoryEntryModel } from '@/shared/auth'
 import { countryFlagEmoji, countryDisplayName } from '@/shared/lib/country'
+import type { Locale } from '@/shared/lib/locale'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
+import { useCopy } from '@/shared/i18n/defineCopy'
 import { describeUserAgent } from '../lib/userAgent'
+import { userCopy } from '../lib/userCopy'
 
 interface LoginHistoryListProps {
   /** `null` when the history request failed — the profile card must still render (its own request
@@ -12,10 +16,11 @@ interface LoginHistoryListProps {
  * the cap, so it is conditional rather than always printed. */
 const SERVER_LIMIT = 100
 
-const dateTimeFormatter = new Intl.DateTimeFormat('ru', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-})
+/** One formatter per interface locale, built once. `en-GB` per Spec 009 §5 (day-month-year). */
+const DATE_TIME: Record<Locale, Intl.DateTimeFormat> = {
+  ru: new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }),
+  en: new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }),
+}
 
 /**
  * Login history for one account (C2, 2026-08-09) — admin-only by explicit product decision; the
@@ -34,34 +39,30 @@ const dateTimeFormatter = new Intl.DateTimeFormat('ru', {
  * approximate and an audit view must never be the place where information is lost.
  */
 export function LoginHistoryList({ entries }: LoginHistoryListProps) {
+  const { locale } = useLocale()
+  const copy = useCopy(userCopy).history
+
   return (
     <section className="rounded-xl border border-neutral-200 bg-white">
       <div className="border-b border-neutral-100 px-4 py-2.5">
-        <h2 className="text-sm font-semibold text-neutral-800">История входов</h2>
-        <p className="text-xs text-neutral-500">
-          Только успешные входы. Обновление токена входом не считается.
-        </p>
+        <h2 className="text-sm font-semibold text-neutral-800">{copy.title}</h2>
+        <p className="text-xs text-neutral-500">{copy.subtitle}</p>
       </div>
 
       {entries === null ? (
-        <p className="px-4 py-6 text-sm text-neutral-500">
-          Не удалось загрузить историю входов. Остальные данные пользователя показаны выше.
-        </p>
+        <p className="px-4 py-6 text-sm text-neutral-500">{copy.loadFailed}</p>
       ) : entries.length === 0 ? (
-        <p className="px-4 py-6 text-sm text-neutral-500">
-          Входов пока нет — либо пользователь ни разу не входил, либо все его входы были до
-          появления этой истории.
-        </p>
+        <p className="px-4 py-6 text-sm text-neutral-500">{copy.empty}</p>
       ) : (
         <>
           <ul className="flex flex-col divide-y divide-neutral-100">
             {entries.map((entry, index) => (
-              <LoginHistoryRow key={`${entry.loggedInAtUtc}-${index}`} entry={entry} />
+              <LoginHistoryRow key={`${entry.loggedInAtUtc}-${index}`} entry={entry} locale={locale} />
             ))}
           </ul>
           {entries.length === SERVER_LIMIT && (
             <p className="border-t border-neutral-100 px-4 py-2.5 text-[11px] text-neutral-500">
-              Показаны последние {SERVER_LIMIT} входов.
+              {copy.limitNote(SERVER_LIMIT)}
             </p>
           )}
         </>
@@ -70,15 +71,15 @@ export function LoginHistoryList({ entries }: LoginHistoryListProps) {
   )
 }
 
-function LoginHistoryRow({ entry }: { entry: LoginHistoryEntryModel }) {
+function LoginHistoryRow({ entry, locale }: { entry: LoginHistoryEntryModel; locale: Locale }) {
   const device = describeUserAgent(entry.userAgent)
-  const place = formatPlace(entry)
+  const place = formatPlace(entry, locale)
 
   return (
     <li className="flex flex-col gap-1 px-4 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <span className="text-sm font-semibold text-neutral-900">
-          {formatMoment(entry.loggedInAtUtc)}
+          {formatMoment(entry.loggedInAtUtc, locale)}
         </span>
         {place && <span className="text-sm text-neutral-600">{place}</span>}
       </div>
@@ -101,18 +102,19 @@ function LoginHistoryRow({ entry }: { entry: LoginHistoryEntryModel }) {
  * would read it as LOCAL time and silently shift every timestamp. Appending `Z` when there is no
  * offset is what keeps that honest.
  */
-function formatMoment(loggedInAtUtc: string): string {
+function formatMoment(loggedInAtUtc: string, locale: Locale): string {
   const normalised = /[Zz]|[+-]\d{2}:?\d{2}$/.test(loggedInAtUtc) ? loggedInAtUtc : `${loggedInAtUtc}Z`
   const date = new Date(normalised)
   if (Number.isNaN(date.getTime())) return loggedInAtUtc
-  return dateTimeFormatter.format(date)
+  return DATE_TIME[locale].format(date)
 }
 
 /** «🇦🇲 Армения, Ереван» — degrades gracefully: geo data is optional on the backend, so any part of
- * it can be missing and the row must still read correctly. */
-function formatPlace(entry: LoginHistoryEntryModel): string | null {
+ * it can be missing and the row must still read correctly. `countryName` is the backend's own
+ * fallback string and is not localised — it is only used when the ISO code is missing. */
+function formatPlace(entry: LoginHistoryEntryModel, locale: Locale): string | null {
   const country = entry.countryCode
-    ? `${countryFlagEmoji(entry.countryCode)} ${countryDisplayName(entry.countryCode, 'ru')}`
+    ? `${countryFlagEmoji(entry.countryCode)} ${countryDisplayName(entry.countryCode, locale)}`
     : entry.countryName
   if (!country) return entry.city ?? null
   return entry.city ? `${country}, ${entry.city}` : country
