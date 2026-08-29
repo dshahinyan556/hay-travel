@@ -19,6 +19,14 @@ namespace ATTours.ClientAPI.Controllers
         public async Task<MessageResultModel> RegisterAsync([FromBody] RegisterModel model, CancellationToken cancellationToken)
             => await authService.RegisterAsync(model, BuildRequestContext(), cancellationToken);
 
+        // Переотправка письма подтверждения (2026-08-27): до неё единственным способом было
+        // заново отправить всю форму регистрации. Ответ generic и при кулдауне, и при
+        // неизвестном адресе — см. AuthService.ResendVerificationEmailAsync.
+        [HttpPost]
+        [Route("ResendVerification")]
+        public async Task<MessageResultModel> ResendVerificationAsync([FromBody] ResendVerificationModel model, CancellationToken cancellationToken)
+            => await authService.ResendVerificationEmailAsync(model, BuildRequestContext(), cancellationToken);
+
         [HttpPost]
         [Route("VerifyEmail")]
         public async Task<MessageResultModel> VerifyEmailAsync([FromBody] VerifyEmailModel model, CancellationToken cancellationToken)

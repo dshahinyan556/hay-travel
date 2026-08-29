@@ -1,7 +1,9 @@
 import { Card, Checkbox, DatePicker, Field, Input } from '@/shared/ui'
+import { HelpButton } from '@/shared/ui/HelpButton'
+import { HelpRevealZone } from '@/shared/ui/HelpReveal'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
-import { TourType } from '@/features/admin/lib/enums'
+import { TourFormat, TourType } from '@/features/admin/lib/enums'
 import type { TourFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
 import { computeTotalPrice, formatTotalPrice } from '@/features/admin/tour-form/lib/price'
@@ -11,6 +13,7 @@ import { TranslationGroup } from '@/features/admin/ui/TranslationGroup'
 import type { RegionInfoModel, TagInfoModel } from '@/shared/types/attours'
 import { RegionPicker } from './RegionPicker'
 import { TagPicker } from './TagPicker'
+import { TourFormatFields } from './TourFormatFields'
 import { TourTypeToggle } from './TourTypeToggle'
 
 interface TourFormHeaderProps {
@@ -26,6 +29,10 @@ interface TourFormHeaderProps {
   discountStartDateError?: string
   /** Discount valid-until error (missing while a percent is set). */
   discountValidUntilError?: string
+  /** Format/group-pricing errors (батч 2026-08-29) — passed through to `TourFormatFields`. */
+  formatError?: string
+  groupPricePerPersonError?: string
+  groupCapacityError?: string
   /** When true (edit mode) the type toggle is locked — type is immutable after creation. */
   typeLocked?: boolean
   /** The fixed 11-region reference list, for the region picker (4.4). */
@@ -41,6 +48,12 @@ interface TourFormHeaderProps {
  *  - Tour: a read-only, auto-summed total of every day's price (edited per day in the "Дни" tab).
  *  - Excursion: the excursion has exactly one day and no "Дни" tab, so its single price is edited
  *    right here — the header texts already ARE that day's texts (they're unified on save).
+ *
+ * …и на формате (решение 0.26, 2026-08-29): при формате «Групповой» «Цена за группу» ПРЯЧЕТСЯ —
+ * продаётся только цена за человека, и держать на экране вторую, ни на что не влияющую сумму
+ * значит предлагать её заполнить. Спрятано ровно отображение: `Tour.TotalPrice` по-прежнему сумма
+ * цен дней, мэппер шлёт её как раньше, сохранение проходит без изменений. При «Оба» цена за
+ * группу остаётся видимой — там нужны обе.
  */
 export function TourFormHeader({
   state,
@@ -51,6 +64,9 @@ export function TourFormHeader({
   discountPercentError,
   discountStartDateError,
   discountValidUntilError,
+  formatError,
+  groupPricePerPersonError,
+  groupCapacityError,
   typeLocked,
   regions,
   tags,
@@ -58,6 +74,12 @@ export function TourFormHeader({
   const { locale } = useLocale()
   const copy = useCopy(tourFormCopy).header
   const isExcursion = state.type === TourType.Excursion
+  // Трансфер использует из этой карточки только тип, картинку, тексты, публикацию и предоплату:
+  // цены/формата/регионов/тегов/скидки у него нет вообще (решение 0.4).
+  const isTransfer = state.type === TourType.Transfer
+  // «Только групповой» — не «групповой или оба»: при «Оба» продукт продаётся ещё и как
+  // индивидуальный, и цена за группу ему по-прежнему нужна (решение 0.26).
+  const isGroupOnly = state.format === TourFormat.Group
   const totalPrice = computeTotalPrice(state.days)
   const singleDay = state.days[0]
 
@@ -75,9 +97,14 @@ export function TourFormHeader({
             <TourTypeToggle value={state.type} onChange={actions.setType} disabled={typeLocked} />
           </div>
 
-          {isExcursion && singleDay ? (
+          {isTransfer || isGroupOnly ? null : isExcursion && singleDay ? (
             <div className="w-40">
-              <Field label={copy.price} htmlFor="excursion-price" error={excursionPriceError}>
+              <Field
+                label={copy.price}
+                htmlFor="excursion-price"
+                hint={copy.priceHint}
+                error={excursionPriceError}
+              >
                 <Input
                   id="excursion-price"
                   type="text"
@@ -90,16 +117,34 @@ export function TourFormHeader({
               </Field>
             </div>
           ) : (
-            <div className="flex flex-col items-end gap-0.5">
+            <HelpRevealZone className="flex flex-col items-end gap-0.5">
               <span className="text-2xl font-bold tabular-nums text-neutral-900">
                 {formatTotalPrice(totalPrice, locale)}
               </span>
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
                 {copy.totalCaption}
+                <HelpButton surface="admin" title={copy.price}>
+                  {copy.priceHint}
+                </HelpButton>
               </span>
-            </div>
+            </HelpRevealZone>
           )}
         </div>
+
+        {/* Формат — только у тура/экскурсии; у трансфера этого поля нет вообще (решение 0.16). */}
+        {!isTransfer && (
+          <TourFormatFields
+            value={state.format}
+            onChange={actions.setFormat}
+            groupPricePerPerson={state.groupPricePerPerson}
+            onChangeGroupPricePerPerson={actions.setGroupPricePerPerson}
+            groupCapacity={state.groupCapacity}
+            onChangeGroupCapacity={actions.setGroupCapacity}
+            formatError={formatError}
+            groupPricePerPersonError={groupPricePerPersonError}
+            groupCapacityError={groupCapacityError}
+          />
+        )}
 
         <ImageUrlField
           label={copy.mainImage}
@@ -128,15 +173,21 @@ export function TourFormHeader({
           value={state.description}
           onChange={(lang, value) => actions.setLocalized('description', lang, value)}
         />
-        <TranslationGroup
-          label={copy.duration}
-          value={state.duration}
-          onChange={(lang, value) => actions.setLocalized('duration', lang, value)}
-        />
+        {/* Длительность, регионы и теги — часть «богатства» тура; у трансфера их нет: он всегда
+            «из точки А в точку Б», а в общий каталог с фильтрами он не попадает (решение 0.15). */}
+        {!isTransfer && (
+          <>
+            <TranslationGroup
+              label={copy.duration}
+              value={state.duration}
+              onChange={(lang, value) => actions.setLocalized('duration', lang, value)}
+            />
 
-        <RegionPicker regions={regions} selected={state.regions} onToggle={actions.toggleRegion} />
+            <RegionPicker regions={regions} selected={state.regions} onToggle={actions.toggleRegion} />
 
-        <TagPicker tags={tags} selected={state.tags} onToggle={actions.toggleTag} />
+            <TagPicker tags={tags} selected={state.tags} onToggle={actions.toggleTag} />
+          </>
+        )}
 
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-semibold text-neutral-700">{copy.publication}</span>
@@ -156,6 +207,8 @@ export function TourFormHeader({
           />
         </div>
 
+        {/* Скидки у трансфера нет (решение 0.4) — бэк отвергает её вместе с днями и галереей. */}
+        {!isTransfer && (
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-semibold text-neutral-700">{copy.discount}</span>
           <div className="flex flex-wrap items-start gap-3">
@@ -200,6 +253,7 @@ export function TourFormHeader({
           </div>
           <p className="text-xs text-neutral-400">{copy.discountHint}</p>
         </div>
+        )}
       </div>
     </Card>
   )

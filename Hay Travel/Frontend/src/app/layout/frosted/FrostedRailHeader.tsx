@@ -40,6 +40,8 @@ export function FrostedRailHeader() {
     { to: '/', label: t('nav.home'), end: true },
     // Одна запись каталога: туры и экскурсии — вкладки внутри `/trips`, не разные разделы.
     { to: '/trips', label: t('nav.trips') },
+    // Отдельный раздел, а не вкладка каталога (решение 0.15) — см. тот же комментарий в `Header`.
+    { to: '/transfers', label: t('nav.transfers') },
     { to: '/regions', label: t('nav.regions') },
   ]
 

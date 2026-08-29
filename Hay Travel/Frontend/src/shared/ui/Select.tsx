@@ -22,6 +22,12 @@ export interface SelectOption {
    * «Армения +374». Falls back to `label`.
    */
   triggerLabel?: string
+  /**
+   * Secondary text pinned to the RIGHT of the option row — e.g. how many products stand behind a
+   * filter value (`/transfers`, 2026-08-29). Muted, and never shown in the trigger: it qualifies
+   * the choice, it is not part of it.
+   */
+  meta?: string
 }
 
 export interface SelectProps {
@@ -61,6 +67,34 @@ export interface SelectProps {
    * that one of the two consumers doesn't even manage.
    */
   surface?: 'public' | 'admin'
+  /**
+   * Static caption rendered INSIDE the trigger, before the value («Откуда» / «From» on
+   * `/transfers`, 2026-08-29).
+   *
+   * Why inside and not a `<label>` above: the two route filters sit in one horizontal row, and a
+   * caption that only appeared once something was picked would make that row change width on
+   * every choice. Keeping it in the trigger keeps the row's geometry fixed.
+   *
+   * `aria-hidden`: the trigger already has a name via `aria-label`/`aria-labelledby`, and reading
+   * the caption twice helps nobody.
+   */
+  triggerPrefix?: ReactNode
+  /**
+   * Where the VALUE sits inside the trigger. `'start'` (default) is every existing call site:
+   * the value reads immediately after the optional prefix. `'end'` pins it to the right edge,
+   * which is what a caption+value pill needs («Откуда … Ереван») so that two such pills side by
+   * side line their values up regardless of caption width.
+   */
+  triggerValueAlign?: 'start' | 'end'
+  /**
+   * Draws the trigger as "a choice has been made" — a gold wash instead of the resting border
+   * (public), a darker border (admin).
+   *
+   * A prop rather than a `triggerClassName` colour, deliberately: colours live in the component so
+   * the two `surface` palettes cannot desync (see the note on `triggerClassName`). Callers state
+   * the STATE, never the paint.
+   */
+  active?: boolean
   /**
    * Adds a text filter above the option list.
    *
@@ -170,6 +204,9 @@ export function Select({
   className = '',
   triggerClassName,
   surface = 'public',
+  triggerPrefix,
+  triggerValueAlign = 'start',
+  active = false,
   searchable = false,
   searchPlaceholder,
   noResultsText,
@@ -424,12 +461,16 @@ export function Select({
       ? `border bg-white text-neutral-900 disabled:bg-neutral-100 disabled:text-neutral-400 ${
           error
             ? 'border-rose-500 focus-visible:border-rose-600 focus-visible:ring-rose-600/20'
-            : 'border-neutral-300 hover:border-neutral-400 focus-visible:border-neutral-900 focus-visible:ring-neutral-900/15'
+            : active
+              ? 'border-neutral-500 hover:border-neutral-600 focus-visible:border-neutral-900 focus-visible:ring-neutral-900/15'
+              : 'border-neutral-300 hover:border-neutral-400 focus-visible:border-neutral-900 focus-visible:ring-neutral-900/15'
         }`
-      : `border bg-panel-raised text-ink disabled:border-disabled-edge disabled:bg-disabled-bg disabled:text-disabled-ink ${
+      : `border text-ink disabled:border-disabled-edge disabled:bg-disabled-bg disabled:text-disabled-ink ${
           error
-            ? 'border-danger focus-visible:ring-danger'
-            : 'border-edge-strong hover:border-gold-line focus-visible:ring-focus'
+            ? 'border-danger bg-panel-raised focus-visible:ring-danger'
+            : active
+              ? 'border-gold-line bg-accent-soft focus-visible:ring-focus'
+              : 'border-edge-strong bg-panel-raised hover:border-gold-line focus-visible:ring-focus'
         }`
   const triggerClasses = `${TRIGGER_BASE} ${triggerClassName || DEFAULT_TRIGGER_SHAPE} ${triggerColorClasses}`
 
@@ -521,7 +562,10 @@ export function Select({
               {option.icon}
             </span>
           )}
-          <span className="flex-1">{option.label}</span>
+          <span className="flex-1 truncate">{option.label}</span>
+          {option.meta !== undefined && (
+            <span className={`shrink-0 text-xs ${mutedTextClass}`}>{option.meta}</span>
+          )}
           {index === selectedIndex && <CheckIcon size={16} className="shrink-0" />}
         </li>
       ))}
@@ -550,7 +594,10 @@ export function Select({
               {option.icon}
             </span>
           )}
-          <span className="flex-1">{option.label}</span>
+          <span className="flex-1 truncate">{option.label}</span>
+          {option.meta !== undefined && (
+            <span className={`shrink-0 text-xs ${mutedTextClass}`}>{option.meta}</span>
+          )}
           {index === selectedIndex && <CheckIcon size={16} className="shrink-0" />}
         </li>
       ))}
@@ -596,12 +643,21 @@ export function Select({
         }}
         className={triggerClasses}
       >
+        {triggerPrefix !== undefined && (
+          <span aria-hidden="true" className={`shrink-0 ${mutedTextClass}`}>
+            {triggerPrefix}
+          </span>
+        )}
         {selectedOption?.icon && (
           <span aria-hidden="true" className="flex shrink-0 items-center">
             {selectedOption.icon}
           </span>
         )}
-        <span className={`flex-1 truncate ${selectedOption ? '' : mutedTextClass}`}>
+        <span
+          className={`flex-1 truncate ${selectedOption ? '' : mutedTextClass} ${
+            triggerValueAlign === 'end' ? 'text-right' : ''
+          }`}
+        >
           {selectedOption ? (selectedOption.triggerLabel ?? selectedOption.label) : resolvedPlaceholder}
         </span>
         <ChevronDownIcon

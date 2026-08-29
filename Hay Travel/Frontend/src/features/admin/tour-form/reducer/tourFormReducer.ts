@@ -15,18 +15,22 @@
  */
 
 import { arrayMove } from '@dnd-kit/sortable'
-import { TourType } from '@/features/admin/lib/enums'
+import { TourFormat, TourType } from '@/features/admin/lib/enums'
 import {
   emptyDay,
   emptyExpense,
   emptyLocalizedItem,
   emptyGalleryItem,
   emptyRoutePoint,
+  emptyStartTime,
+  emptyTransferPrice,
+  emptyTransferStop,
 } from '@/features/admin/lib/tourMapper'
 import type { DaySourceContent } from '@/features/admin/lib/tourMapper'
 import type {
   Localized,
   LocalizedListItem,
+  StartTimeFormState,
   TourDayFormState,
   TourFormState,
 } from '@/features/admin/types/form'
@@ -49,9 +53,19 @@ export const MIN_TOUR_DAYS = 2
 /*  Actions                                                                    */
 /* -------------------------------------------------------------------------- */
 
+/** Which end of the transfer route a text edit targets. Stops are addressed by key instead — they
+ * are a list, `From`/`To` are single-valued fields (see `TourFormState.transferFrom`). */
+export type TransferEndpoint = 'from' | 'to'
+
+/** Which of a price row's two independent prices is being edited. */
+export type TransferPriceField = 'oneWayPrice' | 'roundTripPrice'
+
 export type TourFormAction =
   // top-level
   | { kind: 'setType'; value: TourType }
+  | { kind: 'setFormat'; value: TourFormat }
+  | { kind: 'setField'; field: 'groupPricePerPerson'; value: string }
+  | { kind: 'setField'; field: 'groupCapacity'; value: string }
   | { kind: 'setField'; field: 'mainImageUrl'; value: string }
   | { kind: 'setField'; field: 'isActive'; value: boolean }
   | { kind: 'setField'; field: 'requiresPrepayment'; value: boolean }
@@ -122,6 +136,23 @@ export type TourFormAction =
   // tags (tour-level, unordered checkbox set). Dumb toggle only — the max-3 rule lives in
   // `TagPicker`, the same layering `RegionPicker` uses for its own (looser) rule.
   | { kind: 'toggleTag'; tagId: number }
+  // start times (tour/excursion only). No `move*`: the list is chronological, not hand-ordered —
+  // `sortStartTimes` re-sorts it, and the editor dispatches that on blur (see the case below).
+  | { kind: 'addStartTime' }
+  | { kind: 'removeStartTime'; key: string }
+  | { kind: 'setStartTime'; key: string; value: string }
+  | { kind: 'sortStartTimes' }
+  // transfer route: two fixed endpoints + a reorderable list of stops between them
+  | { kind: 'setTransferEndpointText'; endpoint: TransferEndpoint; lang: LangKey; value: string }
+  | { kind: 'addTransferStop' }
+  | { kind: 'removeTransferStop'; key: string }
+  | { kind: 'moveTransferStop'; fromIndex: number; toIndex: number }
+  | { kind: 'setTransferStopText'; key: string; lang: LangKey; value: string }
+  // transfer prices: one row per vehicle class, two independent prices each
+  | { kind: 'addTransferPrice' }
+  | { kind: 'removeTransferPrice'; key: string }
+  | { kind: 'setTransferPriceClass'; key: string; vehicleClassId: number | null }
+  | { kind: 'setTransferPriceAmount'; key: string; field: TransferPriceField; value: string }
 
 /* -------------------------------------------------------------------------- */
 /*  Immutable list helpers                                                     */
@@ -190,6 +221,9 @@ const removeLinkedImages = <T extends Keyed>(
 
 /** Coerce the day list to satisfy the rule for `type` (see file header). */
 export function applyDayRule(days: TourDayFormState[], type: TourType): TourDayFormState[] {
+  // A transfer has no days at all — not "one empty day". The backend rejects a non-empty day
+  // collection on a transfer outright (`TourValidationService`, решение 0.4).
+  if (type === TourType.Transfer) return days.length === 0 ? days : []
   if (type === TourType.Excursion) {
     return days.length === 1 ? days : days.length === 0 ? [emptyDay()] : [days[0]]
   }
@@ -208,7 +242,22 @@ export function normalizeInitialState(state: TourFormState): TourFormState {
 
 /** The smallest legal day count for the current type. */
 export function minDaysFor(type: TourType): number {
+  if (type === TourType.Transfer) return 0
   return type === TourType.Excursion ? 1 : MIN_TOUR_DAYS
+}
+
+/**
+ * Keep the start-time list chronological. Blank rows (a slot the admin has started but not
+ * finished) sink to the bottom instead of jumping to the top, so adding a row never pushes the
+ * one you are about to fill away from the cursor.
+ */
+function sortStartTimes(times: StartTimeFormState[]): StartTimeFormState[] {
+  return [...times].sort((a, b) => {
+    if (a.time === b.time) return 0
+    if (a.time === '') return 1
+    if (b.time === '') return -1
+    return a.time < b.time ? -1 : 1
+  })
 }
 
 /* -------------------------------------------------------------------------- */
@@ -219,10 +268,26 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
   switch (action.kind) {
     case 'setType': {
       if (action.value === state.type) return state
-      return { ...state, type: action.value, days: applyDayRule(state.days, action.value) }
+      return {
+        ...state,
+        type: action.value,
+        days: applyDayRule(state.days, action.value),
+        // Switching away from a transfer must leave a valid format behind: a transfer's format is
+        // `null` by definition, and a tour/excursion cannot be saved without one. `Individual` is
+        // the same default `InitTour` seeds. The reverse direction keeps the format in state (the
+        // mapper drops it) so switching back and forth loses nothing.
+        format:
+          action.value === TourType.Transfer ? state.format : (state.format ?? TourFormat.Individual),
+      }
     }
 
+    case 'setFormat':
+      if (action.value === state.format) return state
+      return { ...state, format: action.value }
+
     case 'setField':
+      if (action.field === 'groupPricePerPerson') return { ...state, groupPricePerPerson: action.value }
+      if (action.field === 'groupCapacity') return { ...state, groupCapacity: action.value }
       if (action.field === 'mainImageUrl') return { ...state, mainImageUrl: action.value }
       if (action.field === 'isActive') return { ...state, isActive: action.value }
       if (action.field === 'requiresPrepayment') return { ...state, requiresPrepayment: action.value }
@@ -484,5 +549,82 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
           : [...state.tags, { tagId: action.tagId }],
       }
     }
+
+    /* ---- start times ---- */
+    case 'addStartTime':
+      return { ...state, startTimes: [...state.startTimes, emptyStartTime()] }
+
+    case 'removeStartTime':
+      return { ...state, startTimes: removeByKey(state.startTimes, action.key) }
+
+    case 'setStartTime':
+      // Deliberately does NOT re-sort: `<input type="time">` reports every intermediate state
+      // (including `''` while the hour is being retyped), and reordering rows under the cursor
+      // would move the field the admin is typing into. `sortStartTimes` runs on blur instead.
+      return {
+        ...state,
+        startTimes: updateByKey(state.startTimes, action.key, (slot) => ({
+          ...slot,
+          time: action.value,
+        })),
+      }
+
+    case 'sortStartTimes': {
+      const sorted = sortStartTimes(state.startTimes)
+      // Reference-equal when nothing moved, so a blur on an already-sorted list is not a change
+      // (it would otherwise mark the form dirty on every focus out).
+      const unchanged = sorted.every((slot, i) => slot === state.startTimes[i])
+      return unchanged ? state : { ...state, startTimes: sorted }
+    }
+
+    /* ---- transfer route ---- */
+    case 'setTransferEndpointText': {
+      const field = action.endpoint === 'from' ? 'transferFrom' : 'transferTo'
+      const point = state[field]
+      return { ...state, [field]: { ...point, text: setLoc(point.text, action.lang, action.value) } }
+    }
+
+    case 'addTransferStop':
+      return { ...state, transferStops: [...state.transferStops, emptyTransferStop()] }
+
+    case 'removeTransferStop':
+      return { ...state, transferStops: removeByKey(state.transferStops, action.key) }
+
+    case 'moveTransferStop':
+      return {
+        ...state,
+        transferStops: reorder(state.transferStops, action.fromIndex, action.toIndex),
+      }
+
+    case 'setTransferStopText':
+      return {
+        ...state,
+        transferStops: setItemText(state.transferStops, action.key, action.lang, action.value),
+      }
+
+    /* ---- transfer prices ---- */
+    case 'addTransferPrice':
+      return { ...state, transferPrices: [...state.transferPrices, emptyTransferPrice()] }
+
+    case 'removeTransferPrice':
+      return { ...state, transferPrices: removeByKey(state.transferPrices, action.key) }
+
+    case 'setTransferPriceClass':
+      return {
+        ...state,
+        transferPrices: updateByKey(state.transferPrices, action.key, (row) => ({
+          ...row,
+          vehicleClassId: action.vehicleClassId,
+        })),
+      }
+
+    case 'setTransferPriceAmount':
+      return {
+        ...state,
+        transferPrices: updateByKey(state.transferPrices, action.key, (row) => ({
+          ...row,
+          [action.field]: action.value,
+        })),
+      }
   }
 }

@@ -31,15 +31,34 @@ export const tourFormCopy = defineCopy(
       products: 'Продукты',
       createTour: 'Создать тур',
       createExcursion: 'Создать экскурсию',
+      createTransfer: 'Создать трансфер',
       editTour: 'Редактировать тур',
       editExcursion: 'Редактировать экскурсию',
+      editTransfer: 'Редактировать трансфер',
+      /** Подзаголовок шаблона A — одна строка о том, что это за экран. */
+      subtitleCreate: 'Заполните карточку продукта и сохраните — до сохранения ничего не создаётся.',
+      subtitleEdit: 'Правки попадают на сайт только после сохранения.',
     },
 
     header: {
       type: 'Тип позиции',
       typeLocked: 'Тип нельзя изменить после создания',
-      price: 'Цена, ֏',
-      totalCaption: 'Цена · сумма дней',
+      price: 'Цена за группу, ֏',
+      /** Подсказка «?» у цены: на одном экране живут два разных смысла цены, и перепутать их
+       * дороже всего — отсюда явное объяснение прямо у поля. */
+      priceHint:
+        'Это фиксированная цена за всю группу: она не умножается на число гостей, к ней применяется наценка за размер группы (1-4 / 5-6 / 7+). Именно её платит клиент при индивидуальном формате. При групповом формате берётся другая цена — «за человека», ниже.',
+      totalCaption: 'Цена за группу · сумма дней',
+      format: 'Формат',
+      formatHint:
+        'Индивидуальный — выезд только для этой группы: цена фиксирована за всю группу, работает наценка за размер группы. Групповой — сборный выезд: цена берётся за одного человека и умножается на число гостей, наценки нет, ограничение — свободные места. «Оба» — клиент выбирает формат сам при бронировании.',
+      groupPricing: 'Групповой формат',
+      groupPricePerPerson: 'Цена за человека, ֏',
+      groupPricePerPersonHint:
+        'Цена за ОДНОГО гостя: итог считается как эта цена × число гостей. Наценка за размер группы к ней не применяется — это отдельная от «Цены за группу» величина, а не пересчёт из неё.',
+      groupCapacity: 'Мест на выезд',
+      groupCapacityHint:
+        'Сколько гостей помещается на один выезд. Одно число на весь продукт: остаток свободных мест считается отдельно на каждую пару «дата + время старта».',
       mainImage: 'Главная картинка — URL',
       title: 'Заголовок',
       shortDescription: 'Краткое описание',
@@ -55,6 +74,51 @@ export const tourFormCopy = defineCopy(
       discountValidUntil: 'Действует до',
       discountHint:
         'Скидка действует с даты начала по дату окончания включительно. После даты окончания она перестаёт применяться сама — снимать вручную не нужно.',
+    },
+
+    /** Редактор предопределённых времён начала (решение 0.21). */
+    startTimes: {
+      title: 'Время начала',
+      hint: 'Клиент выбирает одно из этих времён при бронировании — своё время он ввести не может.',
+      help: 'Список времён, в которые продукт стартует. Клиент выбирает одно из них и изменить не может. Нужно хотя бы одно время; одинаковые времена задать нельзя. Список сам выстраивается по возрастанию.',
+      empty: 'Времён пока нет — добавьте хотя бы одно.',
+      add: 'Добавить время',
+      remove: 'Удалить время',
+      label: (index: number) => `Время ${index}`,
+    },
+
+    /** Ветка трансфера: маршрут «откуда → стопы → куда» и таблица цен по классам авто. */
+    transfer: {
+      routeTitle: 'Маршрут',
+      routeHelp:
+        'Откуда и куда едет трансфер. Обе точки обязательны. Промежуточные остановки не обязательны — добавляйте их, если маршрут проходит через конкретные места; порядок остановок меняется перетаскиванием.',
+      from: 'Откуда',
+      to: 'Куда',
+      stopsTitle: 'Промежуточные остановки',
+      stopsHint: 'Порядок остановок соответствует маршруту.',
+      stopsEmpty: 'Остановок нет — трансфер едет напрямую.',
+      stopsAdd: 'Добавить остановку',
+      /** Винительный падеж — «Удалить остановку» / «Перетащить остановку 2…». */
+      stopNoun: 'остановку',
+      /** Именительный падеж — для объявлений при перетаскивании. */
+      stopLabel: 'Остановка',
+      pricesTitle: 'Цены по классам авто',
+      pricesHelp:
+        'Цена трансфера зависит от класса авто. «Туда-обратно» — самостоятельная цена, а не удвоенная односторонняя: обратный рейс можно продавать дешевле двух отдельных поездок. Нужен хотя бы один класс с ценой; один класс нельзя добавить дважды.',
+      pricesEmpty: 'Классов с ценой пока нет — добавьте хотя бы один.',
+      pricesAdd: 'Добавить класс',
+      priceRemove: 'Удалить строку',
+      vehicleClass: 'Класс авто',
+      vehicleClassPlaceholder: 'Выберите класс…',
+      /** Подпись под названием класса в списке: вместимость и лимит багажа из справочника. */
+      vehicleClassMeta: (capacity: number, luggage: number) =>
+        `${capacity} ${pluralizeRu(capacity, ['место', 'места', 'мест'])} · багаж ${luggage}`,
+      vehicleClassFallback: (id: number) => `класс №${id}`,
+      oneWayPrice: 'В одну сторону, ֏',
+      roundTripPrice: 'Туда-обратно, ֏',
+      /** Пустой справочник классов авто — самостоятельное состояние экрана, не ошибка формы. */
+      noVehicleClasses:
+        'Классы авто ещё не заведены. Добавьте их в «Справочники → Классы авто» — без них у трансфера не задать цену.',
     },
 
     regions: {
@@ -189,12 +253,29 @@ export const tourFormCopy = defineCopy(
       replace: 'Заменить',
     },
 
+    /** Статус черновика под тулбаром. Подписи самих кнопок Save/Cancel сюда НЕ дублируются: их
+     * даёт общий словарь `ui.toolbar.*`, как на экране заказа. */
     actions: {
-      draftNote: 'Черновик не сохраняется автоматически.',
+      draftNote: 'Есть несохранённые изменения — черновик не сохраняется автоматически.',
       invalidNote: 'Проверьте форму: заполните обязательные поля (отмечены *).',
-      cancel: 'Отмена',
-      save: 'Сохранить',
-      saving: 'Сохранение…',
+    },
+
+    /** Мягкое удаление продукта прямо из формы: «В архив». Окончательное удаление живёт только в
+     * архиве списка продуктов — здесь его нет и не должно быть. */
+    archive: {
+      button: 'В архив',
+      modalTitle: 'Убрать в архив?',
+      /** Предложение разорвано вокруг выделенного названия продукта — как в списке продуктов. */
+      lead: 'Позиция',
+      tail: 'пропадёт с сайта и переедет в архив. Данные останутся на месте — вернуть её можно из архива в списке продуктов.',
+      quoteOpen: '«',
+      quoteClose: '»',
+      /** Показывается только поверх несохранённого черновика — иначе это лишний шум. */
+      unsavedNote: 'Несохранённые изменения формы при этом пропадут.',
+      confirm: 'В архив',
+      pending: 'Убираем…',
+      errorServer: (status: number) => `Не удалось убрать в архив: сервер вернул ошибку (${status}).`,
+      errorNetwork: 'Не удалось убрать в архив: проверьте соединение и попробуйте ещё раз.',
     },
 
     /** Blocking validation messages. `validateTourForm` is pure and takes this section as a
@@ -210,6 +291,12 @@ export const tourFormCopy = defineCopy(
       discountNeedsStartDate: 'Укажите дату начала скидки',
       discountNeedsValidUntil: 'Укажите дату, до которой действует скидка',
       discountStartAfterEnd: 'Дата начала не может быть позже даты окончания',
+      positiveNumber: 'Введите число больше нуля',
+      positiveSeats: 'Введите целое число мест больше нуля',
+      noStartTime: 'Добавьте хотя бы одно время начала',
+      duplicateStartTime: 'Такое время уже добавлено',
+      noTransferPrice: 'Добавьте хотя бы один класс авто с ценой',
+      duplicateVehicleClass: 'Этот класс уже добавлен',
     },
 
     submitError: {
@@ -226,15 +313,31 @@ export const tourFormCopy = defineCopy(
       products: 'Products',
       createTour: 'Create a tour',
       createExcursion: 'Create an excursion',
+      createTransfer: 'Create a transfer',
       editTour: 'Edit tour',
       editExcursion: 'Edit excursion',
+      editTransfer: 'Edit transfer',
+      subtitleCreate: 'Fill in the product card and save — nothing is created until you do.',
+      subtitleEdit: 'Changes reach the site only after you save.',
     },
 
     header: {
       type: 'Product type',
       typeLocked: 'The type cannot be changed after creation',
-      price: 'Price, ֏',
-      totalCaption: 'Price · sum of days',
+      price: 'Price per group, ֏',
+      priceHint:
+        'A fixed price for the whole group: it is not multiplied by the number of guests, and the group-size surcharge (1-4 / 5-6 / 7+) applies to it. This is what the client pays in the individual format. The group format uses a different price — “per person”, below.',
+      totalCaption: 'Price per group · sum of days',
+      format: 'Format',
+      formatHint:
+        'Individual — a private departure for this group only: the price is fixed for the whole group and the group-size surcharge applies. Group — a shared departure: the price is per person and multiplied by the number of guests, with no surcharge; the only limit is the seats left. “Both” — the client picks the format when booking.',
+      groupPricing: 'Group format',
+      groupPricePerPerson: 'Price per person, ֏',
+      groupPricePerPersonHint:
+        'The price for ONE guest: the total is this price × the number of guests. The group-size surcharge does not apply to it — it is a separate number from “Price per group”, not derived from it.',
+      groupCapacity: 'Seats per departure',
+      groupCapacityHint:
+        'How many guests fit into a single departure. One number for the whole product: the seats left are counted separately for each date + start time pair.',
       mainImage: 'Main image — URL',
       title: 'Title',
       shortDescription: 'Short description',
@@ -250,6 +353,45 @@ export const tourFormCopy = defineCopy(
       discountValidUntil: 'Valid until',
       discountHint:
         'The discount applies from the start date through the end date inclusive. After the end date it stops applying on its own — there is nothing to switch off by hand.',
+    },
+
+    startTimes: {
+      title: 'Start time',
+      hint: 'The client picks one of these times when booking — they cannot enter their own.',
+      help: 'The times the product departs at. The client picks one of them and cannot change it. At least one time is required, and two identical times are not allowed. The list keeps itself in ascending order.',
+      empty: 'No times yet — add at least one.',
+      add: 'Add a time',
+      remove: 'Remove time',
+      label: (index: number) => `Time ${index}`,
+    },
+
+    transfer: {
+      routeTitle: 'Route',
+      routeHelp:
+        'Where the transfer goes from and to. Both points are required. Intermediate stops are optional — add them if the route passes through specific places; drag to reorder them.',
+      from: 'From',
+      to: 'To',
+      stopsTitle: 'Intermediate stops',
+      stopsHint: 'The order of the stops follows the route.',
+      stopsEmpty: 'No stops — the transfer goes directly.',
+      stopsAdd: 'Add a stop',
+      stopNoun: 'stop',
+      stopLabel: 'Stop',
+      pricesTitle: 'Prices by vehicle class',
+      pricesHelp:
+        'The transfer price depends on the vehicle class. “Round trip” is a price of its own, not double the one-way one: the return leg can be sold cheaper than two separate rides. At least one class with a price is required, and a class cannot be added twice.',
+      pricesEmpty: 'No priced classes yet — add at least one.',
+      pricesAdd: 'Add a class',
+      priceRemove: 'Remove row',
+      vehicleClass: 'Vehicle class',
+      vehicleClassPlaceholder: 'Pick a class…',
+      vehicleClassMeta: (capacity: number, luggage: number) =>
+        `${capacity} ${pluralizeEn(capacity, ['seat', 'seats'])} · luggage ${luggage}`,
+      vehicleClassFallback: (id: number) => `class #${id}`,
+      oneWayPrice: 'One way, ֏',
+      roundTripPrice: 'Round trip, ֏',
+      noVehicleClasses:
+        'No vehicle classes have been created yet. Add them under “Reference data → Vehicle classes” — without them a transfer cannot be priced.',
     },
 
     regions: {
@@ -376,11 +518,22 @@ export const tourFormCopy = defineCopy(
     },
 
     actions: {
-      draftNote: 'The draft is not saved automatically.',
+      draftNote: 'You have unsaved changes — the draft is not saved automatically.',
       invalidNote: 'Check the form: fill in the required fields (marked with *).',
-      cancel: 'Cancel',
-      save: 'Save',
-      saving: 'Saving…',
+    },
+
+    archive: {
+      button: 'Archive',
+      modalTitle: 'Move to the archive?',
+      lead: 'The item',
+      tail: 'will disappear from the site and move to the archive. Its data is kept — you can restore it from the archive in the product list.',
+      quoteOpen: '“',
+      quoteClose: '”',
+      unsavedNote: 'Any unsaved changes in the form will be lost.',
+      confirm: 'Archive',
+      pending: 'Archiving…',
+      errorServer: (status: number) => `Could not archive: the server returned an error (${status}).`,
+      errorNetwork: 'Could not archive: check your connection and try again.',
     },
 
     validation: {
@@ -394,6 +547,12 @@ export const tourFormCopy = defineCopy(
       discountNeedsStartDate: 'Enter the date the discount starts',
       discountNeedsValidUntil: 'Enter the date the discount is valid until',
       discountStartAfterEnd: 'The start date cannot be later than the end date',
+      positiveNumber: 'Enter a number greater than zero',
+      positiveSeats: 'Enter a whole number of seats greater than zero',
+      noStartTime: 'Add at least one start time',
+      duplicateStartTime: 'This time is already in the list',
+      noTransferPrice: 'Add at least one vehicle class with a price',
+      duplicateVehicleClass: 'This class is already in the list',
     },
 
     submitError: {

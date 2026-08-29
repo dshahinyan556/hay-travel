@@ -18,6 +18,9 @@ import {
   useScreenPermission,
 } from '@/shared/auth'
 import { getAllTours } from '@/features/admin/api/adminTours'
+import { getVehicleClasses } from '@/features/admin/api/adminCatalog'
+import { vehicleClassesToOptions } from '@/features/admin/lib/tourMapper'
+import type { VehicleClassOption } from '@/features/admin/lib/tourMapper'
 import {
   addOrderLine,
   addOrderPayment,
@@ -42,6 +45,7 @@ import {
   type OrderPaymentType,
 } from '@/shared/types/booking'
 import { LanguageCode } from '@/shared/types/language'
+import { OrderLineKind } from '@/features/admin/lib/enums'
 import type { TourInfoModel } from '@/shared/types/attours'
 import type { UserInfoModel } from '@/shared/auth'
 import { useCopy } from '@/shared/i18n/defineCopy'
@@ -56,7 +60,9 @@ import { AssignEmployeesModal } from './components/AssignEmployeesModal'
 import { OrderPaymentTab } from './components/OrderPaymentTab'
 import { OrderFulfillmentTab } from './components/OrderFulfillmentTab'
 import { OrderHistoryTab } from './components/OrderHistoryTab'
+import { OrderRequestDetails } from './components/OrderRequestDetails'
 import { OrderContextActions, type OrderContextActionKey } from './components/OrderContextActions'
+import { lineTitle } from './lib/ordersModel'
 
 /** Same permission gate as `ordersLoader`, plus a defensive id check mirroring
  * `userDetailLoader`/`tourEditLoader`. A missing/deleted id 404s from `getOrder` itself and is
@@ -68,7 +74,12 @@ import { OrderContextActions, type OrderContextActionKey } from './components/Or
  * Those two companions are gated by OTHER keys (`products.View` and `users.View`) and therefore
  * degrade to empty lists instead of 403-ing the whole order card: without tours the "add a line"
  * picker has no options, without employees the assignment picker has none, and both explain
- * themselves where they are used. */
+ * themselves where they are used.
+ *
+ * Справочник классов авто (батч 2026-08-29) — та же схема, третьим «мягким» спутником: он нужен
+ * ровно одному контролу «+ Добавить строку» (названия и вместимость классов трансфера), живёт за
+ * своим правом `catalog.vehicle-classes` и грузится ЗДЕСЬ, а не запросом из модалки — та остаётся
+ * презентационной, как и остальные модалки этого экрана. */
 export async function orderDetailLoader({ params }: LoaderFunctionArgs) {
   await ensurePermissionsReady()
   if (!canView(AdminScreen.Orders)) throw redirect('/admin')
@@ -80,29 +91,45 @@ export async function orderDetailLoader({ params }: LoaderFunctionArgs) {
     throw new Response(ordersCopy(getStoredLocale()).invalidOrderId, { status: 400 })
   }
 
-  const [order, tours, employees, events] = await Promise.all([
+  const [order, tours, employees, events, vehicleClasses] = await Promise.all([
     getOrder(id),
     canView(AdminScreen.Products) ? getAllTours() : Promise.resolve([]),
     canView(AdminScreen.Users) ? getEmployees() : Promise.resolve([]),
     getOrderEvents(id),
+    canView(AdminScreen.CatalogVehicleClasses)
+      ? getVehicleClasses().catch(() => [])
+      : Promise.resolve([]),
   ])
-  return { order, tours, employees, events }
+  return { order, tours, employees, events, vehicleClasses: vehicleClassesToOptions(vehicleClasses) }
 }
 
 export function OrderDetailPage() {
-  const { order, tours, employees, events } = useLoaderData<typeof orderDetailLoader>()
+  const { order, tours, employees, events, vehicleClasses } = useLoaderData<typeof orderDetailLoader>()
   // Keyed by id: navigating between two order URLs remounts with fresh tab/draft/pending state
   // instead of carrying the previous order's editing state over — same reasoning as `UserDetailPage`.
-  return <OrderDetailView key={order.id} order={order} tours={tours} employees={employees} events={events} />
+  return (
+    <OrderDetailView
+      key={order.id}
+      order={order}
+      tours={tours}
+      employees={employees}
+      events={events}
+      vehicleClasses={vehicleClasses}
+    />
+  )
 }
 
 type OrderDetailTabId = 'overview' | 'payment' | 'fulfillment' | 'history'
 
-/** Несохранённые правки одной СТРОКИ — теперь только предоплата: «детали для выполнения» переехали
- * на исполнителя (редизайн 2026-08-23). Keyed by line id. */
+/** Несохранённые правки одной СТРОКИ: предоплата («детали для выполнения» переехали на
+ * исполнителя, редизайн 2026-08-23) и — только у строки-заявки — согласованная менеджером цена
+ * (батч 2026-08-29). Keyed by line id. */
 interface LineDraftPatch {
   requiresPrepayment?: boolean
   prepaymentAmount?: number
+  /** Итог строки-заявки. У строки по продукту в черновик не попадает вовсе: сервер отбивает
+   * ручную сумму на ней 400-ым (`OrderNotEditable`), а не игнорирует молча. */
+  lineTotal?: number
 }
 
 /** Несохранённые правки одного ИСПОЛНИТЕЛЯ строки. Ключ — `OrderLineEmployeeInfoModel.id`
@@ -189,11 +216,13 @@ function OrderDetailView({
   tours,
   employees,
   events,
+  vehicleClasses,
 }: {
   order: OrderInfoModel
   tours: TourInfoModel[]
   employees: UserInfoModel[]
   events: OrderEventInfoModel[]
+  vehicleClasses: VehicleClassOption[]
 }) {
   const revalidator = useRevalidator()
   const navigate = useNavigate()
@@ -304,6 +333,12 @@ function OrderDetailView({
           id: lineId,
           requiresPrepayment: patch.requiresPrepayment ?? base.requiresPrepayment,
           prepaymentAmount: patch.prepaymentAmount ?? base.prepaymentAmount,
+          // `null` = «не трогать сумму». Отправляем число ТОЛЬКО со строки-заявки и только если
+          // его действительно правили: на строке по продукту любое непустое значение — 400.
+          lineTotal:
+            base.lineKind === OrderLineKind.CustomTransfer && patch.lineTotal !== undefined
+              ? patch.lineTotal
+              : null,
         }),
       )
     }
@@ -434,6 +469,10 @@ function OrderDetailView({
    * Add/Save/"...") заблокирован так же, как при frozen, но Approve/Reject НЕ прячутся
    * (в отличие от frozen, где их место занимает "Возобновить"). */
   const preDecision = effectiveOrder.status === OrderStatus.Open
+  /** Заказ-заявка (батч 2026-08-29). НАМЕРЕННО не попадает ни во `frozen`, ни в `preDecision`:
+   * заявку нужно править ДО решения — иначе одобрять было бы нечего, цены у неё нет. Флаг
+   * управляет только пояснением сверху; редактирование он не ограничивает. */
+  const isRequestOrder = effectiveOrder.status === OrderStatus.Request
   const blockedForDraft = pending || newDraftMode || frozen || preDecision
   const hasAssignedEmployee = order.lines.some((line) => line.employees.length > 0)
   /** "…" `AdminActionsMenu` groups (checklist §6) — Назначить/Отправить-клиенту/
@@ -542,6 +581,11 @@ function OrderDetailView({
           {copy.preDecisionBanner}
         </div>
       )}
+      {isRequestOrder && (
+        <div className="rounded-lg border border-neutral-300 bg-neutral-50 px-4 py-2.5 text-sm text-neutral-700">
+          {copy.requestBanner}
+        </div>
+      )}
 
       {error && (
         <div
@@ -607,21 +651,31 @@ function OrderDetailView({
       <Tabs tabs={tabs} activeId={tab} onChange={(id) => setTab(id as OrderDetailTabId)} label={copy.tabsLabel} />
 
       {tab === 'overview' && (
-        <OrderLinesGrid
-          order={effectiveOrder}
-          pending={blockedForDraft}
-          hints={hints}
-          onRequestAssign={(lineId) => setAssignTarget({ lineId })}
-          onRequestUnassign={(target) => setUnassignTarget(target)}
-          onToggleRequiresPrepayment={(line, requiresPrepayment) => patchLine(line.id, { requiresPrepayment })}
-          onSavePrepaymentAmount={(line, prepaymentAmount) => patchLine(line.id, { prepaymentAmount })}
-          onAddLine={() => setAddLineOpen(true)}
-          onRemoveLines={(lineIds) =>
-            run(copy.errorActions.removeLines, async () => {
-              for (const lineId of lineIds) await removeOrderLine(lineId)
-            })
-          }
-        />
+        <>
+          <OrderLinesGrid
+            order={effectiveOrder}
+            pending={blockedForDraft}
+            hints={hints}
+            onRequestAssign={(lineId) => setAssignTarget({ lineId })}
+            onRequestUnassign={(target) => setUnassignTarget(target)}
+            onToggleRequiresPrepayment={(line, requiresPrepayment) => patchLine(line.id, { requiresPrepayment })}
+            onSavePrepaymentAmount={(line, prepaymentAmount) => patchLine(line.id, { prepaymentAmount })}
+            onAddLine={() => setAddLineOpen(true)}
+            onRemoveLines={(lineIds) =>
+              run(copy.errorActions.removeLines, async () => {
+                for (const lineId of lineIds) await removeOrderLine(lineId)
+              })
+            }
+          />
+          {/* Рендерит `null`, если заявок в заказе нет — обычный заказ выглядит как раньше.
+              Цена заявки — `UpdateLine` (`Update`), тот же гейт, что у предоплаты в гриде. */}
+          <OrderRequestDetails
+            order={effectiveOrder}
+            pending={blockedForDraft}
+            updateHint={hints.update}
+            onChangeLineTotal={(line, lineTotal) => patchLine(line.id, { lineTotal })}
+          />
+        </>
       )}
       {tab === 'payment' && (
         <OrderPaymentTab
@@ -664,6 +718,7 @@ function OrderDetailView({
       <AddLineModal
         open={addLineOpen}
         tours={tours}
+        vehicleClasses={vehicleClasses}
         pending={pending}
         onClose={() => setAddLineOpen(false)}
         onSubmit={(draft: NewLineDraft) =>
@@ -676,7 +731,11 @@ function OrderDetailView({
       <AssignEmployeesModal
         open={assignTarget !== null}
         lineId={assignTarget?.lineId ?? null}
-        lineLabel={assignTargetLine === null ? null : `${assignTargetLine.tourTitle ?? copy.tourFallback(assignTargetLine.tourId)} · ${assignTargetLine.tourDate}`}
+        lineLabel={
+          assignTargetLine === null
+            ? null
+            : `${lineTitle(assignTargetLine, copy)} · ${assignTargetLine.tourDate}`
+        }
         employees={employees}
         alreadyAssignedIds={assignTargetLine?.employees.map((employee) => employee.employeeId) ?? []}
         pending={pending}

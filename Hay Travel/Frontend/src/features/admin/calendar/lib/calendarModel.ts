@@ -7,7 +7,7 @@
 
 import { formatISODate, getMonthGrid, isSameDay, stripTime } from '@/shared/lib/date'
 import type { Locale } from '@/shared/lib/locale'
-import { LanguageCode, TourTranslationType } from '@/features/admin/lib/enums'
+import { LanguageCode, TourTranslationType, TourType } from '@/features/admin/lib/enums'
 import type { TourInfoModel } from '@/shared/types/attours'
 import type { CalendarCopy } from './calendarCopy'
 import {
@@ -68,14 +68,49 @@ export function buildCalendarGrid(
   })
 }
 
-/** How closed a day is, for the cell's indicator. */
+/**
+ * How closed a day is, for the cell's indicator.
+ *
+ * `partial` covers BOTH narrower scopes a rule can have (решение 0.27): отдельные продукты
+ * (`closedTourIds`) и целые типы продукта (`closedTourTypes`). Различает их не уровень, а
+ * `closedScopesOf` ниже — уровень отвечает только за фон клетки.
+ */
 export type DayClosureLevel = 'open' | 'partial' | 'closed'
 
 export function closureLevelOf(day: CalendarDayModel | null): DayClosureLevel {
   if (day === null) return 'open'
   if (day.isClosedGlobally) return 'closed'
-  if (day.closedTourIds.length > 0) return 'partial'
+  if (day.closedTourIds.length > 0 || (day.closedTourTypes ?? []).length > 0) return 'partial'
   return 'open'
+}
+
+/** Что именно закрыто в этот день, когда день не закрыт целиком. Пустые списки у открытого дня. */
+export interface DayClosedScopes {
+  tourIds: number[]
+  /** `TourType` (1/2/3). `?? []` — месяц, отданный бэком до появления поля, не должен ронять
+   * клетку на `undefined.length`. */
+  tourTypes: number[]
+}
+
+export function closedScopesOf(day: CalendarDayModel | null): DayClosedScopes {
+  return {
+    tourIds: day?.closedTourIds ?? [],
+    tourTypes: day?.closedTourTypes ?? [],
+  }
+}
+
+/** Порядок типов в чипах и в подписях — тот же, что у enum'а, а не порядок прихода с сервера. */
+export const TOUR_TYPE_ORDER: TourType[] = [TourType.Tour, TourType.Excursion, TourType.Transfer]
+
+/** «Трансферы» — для чипа выбора. Неизвестный тип (бэк добавил четвёртый раньше фронта) даёт
+ * номер, а не пустую подпись. */
+export function tourTypePluralLabel(tourType: number, copy: CalendarCopy): string {
+  return copy.productTypePlural[tourType as TourType] ?? copy.productTypeFallback(tourType)
+}
+
+/** «Все трансферы» — для колонки «Область» и подписи клетки. */
+export function tourTypeScopeLabel(tourType: number, copy: CalendarCopy): string {
+  return copy.productTypeScope[tourType as TourType] ?? copy.productTypeFallback(tourType)
 }
 
 /**
@@ -141,17 +176,27 @@ export function flattenOrderLines(orders: OrderInfoModel[]): CalendarOrderLine[]
   return orders
     .filter((order) => order.status !== OrderStatus.Rejected)
     .flatMap((order) =>
-      order.lines.map((line) => ({
-        orderId: order.id,
-        orderNumber: order.number,
-        status: order.status,
-        userEmail: order.userEmail,
-        userFullName: order.userFullName,
-        createdAtUtc: order.createdAtUtc,
-        tourId: line.tourId,
-        tourDate: line.tourDate,
-        guestCount: line.guestCount,
-      })),
+      order.lines.flatMap((line) =>
+        // Строка без продукта (заявка кастомного трансфера, батч 2026-08-29) в этот экран не
+        // попадает: календарь и занятость строятся ВОКРУГ тура — и группировка дня, и правила
+        // закрытия адресуются `tourId`. Отдельная задача про закрытие трансферов решит, чем такая
+        // строка занимает день; до неё честнее её не показывать, чем показать без принадлежности.
+        line.tourId === null
+          ? []
+          : [
+              {
+                orderId: order.id,
+                orderNumber: order.number,
+                status: order.status,
+                userEmail: order.userEmail,
+                userFullName: order.userFullName,
+                createdAtUtc: order.createdAtUtc,
+                tourId: line.tourId,
+                tourDate: line.tourDate,
+                guestCount: line.guestCount,
+              },
+            ],
+      ),
     )
 }
 
@@ -166,7 +211,14 @@ export function compareClosureRules(
   tourTitle: (tourId: number) => string,
   locale: Locale,
 ): number {
-  if ((a.tourId === null) !== (b.tourId === null)) return a.tourId === null ? -1 : 1
+  // От самой широкой области к самой узкой: глобально → тип продукта → один продукт
+  // (решение 0.27 добавило среднюю ступень).
+  const rankOf = (rule: ClosureRuleInfoModel): number =>
+    rule.tourId !== null ? 2 : rule.tourType !== null ? 1 : 0
+  if (rankOf(a) !== rankOf(b)) return rankOf(a) - rankOf(b)
+  if (a.tourType !== null && b.tourType !== null && a.tourType !== b.tourType) {
+    return a.tourType - b.tourType
+  }
   if (a.tourId !== null && b.tourId !== null && a.tourId !== b.tourId) {
     return tourTitle(a.tourId).localeCompare(tourTitle(b.tourId), locale)
   }

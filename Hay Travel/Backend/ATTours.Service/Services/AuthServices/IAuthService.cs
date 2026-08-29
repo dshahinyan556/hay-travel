@@ -1,5 +1,6 @@
 using ATTours.Common.DTO.Auth;
 using ATTours.Common.DTO.Authorization;
+using ATTours.Common.Entities;
 
 namespace ATTours.BusinessServices.Services.AuthServices
 {
@@ -8,6 +9,11 @@ namespace ATTours.BusinessServices.Services.AuthServices
         // Существующий email не отличим по ответу от нового: возвращается то же
         // generic-сообщение, а неверифицированному аккаунту повторно уходит письмо.
         Task<MessageResultModel> RegisterAsync(RegisterModel model, RequestContextModel requestContext, CancellationToken cancellationToken = default);
+
+        // Повторная отправка письма подтверждения (2026-08-27) — раньше её заменяла только
+        // повторная отправка всей формы регистрации. Ответ всегда generic: несуществующий
+        // адрес, уже подтверждённый и попавший в 60-секундный кулдаун неотличимы.
+        Task<MessageResultModel> ResendVerificationEmailAsync(ResendVerificationModel model, RequestContextModel requestContext, CancellationToken cancellationToken = default);
 
         Task<MessageResultModel> VerifyEmailAsync(VerifyEmailModel model, CancellationToken cancellationToken = default);
 
@@ -45,6 +51,12 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
         // Всегда generic-ответ, независимо от того, существует ли аккаунт.
         Task<MessageResultModel> ForgotPasswordAsync(ForgotPasswordModel model, RequestContextModel requestContext, CancellationToken cancellationToken = default);
+
+        // Админ-инициированная отправка письма о сбросе пароля (2026-08-27): тот же выпуск
+        // токена и то же письмо, что в ForgotPasswordAsync, но без поиска по введённому
+        // адресу и без анти-энумерации — цель уже найдена и проверена вызывающим сервисом
+        // (UserAdminPasswordResetService: 404 на удалённого, SuperAdmin-guard).
+        Task<MessageResultModel> SendPasswordResetEmailAsync(User user, RequestContextModel requestContext, CancellationToken cancellationToken = default);
 
         Task<MessageResultModel> ResetPasswordAsync(ResetPasswordModel model, CancellationToken cancellationToken = default);
 

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { HelpButton } from './HelpButton'
+import { HelpRevealZone } from './HelpReveal'
 
 export interface FieldProps {
   /** Visible label text. Omit for a field that already carries its own label (e.g. Checkbox). */
@@ -41,9 +42,9 @@ export function Field({
   className = '',
 }: FieldProps) {
   return (
-    <div className={`flex flex-col gap-1.5 ${className}`}>
+    <HelpRevealZone enabled={Boolean(hint)} className={`flex flex-col gap-1.5 ${className}`}>
       {label && (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <label htmlFor={htmlFor} className="text-sm font-semibold text-neutral-700">
             {label}
             {required && (
@@ -69,6 +70,6 @@ export function Field({
           {warning}
         </p>
       ) : null}
-    </div>
+    </HelpRevealZone>
   )
 }

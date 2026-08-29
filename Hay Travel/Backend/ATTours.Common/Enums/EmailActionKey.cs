@@ -17,6 +17,11 @@ namespace ATTours.Common.Enums
         OrderUnassignEmployee = 3,
 
         // order.send_to_client — клиенту, документ заказа вложением.
-        OrderSendToClient = 4
+        OrderSendToClient = 4,
+
+        // order.auto_cancelled — админам о брони, которую фоновая задача отменила сама
+        // (не подтверждена до дедлайна). Событие операционное, но заказное: контекст у него
+        // тот же Order, поэтому оно живёт в этом же наборе, а не в отдельном диапазоне.
+        OrderAutoCancelled = 5
     }
 }

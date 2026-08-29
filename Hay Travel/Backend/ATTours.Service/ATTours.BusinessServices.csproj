@@ -9,6 +9,12 @@
   <ItemGroup>
     <PackageReference Include="AutoMapper" Version="16.1.1" />
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
+    <!-- Разбор cron-строк расписания фоновых задач (JobsValidationService). Это ровно та
+         библиотека, которой разбирает cron сам Hangfire, но внутри Hangfire.Core её типы
+         вкомпилированы как internal — переиспользовать их нельзя, поэтому пакет подключён
+         отдельно. Границу «Hangfire живёт только в ATTours.ClientAPI» это не нарушает:
+         Cronos ничего не планирует и не хранит, это парсер строки. -->
+    <PackageReference Include="Cronos" Version="0.11.0" />
     <!-- Санитизация HTML шаблонов писем (Задача E, §E.5). Пакет называется HtmlSanitizer,
          namespace с 8.x — Ganss.Xss. Де-факто стандарт для .NET, на базе AngleSharp.
          Allow-list задан один раз в EmailTemplateValidationService; чистим на сохранении. -->

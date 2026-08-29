@@ -1,4 +1,6 @@
-import { applyGroupTier, useMoney, type PriceTier } from '@/shared/currency'
+import { useMoney, type PriceTier } from '@/shared/currency'
+import { TourFormat, type EffectiveTourFormat } from '@/shared/types/tourFormat'
+import { applyFormatPricing } from './format'
 
 /**
  * Share of the total taken as a deposit. Booking policy, so it lives with the booking hook rather
@@ -41,21 +43,32 @@ export interface TierPriceView {
  * against is the caller's business: `BookingCard` passes the figure for the picked trip date
  * (`lib/tourDiscount.ts`), matching what the backend will snapshot on the order, and falls back to
  * the server's "today" figure (`Tour.discountedPrice`) while no date is picked.
+ *
+ * ── Формат брони (батч 2026-08-29) ────────────────────────────────────────────────────────────
+ * `format` выбирает ВЕТКУ тарифа, не меняя ничего в остальном хуке (`./format.ts`):
+ *  - `Individual` (значение по умолчанию — все прежние вызовы работают как работали) — тир
+ *    1-4 / 5-6 / 7+ по флэт-цене за всю бронь;
+ *  - `Group` — `basePriceAmd` это цена ЗА ЧЕЛОВЕКА, итог = цена × гости, тиров нет и `hidden`
+ *    недостижим.
+ * Соответственно `basePriceAmd`/`discountedBasePriceAmd` в групповой ветке — тоже за человека:
+ * подставить сюда `Tour.priceFrom` при `Group` значит показать цену другого тарифа
+ * (`resolveBasePrice` в `./format.ts` — то место, где выбор базы сделан один раз).
  */
 export function useTierPrice(
   basePriceAmd: number,
   guestCount: number,
   discountedBasePriceAmd?: number | null,
+  format: EffectiveTourFormat = TourFormat.Individual,
 ): TierPriceView {
   const money = useMoney()
   const hasDiscount = discountedBasePriceAmd != null && discountedBasePriceAmd < basePriceAmd
 
-  const tiered = applyGroupTier(hasDiscount ? discountedBasePriceAmd : basePriceAmd, guestCount)
+  const tiered = applyFormatPricing(format, hasDiscount ? discountedBasePriceAmd : basePriceAmd, guestCount)
   if (tiered.amountAmd === null) {
     return { tier: tiered.tier, hidden: true, total: null, prepayment: null, originalTotal: null }
   }
 
-  const originalTiered = hasDiscount ? applyGroupTier(basePriceAmd, guestCount) : null
+  const originalTiered = hasDiscount ? applyFormatPricing(format, basePriceAmd, guestCount) : null
 
   return {
     tier: tiered.tier,

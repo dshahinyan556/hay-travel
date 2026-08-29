@@ -18,6 +18,7 @@ export const dashboardCopy = defineCopy(
       total: 'Всего позиций',
       tours: 'Туров',
       excursions: 'Экскурсий',
+      transfers: 'Трансферов',
       missingEn: 'Без EN-перевода',
     },
 
@@ -38,6 +39,7 @@ export const dashboardCopy = defineCopy(
       total: 'Items total',
       tours: 'Tours',
       excursions: 'Excursions',
+      transfers: 'Transfers',
       missingEn: 'No EN translation',
     },
 

@@ -3,10 +3,10 @@
  * network.
  */
 
-import { LanguageCode, TourTranslationType } from '@/features/admin/lib/enums'
+import { LanguageCode, OrderLineKind, TourTranslationType } from '@/features/admin/lib/enums'
 import { LANGUAGE_CODE_BY_LOCALE, type Locale } from '@/shared/lib/locale'
 import type { TourInfoModel } from '@/shared/types/attours'
-import type { OrderInfoModel } from '@/shared/types/booking'
+import type { OrderInfoModel, OrderLineInfoModel } from '@/shared/types/booking'
 import type { OrdersCopy } from './ordersCopy'
 
 /** Same shape as `calendar/lib/calendarModel.ts`'s `tourTitleResolver` — kept as a small,
@@ -31,6 +31,32 @@ export function tourTitleResolver(
     if (title) titles.set(tour.id, title)
   }
   return (tourId: number) => titles.get(tourId) ?? copy.tourFallback(tourId)
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Line kind (батч «Трансферы + формат», 2026-08-29)                          */
+/* -------------------------------------------------------------------------- */
+
+/** Строка-заявка кастомного трансфера: продукта у неё нет вовсе. Читается по `lineKind`, а НЕ по
+ * `tourId === null` — отсутствие продукта это следствие типа строки, а не его определение. */
+export function isCustomTransferLine(line: OrderLineInfoModel): boolean {
+  return line.lineKind === OrderLineKind.CustomTransfer
+}
+
+/** Единственная точка, где решается, что печатать вместо названия продукта. У строки-заявки
+ * продукта нет (`tourId === null`), и старый `tourTitle ?? tourFallback(tourId)` выдал бы
+ * «Тур #null»; у обычной строки поведение прежнее — снапшот названия, иначе «Тур #id». */
+export function lineTitle(line: OrderLineInfoModel, copy: OrdersCopy): string {
+  const title = line.tourTitle?.trim()
+  if (title) return title
+  return line.tourId === null ? copy.customTransferLine : copy.tourFallback(line.tourId)
+}
+
+/** `TimeOnly` приезжает как `'HH:mm:ss'` — экрану нужны только часы и минуты. `null` (строка,
+ * созданная до появления слотов) и любое неожиданное значение дают `null`, а не пустой чип. */
+export function formatLineTime(value: string | null): string | null {
+  const match = /^(\d{2}):(\d{2})/.exec(value ?? '')
+  return match ? `${match[1]}:${match[2]}` : null
 }
 
 export interface OrderFiltersState {
@@ -90,7 +116,7 @@ export function matchesOrderFilters(order: OrderInfoModel, filters: OrderFilters
 export function orderHeadline(order: OrderInfoModel, copy: OrdersCopy): string {
   const first = order.lines[0]
   if (!first) return ''
-  const title = first.tourTitle ?? copy.tourFallback(first.tourId)
+  const title = lineTitle(first, copy)
   return order.lines.length > 1 ? `${title} +${order.lines.length - 1}` : title
 }
 

@@ -21,8 +21,11 @@ namespace ATTours.ClientAPI.Controllers
 {
     // Управление учётками. Гейтится ключом прав "users" пометодно (было
     // [Authorize(Roles="Admin")] на контроллере): [Authorize] здесь отвечает только за
-    // аутентификацию. Поверх матрицы остаётся SuperAdmin-guard внутри ChangeRole — он к
-    // правам экрана отношения не имеет (architecture-flexible-roles.md §0.5).
+    // аутентификацию. Поверх матрицы остаются SuperAdmin-guard'ы внутри сервисов — они к
+    // правам экрана отношения не имеют (architecture-flexible-roles.md §0.5). С 2026-08-27
+    // такой guard стоит на КАЖДОЙ операции записи по чужой строке User, поэтому все они
+    // получают User.GetUserId(): по правам экрана «Пользователи» админ может всё, кроме
+    // учётки SuperAdmin'а.
     //
     // IAuthService — единственное исключение из «сервисы через new»: impersonation отзывает
     // сессии и выпускает токены, а это домен AuthService, живущего на конструкторном DI
@@ -89,7 +92,7 @@ namespace ATTours.ClientAPI.Controllers
         public async Task<UserInfoModel> SetJobRoleAsync([FromBody] SetUserJobRoleModel model, CancellationToken cancellationToken)
         {
             using var updateService = new UserJobRoleUpdateService(cancellationToken);
-            var user = await updateService.UpdateJobRoleAsync(model.UserId, model.JobRole);
+            var user = await updateService.UpdateJobRoleAsync(model.UserId, model.JobRole, User.GetUserId());
             return mapper.Map<UserInfoModel>(user);
         }
 
@@ -103,7 +106,7 @@ namespace ATTours.ClientAPI.Controllers
             CancellationToken cancellationToken)
         {
             using var updateService = new UserPreferredLanguageUpdateService(cancellationToken);
-            var user = await updateService.UpdateLanguageAsync(model.UserId, model.PreferredLanguage);
+            var user = await updateService.UpdateLanguageAsync(model.UserId, model.PreferredLanguage, User.GetUserId());
             return mapper.Map<UserInfoModel>(user);
         }
 
@@ -118,15 +121,31 @@ namespace ATTours.ClientAPI.Controllers
         }
 
         // Ставит ForceToChangePass=true и возвращает обновлённого юзера (B5, 2026-08-06) —
-        // фронту не нужен второй GET.
+        // фронту не нужен второй GET. actingUserId (2026-08-27): операция по последствиям
+        // равна захвату учётки, поэтому защищена теми же guard'ами, что и удаление.
         [HttpPost]
         [Route("ForcePasswordReset")]
         [RequiresPermission(AdminScreens.Users, PermissionAction.Update)]
         public async Task<UserInfoModel> ForcePasswordResetAsync([FromQuery] int id, CancellationToken cancellationToken)
         {
             using var resetService = new UserForcePasswordResetService(cancellationToken);
-            var user = await resetService.ForceResetAsync(id);
+            var user = await resetService.ForceResetAsync(id, User.GetUserId());
             return mapper.Map<UserInfoModel>(user);
+        }
+
+        // Письмо со ссылкой на сброс пароля клиенту (2026-08-27). Не путать с
+        // ForcePasswordReset выше: тот только поднимает флаг, письмо не уходит.
+        // Ответ здесь обычный (не generic, как у ForgotPassword) — адресат админу известен,
+        // скрывать существование учётки не от кого.
+        [HttpPost]
+        [Route("SendPasswordResetEmail")]
+        [RequiresPermission(AdminScreens.Users, PermissionAction.Update)]
+        public async Task<MessageResultModel> SendPasswordResetEmailAsync([FromQuery] int id, CancellationToken cancellationToken)
+        {
+            // Кто действует — только из токена: значение из тела/query здесь обошло бы
+            // SuperAdmin-guard внутри сервиса.
+            using var resetService = new UserAdminPasswordResetService(authService, cancellationToken);
+            return await resetService.SendPasswordResetEmailAsync(id, User.GetUserId(), HttpContext.BuildRequestContext());
         }
 
         // Персональные права поверх роли (architecture-flexible-roles.md §3.6) — часть
@@ -151,7 +170,7 @@ namespace ATTours.ClientAPI.Controllers
         {
             // Целевой пользователь — всегда из маршрута, никогда из тела (IDOR).
             using var updateService = new UserPermissionOverrideUpdateService(cancellationToken);
-            return mapper.Map<List<ScreenOverrideModel>>(await updateService.SaveAsync(id, model));
+            return mapper.Map<List<ScreenOverrideModel>>(await updateService.SaveAsync(id, model, User.GetUserId()));
         }
 
         // «Войти как пользователь» (spec 014 §3, ADR 028/030). Гейтится не матрицей, а

@@ -130,6 +130,11 @@ export function Footer() {
               </Link>
             </li>
             <li>
+              <Link to="/transfers" className="link-underline text-ink-dim hover:text-gold-ink">
+                {t('nav.transfers')}
+              </Link>
+            </li>
+            <li>
               <Link to="/regions" className="link-underline text-ink-dim hover:text-gold-ink">
                 {t('nav.regions')}
               </Link>

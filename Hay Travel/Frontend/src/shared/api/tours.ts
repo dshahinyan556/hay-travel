@@ -15,6 +15,8 @@
 import { apiFetch, ApiError } from '@/shared/lib/http'
 import { REGION_BY_SLUG, type RegionSlug } from '@/shared/data/armeniaRegions'
 import { getStoredLocale, LANGUAGE_CODE_BY_LOCALE } from '@/shared/lib/locale'
+import { getTransfers } from './transfers'
+import { transferPointOf, type TransferSummary } from '@/shared/types/transfer'
 import { translate } from '@/shared/i18n/translate'
 import type {
   AdditionalExpenseInfoModel,
@@ -24,6 +26,7 @@ import type {
   TourInfoModel,
   TourNoteInfoModel,
   TourRegionInfoModel,
+  TourStartTimeInfoModel,
   TourTagInfoModel,
   TranslatableInfoModel,
 } from '@/shared/types/attours'
@@ -33,8 +36,11 @@ import type {
   TourDetail,
   TourDiscountWindow,
   TourKind,
+  TourStartTime,
   TourTag,
 } from '@/shared/types/tour'
+import { TourFormat } from '@/shared/types/tourFormat'
+import { toDisplayTime } from '@/shared/booking'
 
 function currentLanguageCode(): number {
   return LANGUAGE_CODE_BY_LOCALE[getStoredLocale()]
@@ -48,6 +54,26 @@ const TRANSLATION_DESCRIPTION = 3
 
 /** `TourType` on the backend. */
 const TOUR_TYPE_EXCURSION = 2
+const TOUR_TYPE_TRANSFER = 3
+
+/** `TourFormat` пришедшее с провода — число, и оно может быть любым: `null` у продукта,
+ * созданного до батча 2026-08-29, и значение вне enum'а у клиента, отставшего от бэка. И то,
+ * и другое читается как «формата нет» → индивидуальный (`resolveEffectiveFormat`), а не как
+ * повод показать бейдж с пустой подписью. */
+function toFormat(raw: number | null | undefined): TourFormat | null {
+  return raw === TourFormat.Individual || raw === TourFormat.Group || raw === TourFormat.Both
+    ? raw
+    : null
+}
+
+/** Времена старта в порядке, который задал админ (бэк уже отдаёт их по `sortOrder`). Строки,
+ * которые не разбираются как `HH:mm`, выбрасываются: пустая «кнопка времени» хуже, чем на одну
+ * кнопку меньше, а полностью пустой список блок брони обрабатывает отдельной веткой. */
+function mapStartTimes(startTimes: readonly TourStartTimeInfoModel[] | undefined): TourStartTime[] {
+  return (startTimes ?? [])
+    .map((startTime) => ({ id: startTime.id, time: toDisplayTime(startTime.time) }))
+    .filter((startTime) => startTime.time !== '')
+}
 
 /** `TourNoteType` on the backend. */
 const NOTE_TYPE_ORGANIZATIONAL_DETAIL = 1
@@ -67,11 +93,13 @@ function pickTranslation(translations: readonly TranslatableInfoModel[], type: n
 }
 
 function toKind(type: number): TourKind {
-  return type === TOUR_TYPE_EXCURSION ? 'excursion' : 'tour'
+  if (type === TOUR_TYPE_EXCURSION) return 'excursion'
+  if (type === TOUR_TYPE_TRANSFER) return 'transfer'
+  return 'tour'
 }
 
 function nightsFor(kind: TourKind, durationDays: number): number {
-  return kind === 'excursion' ? 0 : Math.max(durationDays - 1, 0)
+  return kind === 'tour' ? Math.max(durationDays - 1, 0) : 0
 }
 
 /** A hand-authored slug from `TourRegionInfoModel` is trusted data (3.2 confirmed 11/11 against
@@ -139,6 +167,9 @@ function mapCard(card: TourCardModel, tagCatalog: readonly TagInfoModel[]): Tour
     coverImage: card.mainImageUrl || FALLBACK_IMAGE,
     shortDescription: pickTranslation(card.translations, TRANSLATION_SHORT_DESCRIPTION),
     tags: mapTags(card.tags, tagCatalog),
+    format: toFormat(card.format),
+    transferRoute: null,
+    groupPricePerPerson: card.groupPricePerPerson,
   }
 }
 
@@ -217,6 +248,13 @@ function mapDetail(info: TourInfoModel, tagCatalog: readonly TagInfoModel[]): To
     coverImage,
     shortDescription: pickTranslation(info.translations, TRANSLATION_SHORT_DESCRIPTION),
     tags: mapTags(info.tags ?? [], tagCatalog),
+    format: toFormat(info.format),
+    // Детальная трансфера — своя страница и своя модель (`shared/types/transfer.ts`); сюда
+    // трансфер не доезжает вовсе: `GetTourInfo` отвечает на него 404.
+    transferRoute: null,
+    groupPricePerPerson: info.groupPricePerPerson ?? null,
+    groupCapacity: info.groupCapacity ?? null,
+    startTimes: mapStartTimes(info.startTimes),
     requiresPrepayment: info.requiresPrepayment,
     gallery: gallery.length > 0 ? gallery : [coverImage],
     itinerary,
@@ -236,15 +274,45 @@ export async function getTours(): Promise<readonly Tour[]> {
   return cards.map((card) => mapCard(card, tagCatalog))
 }
 
-/** Home page showcase — tours the admin marked `IsFeatured` (at most 6, `Продукты → Избранные`),
- * in their admin-set display order. Shows exactly however many are marked, including none: no
- * "first N tours" filler when the admin hasn't picked any yet (David, 2026-08-02). */
+/**
+ * Home page showcase — products the admin marked `IsFeatured` (at most 9 since 2026-08-29,
+ * `Продукты → Избранные`), in their admin-set display order. Shows exactly however many are
+ * marked, including none: no "first N tours" filler when the admin hasn't picked any yet
+ * (David, 2026-08-02).
+ *
+ * ── Трансферы в избранном (решение 0.4, пункт 6.8) ────────────────────────────────────────────
+ * `GetFeaturedToursClient` фильтра по типу НЕ имеет, поэтому сюда приходят и трансферы. Но
+ * `TourCardModel` описывает тур: у трансфера в нём нет ни маршрута, ни цены (`TotalPrice` — это
+ * сумма цен ДНЕЙ, а у трансфера дней нет, цена живёт на классах авто). Карточка с «от 0 ֏» и
+ * пустой строкой регионов — это не «трансфер отображается», это витрина с браком.
+ *
+ * Поэтому недостающее добирается из публичного списка трансферов — того самого, что уже
+ * обслуживает `/transfers`. Запрос делается ТОЛЬКО если в избранном реально есть трансфер, и
+ * его сбой не роняет секцию: карточка тогда просто останется без цены и маршрута.
+ */
 export async function getFeaturedTours(): Promise<readonly Tour[]> {
   const [cards, tagCatalog] = await Promise.all([
     apiFetch<TourCardModel[]>(`api/Tour/GetFeaturedToursClient?languageCode=${currentLanguageCode()}`),
     getTagCatalog(),
   ])
-  return cards.map((card) => mapCard(card, tagCatalog))
+
+  const mapped = cards.map((card) => mapCard(card, tagCatalog))
+  if (!mapped.some((product) => product.kind === 'transfer')) return mapped
+
+  const transfers = await getTransfers().catch(() => [] as readonly TransferSummary[])
+  if (transfers.length === 0) return mapped
+
+  const byId = new Map(transfers.map((transfer) => [transfer.id, transfer]))
+  return mapped.map((product) => {
+    const transfer = product.kind === 'transfer' ? byId.get(product.id) : undefined
+    if (!transfer) return product
+    return {
+      ...product,
+      priceFrom: transfer.priceFrom ?? product.priceFrom,
+      transferRoute: [transferPointOf(transfer.route, 'from'), transferPointOf(transfer.route, 'to')]
+        .filter((point) => point !== ''),
+    }
+  })
 }
 
 /** `undefined` for a 404 (hidden or nonexistent id) — same contract the mock had, so

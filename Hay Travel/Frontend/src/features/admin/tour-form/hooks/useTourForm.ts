@@ -21,7 +21,7 @@ import { createTour, setTourActive, updateTour } from '@/features/admin/api/admi
 import { formToCreateModel, formToUpdateModel } from '@/features/admin/lib/tourMapper'
 import type { DaySourceContent } from '@/features/admin/lib/tourMapper'
 import { ApiError } from '@/shared/lib/http'
-import type { TourType } from '@/features/admin/lib/enums'
+import type { TourFormat, TourType } from '@/features/admin/lib/enums'
 import type { Localized, TourFormState } from '@/features/admin/types/form'
 import {
   normalizeInitialState,
@@ -31,6 +31,8 @@ import type {
   DayLocalizedField,
   LangKey,
   TourLocalizedField,
+  TransferEndpoint,
+  TransferPriceField,
 } from '@/features/admin/tour-form/reducer/tourFormReducer'
 import { validateTourForm } from '@/features/admin/tour-form/lib/validation'
 import type { TourFormValidation } from '@/features/admin/tour-form/lib/validation'
@@ -46,6 +48,9 @@ import type { TourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
  */
 export interface TourFormActions {
   setType: (value: TourType) => void
+  setFormat: (value: TourFormat) => void
+  setGroupPricePerPerson: (value: string) => void
+  setGroupCapacity: (value: string) => void
   setMainImageUrl: (value: string) => void
   setIsActive: (value: boolean) => void
   setRequiresPrepayment: (value: boolean) => void
@@ -110,6 +115,23 @@ export interface TourFormActions {
   toggleRegion: (regionId: number) => void
   // tags
   toggleTag: (tagId: number) => void
+  // start times (tour/excursion). `sortStartTimes` is called on blur, not on every keystroke —
+  // see the reducer's `setStartTime` case for why.
+  addStartTime: () => void
+  removeStartTime: (key: string) => void
+  setStartTime: (key: string, value: string) => void
+  sortStartTimes: () => void
+  // transfer route
+  setTransferEndpointText: (endpoint: TransferEndpoint, lang: LangKey, value: string) => void
+  addTransferStop: () => void
+  removeTransferStop: (key: string) => void
+  moveTransferStop: (fromIndex: number, toIndex: number) => void
+  setTransferStopText: (key: string, lang: LangKey, value: string) => void
+  // transfer prices
+  addTransferPrice: () => void
+  removeTransferPrice: (key: string) => void
+  setTransferPriceClass: (key: string, vehicleClassId: number | null) => void
+  setTransferPriceAmount: (key: string, field: TransferPriceField, value: string) => void
 }
 
 export interface UseTourFormResult {
@@ -162,6 +184,10 @@ export function useTourForm(
   const actions = useMemo<TourFormActions>(
     () => ({
       setType: (value) => dispatch({ kind: 'setType', value }),
+      setFormat: (value) => dispatch({ kind: 'setFormat', value }),
+      setGroupPricePerPerson: (value) =>
+        dispatch({ kind: 'setField', field: 'groupPricePerPerson', value }),
+      setGroupCapacity: (value) => dispatch({ kind: 'setField', field: 'groupCapacity', value }),
       setMainImageUrl: (value) => dispatch({ kind: 'setField', field: 'mainImageUrl', value }),
       setIsActive: (value) => dispatch({ kind: 'setField', field: 'isActive', value }),
       setRequiresPrepayment: (value) =>
@@ -227,6 +253,27 @@ export function useTourForm(
 
       toggleRegion: (regionId) => dispatch({ kind: 'toggleRegion', regionId }),
       toggleTag: (tagId) => dispatch({ kind: 'toggleTag', tagId }),
+
+      addStartTime: () => dispatch({ kind: 'addStartTime' }),
+      removeStartTime: (key) => dispatch({ kind: 'removeStartTime', key }),
+      setStartTime: (key, value) => dispatch({ kind: 'setStartTime', key, value }),
+      sortStartTimes: () => dispatch({ kind: 'sortStartTimes' }),
+
+      setTransferEndpointText: (endpoint, lang, value) =>
+        dispatch({ kind: 'setTransferEndpointText', endpoint, lang, value }),
+      addTransferStop: () => dispatch({ kind: 'addTransferStop' }),
+      removeTransferStop: (key) => dispatch({ kind: 'removeTransferStop', key }),
+      moveTransferStop: (fromIndex, toIndex) =>
+        dispatch({ kind: 'moveTransferStop', fromIndex, toIndex }),
+      setTransferStopText: (key, lang, value) =>
+        dispatch({ kind: 'setTransferStopText', key, lang, value }),
+
+      addTransferPrice: () => dispatch({ kind: 'addTransferPrice' }),
+      removeTransferPrice: (key) => dispatch({ kind: 'removeTransferPrice', key }),
+      setTransferPriceClass: (key, vehicleClassId) =>
+        dispatch({ kind: 'setTransferPriceClass', key, vehicleClassId }),
+      setTransferPriceAmount: (key, field, value) =>
+        dispatch({ kind: 'setTransferPriceAmount', key, field, value }),
     }),
     [],
   )
@@ -254,6 +301,9 @@ export function useTourForm(
             dayTitleErrors: {},
             dayPriceErrors: {},
             dayRoutePointErrors: {},
+            startTimeErrors: {},
+            transferStopErrors: {},
+            transferPriceErrors: {},
           },
     [rawValidation, hasAttemptedSubmit],
   )

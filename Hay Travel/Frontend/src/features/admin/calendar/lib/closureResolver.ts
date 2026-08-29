@@ -19,6 +19,7 @@ import {
   ClosureAction,
   ClosureRuleType,
   type ClosureRuleInfoModel,
+  type ClosureRuleScope,
   type DayOfWeekCode,
 } from '@/shared/types/booking'
 
@@ -30,22 +31,49 @@ export function dayOfWeekCodeOf(dateISO: string): DayOfWeekCode {
   return ((date?.getDay() ?? 0) as DayOfWeekCode)
 }
 
-/** Specificity tiers, highest first: `Tour+SpecificDate` > `Global+SpecificDate` > `Tour+Weekly`
- * > `Global+Weekly` (ADR 012). */
+export function isSameScope(a: ClosureRuleScope, b: ClosureRuleScope): boolean {
+  return a.tourId === b.tourId && a.tourType === b.tourType
+}
+
+/**
+ * КОГО спрашиваем — не то же самое, что область правила.
+ *
+ * В ПРАВИЛЕ `tourId` и `tourType` взаимоисключимы (сервер отбивает оба сразу). В ВОПРОСЕ они
+ * сочетаются: спрашивая «закрыт ли продукт X», сервер знает и его id, и его тип и применяет к
+ * нему правила обеих областей (`ClosureRuleResolver.IsClosed(rules, date, tourId, tourType)`).
+ * Не передать тип здесь значит разойтись с сервером ровно на закрытия по типу.
+ */
+export type ClosureSubject = ClosureRuleScope
+
+/**
+ * Specificity tiers, highest first — six of them since the product-type scope was added
+ * (решение 0.27), sitting between "one tour" and "global" exactly as
+ * `ClosureRuleResolver.GetSpecificityRank` orders them:
+ *
+ *   Tour+SpecificDate 6 > Type+SpecificDate 5 > Global+SpecificDate 4
+ * > Tour+Weekly 3       > Type+Weekly 2       > Global+Weekly 1
+ *
+ * `tourId` and `tourType` are mutually exclusive server-side (validation), so this walks from the
+ * narrowest scope outwards and never has to consider both being set.
+ */
 function precedenceOf(rule: ClosureRuleInfoModel): number {
-  const scoped = rule.tourId !== null
-  if (rule.type === ClosureRuleType.SpecificDate) return scoped ? 4 : 3
-  return scoped ? 2 : 1
+  const isSpecificDate = rule.type === ClosureRuleType.SpecificDate
+  if (rule.tourId !== null) return isSpecificDate ? 6 : 3
+  if (rule.tourType !== null) return isSpecificDate ? 5 : 2
+  return isSpecificDate ? 4 : 1
 }
 
 function isApplicable(
   rule: ClosureRuleInfoModel,
   dateISO: string,
-  tourId: number | null,
+  subject: ClosureSubject,
   weekday: DayOfWeekCode,
 ): boolean {
-  // Scope: a global rule applies to everything; a tour rule only to its own tour.
-  if (rule.tourId !== null && rule.tourId !== tourId) return false
+  // Область: глобальное правило применимо всегда; правило тура — только к этому туру; правило
+  // типа продукта — только к продукту этого типа. Запрос без тура и без типа (глобальный срез
+  // календаря) видит одни глобальные правила.
+  if (rule.tourId !== null && rule.tourId !== subject.tourId) return false
+  if (rule.tourType !== null && rule.tourType !== subject.tourType) return false
 
   if (rule.type === ClosureRuleType.SpecificDate) return rule.date === dateISO
 
@@ -58,7 +86,7 @@ function isApplicable(
 }
 
 /**
- * Is this day closed for `tourId` (or globally, when `tourId` is `null`)?
+ * Is this day closed for `subject` (a product, a whole product type, or the day as a whole)?
  *
  * Among the applicable rules the most specific one wins; ties are broken by the higher `id`, i.e.
  * the most recently created rule. No applicable rule at all → open.
@@ -66,14 +94,14 @@ function isApplicable(
 export function resolveClosure(
   rules: readonly ClosureRuleInfoModel[],
   dateISO: string,
-  tourId: number | null,
+  subject: ClosureSubject,
 ): boolean {
   const weekday = dayOfWeekCodeOf(dateISO)
 
   let winner: ClosureRuleInfoModel | null = null
   let winnerRank = 0
   for (const rule of rules) {
-    if (!isApplicable(rule, dateISO, tourId, weekday)) continue
+    if (!isApplicable(rule, dateISO, subject, weekday)) continue
     const rank = precedenceOf(rule)
     if (winner === null || rank > winnerRank || (rank === winnerRank && rule.id > winner.id)) {
       winner = rule

@@ -1,7 +1,9 @@
 using ArmeniaTours.DataLayer;
+using ATTours.BusinessServices.Services.Shared;
 using ATTours.BusinessServices.Services.ValidationServices;
 using ATTours.Common.Entities;
 using ATTours.Common.Enums;
+using ATTours.Common.Extensions;
 using ATTours.Common.Settings;
 using ATTours.ContextRepository;
 using ATTours.Exceptions;
@@ -57,7 +59,7 @@ namespace ATTours.BusinessServices.Services.UpdateServices
 
             // Пересчёт от того же снапшота цены: правка гостей не должна переоценивать тур
             // по текущей цене (снапшот фиксируется один раз, на создании — ADR 019).
-            line.LineTotal = ResolveTotalAmount(line.PriceSnapshot, line.DiscountPercent, line.GuestCount);
+            line.LineTotal = ResolveTotalAmount(line);
 
             await EntityRepository.SaveChangesAsync(cancellationToken);
 
@@ -70,21 +72,34 @@ namespace ATTours.BusinessServices.Services.UpdateServices
             };
         }
 
-        private const int TierBaseMaxGuests = 4;
-        private const int TierSurchargeMaxGuests = 6;
-        private const decimal TierSurchargeMultiplier = 1.2m;
-
-        private static decimal ResolveTotalAmount(decimal priceSnapshot, decimal? discountPercent, int guestCount)
+        // Пересчёт итога строки после правки даты/гостей. Формула — общая
+        // (OrderLinePricing), собственной копии тарифных ступеней у этого сервиса больше нет
+        // (батч «Трансферы + формат», 2026-08-29): с групповым форматом и трансфером
+        // разошедшиеся копии дали бы клиенту одну цену при бронировании и другую после
+        // правки той же брони.
+        //
+        // Скидка НЕ перерезолвится: и процент, и базовая цена — снапшоты момента брони
+        // (ADR 019). Меняется только то, что зависит от числа гостей.
+        private static decimal ResolveTotalAmount(OrderLine line)
         {
-            var discounted = discountPercent is null or <= 0
-                ? priceSnapshot
-                : Math.Round(priceSnapshot * (1 - discountPercent.Value / 100m), 0, MidpointRounding.AwayFromZero);
+            // Кастомная заявка: цену проставил менеджер вручную, пересчитывать её не по чему
+            // (базовой цены продукта у заявки нет). Сюда доехать нельзя — заказ-заявка не в
+            // статусе Open/PendingPayment — но правило важнее, чем текущая недостижимость.
+            if (line.LineKind == OrderLineKind.CustomTransfer)
+                return line.LineTotal;
 
-            if (guestCount <= TierBaseMaxGuests)
-                return discounted;
-            if (guestCount <= TierSurchargeMaxGuests)
-                return discounted * TierSurchargeMultiplier;
-            return 0m;
+            // Трансфер: цена — это цена класса авто за машину. Ни гости, ни дата на неё не
+            // влияют, значит и пересчитывать нечего.
+            if (line.VehicleClassId is not null)
+                return line.LineTotal;
+
+            var discounted = TourDiscountExtensions.ApplyDiscount(line.PriceSnapshot, line.DiscountPercent)
+                             ?? line.PriceSnapshot;
+
+            // Формат берётся со строки-снапшота, а не из текущего состояния продукта: смена
+            // формата в карточке тура не должна переоценивать уже оформленные брони. null —
+            // строка, созданная до появления формата, то есть индивидуальная.
+            return OrderLinePricing.ResolveLineTotal(line.Format ?? TourFormat.Individual, discounted, line.GuestCount);
         }
     }
 

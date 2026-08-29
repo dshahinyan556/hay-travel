@@ -25,6 +25,10 @@ interface TourDayCardProps {
   /** Missing-route-point error for this day, if any. */
   routePointError?: string
   actions: TourFormActions
+  /** `false` при формате «Групповой» — прячет и поле цены в теле, и её чип в свёрнутой шапке
+   * (решение 0.26; подробности — в доккомментарии `TourDayFields`).
+   * @default true */
+  showPrice?: boolean
   /** Existing route-point catalog entries offered as autocomplete. */
   routePointSuggestions: Localized[]
   /** Place catalog entries a route point can be hard-linked to (F13 gap closure). */
@@ -51,6 +55,7 @@ export function TourDayCard({
   priceError,
   routePointError,
   actions,
+  showPrice = true,
   routePointSuggestions,
   placeOptions,
   daySources,
@@ -103,7 +108,8 @@ export function TourDayCard({
           <span className="truncate text-sm font-bold text-neutral-900">{summaryTitle}</span>
           {!open && (
             <span className="truncate text-xs text-neutral-500">
-              · {copy.images(day.gallery.length)} · {formatDayPrice(day.price, locale)}
+              · {copy.images(day.gallery.length)}
+              {showPrice && <> · {formatDayPrice(day.price, locale)}</>}
             </span>
           )}
           {hasError && (
@@ -135,6 +141,7 @@ export function TourDayCard({
             priceError={priceError}
             routePointError={routePointError}
             actions={actions}
+            showPrice={showPrice}
             routePointSuggestions={routePointSuggestions}
             placeOptions={placeOptions}
             daySources={daySources}

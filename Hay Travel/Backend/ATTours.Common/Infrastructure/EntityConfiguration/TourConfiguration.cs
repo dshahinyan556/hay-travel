@@ -28,6 +28,10 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
             builder.Property(a => a.TotalPrice)
                 .HasPrecision(18, 2);
 
+            // Цена за человека группового формата (2026-08-29) — та же точность, что у TotalPrice.
+            builder.Property(a => a.GroupPricePerPerson)
+                .HasPrecision(18, 2);
+
             // Тот же precision, что был у Tag.DiscountPercent (decimal(5,2), 0.00-100.00).
             builder.Property(a => a.DiscountPercent)
                 .HasPrecision(5, 2);

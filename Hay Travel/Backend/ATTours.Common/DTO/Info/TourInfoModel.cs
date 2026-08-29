@@ -8,6 +8,14 @@ namespace ATTours.Common.DTO.Info
     {
         public int Id { get; set; }
         public TourType Type { get; set; }
+        // Формат проведения (батч 2026-08-29): обязателен у тура/экскурсии, ВСЕГДА null
+        // у трансфера (TourValidationService). Копируется в существующий тур вручную —
+        // TourUpdateService переносит скаляры поимённо.
+        public TourFormat? Format { get; set; }
+        // Групповой формат: цена за человека и мест на выезд. Обе обязательны при
+        // Format == Group/Both и всегда null при Individual и у трансфера.
+        public decimal? GroupPricePerPerson { get; set; }
+        public int? GroupCapacity { get; set; }
         public bool IsActive { get; set; }
         public bool IsArchived { get; set; }
         // Управляется отдельным SetFeatured (как IsActive/IsArchived) — UpdateTour их игнорирует.
@@ -39,5 +47,14 @@ namespace ATTours.Common.DTO.Info
         // Тот же null/[] контракт, что у Regions: null — не трогать теги тура, [] — очистить
         // все. Максимум 3 тега, максимум 1 Discount — TourValidationService.
         public List<TourTagInfoModel> Tags { get; set; }
+        // Предопределённые времена начала (батч 2026-08-29): минимум одно у тура/экскурсии,
+        // ни одного у трансфера. Реконсилятся по Id, как остальные коллекции графа тура
+        // (null трактуется как пустой список — «очистить», а не «не трогать»: исключение
+        // null/[] есть только у Regions/Tags).
+        public List<TourStartTimeInfoModel> StartTimes { get; set; }
+        // Только для TourType.Transfer: маршрут «откуда / стопы / куда» и цены по классам авто.
+        // У тура и экскурсии обе коллекции обязаны быть пустыми.
+        public List<TransferRoutePointInfoModel> TransferRoutePoints { get; set; }
+        public List<TransferPriceInfoModel> TransferPrices { get; set; }
     }
 }

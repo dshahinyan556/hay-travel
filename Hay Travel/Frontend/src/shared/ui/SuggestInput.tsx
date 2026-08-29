@@ -11,6 +11,9 @@ export interface SuggestInputProps extends Omit<InputProps, 'value' | 'onChange'
   onPick: (label: string) => void
   /** Candidate labels — e.g. existing catalog entry names. Free typing is always still allowed. */
   suggestions: string[]
+  /** Text shown instead of the panel when nothing matches the typed value. Optional: без него
+   * панель просто не открывается (историческое поведение админских вызовов). */
+  noResultsText?: string
 }
 
 /**
@@ -29,8 +32,13 @@ export function SuggestInput({
   onChange,
   onPick,
   suggestions,
+  noResultsText,
   ...inputProps
 }: SuggestInputProps) {
+  /* `surface` управляет и полем, и панелью подсказок: список, покрашенный под админку под
+     публичным полем, — ровно тот разъезд, ради которого проп и заводился. Значение по
+     умолчанию совпадает с `Input`, поэтому админские вызовы не меняются. */
+  const surface = inputProps.surface ?? 'admin'
   const [open, setOpen] = useState(false)
   const [highlighted, setHighlighted] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -40,6 +48,7 @@ export function SuggestInput({
   const matches = (
     query === '' ? suggestions : suggestions.filter((s) => s.toLowerCase().includes(query))
   ).slice(0, 20)
+  const showEmpty = open && matches.length === 0 && noResultsText !== undefined
   const showList = open && matches.length > 0
   const activeIndex = Math.min(highlighted, matches.length - 1)
 
@@ -85,29 +94,57 @@ export function SuggestInput({
         autoComplete="off"
         {...inputProps}
       />
-      <Popover open={showList} onClose={() => setOpen(false)} anchorRef={inputRef} matchAnchorWidth>
-        <ul
-          id={listboxId}
-          role="listbox"
-          className="max-h-56 overflow-auto rounded-lg border border-neutral-200 bg-white py-1 shadow-lg"
-        >
-          {matches.map((label, index) => (
-            <li
-              key={label}
-              id={`${listboxId}-${index}`}
-              role="option"
-              aria-selected={index === activeIndex}
-              onMouseDown={(event) => event.preventDefault()}
-              onMouseEnter={() => setHighlighted(index)}
-              onClick={() => pick(label)}
-              className={`block cursor-pointer truncate px-3 py-2 text-left text-sm transition-colors ${
-                index === activeIndex ? 'bg-neutral-100 text-neutral-900' : 'text-neutral-900'
-              }`}
-            >
-              {label}
-            </li>
-          ))}
-        </ul>
+      <Popover
+        open={showList || showEmpty}
+        onClose={() => setOpen(false)}
+        anchorRef={inputRef}
+        matchAnchorWidth
+      >
+        {showEmpty ? (
+          <p
+            role="status"
+            className={
+              surface === 'admin'
+                ? 'rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm text-neutral-400 shadow-lg'
+                : 'rounded-lg border border-edge-strong bg-panel-raised px-3 py-2.5 text-sm text-ink-muted shadow-lg'
+            }
+          >
+            {noResultsText}
+          </p>
+        ) : (
+          <ul
+            id={listboxId}
+            role="listbox"
+            className={`max-h-56 overflow-auto rounded-lg border py-1 shadow-lg ${
+              surface === 'admin'
+                ? 'border-neutral-200 bg-white'
+                : 'border-edge-strong bg-panel-raised'
+            }`}
+          >
+            {matches.map((label, index) => (
+              <li
+                key={label}
+                id={`${listboxId}-${index}`}
+                role="option"
+                aria-selected={index === activeIndex}
+                onMouseDown={(event) => event.preventDefault()}
+                onMouseEnter={() => setHighlighted(index)}
+                onClick={() => pick(label)}
+                className={`block min-h-11 cursor-pointer truncate px-3 py-2.5 text-left text-sm transition-colors ${
+                  surface === 'admin'
+                    ? index === activeIndex
+                      ? 'bg-neutral-100 text-neutral-900'
+                      : 'text-neutral-900'
+                    : index === activeIndex
+                      ? 'bg-accent-soft text-ink'
+                      : 'text-ink'
+                }`}
+              >
+                {label}
+              </li>
+            ))}
+          </ul>
+        )}
       </Popover>
     </div>
   )

@@ -37,6 +37,8 @@ services:
       # Origin, с которого почтовый клиент заберёт /uploads/... — тот же публичный домен,
       # nginx отдаёт этот путь с диска мимо .NET. Новых значений в .env не появляется.
       Email__PublicMediaBaseUrl: ${PUBLIC_BASE_URL}
+      Telegram__BotToken: ${TELEGRAM_BOT_TOKEN}
+      Telegram__WebhookSecret: ${TELEGRAM_WEBHOOK_SECRET}
       Upload__StoragePath: /app/uploads
     volumes:
       # Бинд-маунт, не named volume: nginx на хосте раздаёт "/uploads/*" напрямую с того же

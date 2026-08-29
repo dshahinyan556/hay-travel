@@ -16,12 +16,14 @@ import {
   getRegions,
   getTags,
   getTourNoteTemplates,
+  getVehicleClasses,
 } from '@/features/admin/api/adminCatalog'
 import { PlacesTab } from './places/PlacesTab'
 import { ExpenseTemplatesTab } from './expense-templates/ExpenseTemplatesTab'
 import { NoteTemplatesTab } from './note-templates/NoteTemplatesTab'
 import { RegionsTab } from './regions/RegionsTab'
 import { TagsTab } from './tags/TagsTab'
+import { VehicleClassesTab } from './vehicle-classes/VehicleClassesTab'
 import { catalogCopy } from './lib/catalogCopy'
 
 /**
@@ -30,7 +32,7 @@ import { catalogCopy } from './lib/catalogCopy'
  * after every mutation on any tab (catalogs are small — a handful to a few dozen rows each — so
  * refetching them costs nothing and keeps `tourCount`/cross-tab state honest).
  *
- * ONE route, FIVE independent permission keys. So:
+ * ONE route, SIX independent permission keys. So:
  *  - the route opens when at least one of them is viewable;
  *  - each list is requested only when ITS key is, and stays `null` otherwise — a list nobody may
  *    read must not be fetched just to be thrown away, and `null` is what tells the page to leave
@@ -40,29 +42,30 @@ export async function catalogLoader() {
   await ensurePermissionsReady()
   if (!canViewAny(CATALOG_SCREEN_KEYS)) throw redirect('/admin')
 
-  const [places, expenseTemplates, noteTemplates, regions, tags] = await Promise.all([
+  const [places, expenseTemplates, noteTemplates, regions, tags, vehicleClasses] = await Promise.all([
     canView(AdminScreen.CatalogPlaces) ? getPlaces() : Promise.resolve(null),
     canView(AdminScreen.CatalogExpenseTemplates) ? getExpenseTemplates() : Promise.resolve(null),
     canView(AdminScreen.CatalogNoteTemplates) ? getTourNoteTemplates() : Promise.resolve(null),
     canView(AdminScreen.CatalogRegions) ? getRegions() : Promise.resolve(null),
     canView(AdminScreen.CatalogTags) ? getTags() : Promise.resolve(null),
+    canView(AdminScreen.CatalogVehicleClasses) ? getVehicleClasses() : Promise.resolve(null),
   ])
-  return { places, expenseTemplates, noteTemplates, regions, tags }
+  return { places, expenseTemplates, noteTemplates, regions, tags, vehicleClasses }
 }
 
-type CatalogTabId = 'places' | 'expenses' | 'notes' | 'regions' | 'tags'
+type CatalogTabId = 'places' | 'expenses' | 'notes' | 'regions' | 'tags' | 'vehicle-classes'
 
 /**
  * Справочники (4.2): reference catalogs consumed as selectable options on the tour form (4.3,
- * not built yet). Four tabs have full CRUD (Places / Expense templates / Note templates / Tags,
- * 2026-08-16) — the backend has Create/Update/Delete for all four (3.4). "Регионы" stays
- * name/slug/order-fixed (seeded by a migration, David 2026-08-01) but its teaser text is
- * editable since 2026-08-02 (`UpdateBlurb`) — see `RegionsTab`.
+ * not built yet). Five tabs have full CRUD (Places / Expense templates / Note templates / Tags,
+ * 2026-08-16; Vehicle classes, batch 2026-08-29 decision 0.7) — the backend has Create/Update/
+ * Delete for all five. "Регионы" stays name/slug/order-fixed (seeded by a migration, David
+ * 2026-08-01) but its teaser text is editable since 2026-08-02 (`UpdateBlurb`) — see `RegionsTab`.
  *
- * One loader for all five lists; each tab owns its own add/edit/delete state and calls
+ * One loader for all six lists; each tab owns its own add/edit/delete state and calls
  * `revalidator.revalidate()` after a successful mutation, same contract as `ProductsPage`.
  *
- * Template B — «Форма обслуживания» (`MaintenanceFormLayout`). All five tabs are the same
+ * Template B — «Форма обслуживания» (`MaintenanceFormLayout`). All six tabs are the same
  * archetype: independent, unlinked records, edited one at a time in a side panel. «Регионы» is its
  * fixed-set variant — many records, but the count is settled forever by a migration, so Add and
  * Delete are structurally absent rather than merely hidden.
@@ -70,11 +73,12 @@ type CatalogTabId = 'places' | 'expenses' | 'notes' | 'regions' | 'tags'
  * The layout's page-level `controlZone` is left empty ON PURPOSE: per the proposal's own §B
  * diagram the tab strip sits ABOVE the control zone, so search/count/«Добавить» belong to the
  * ACTIVE tab, not to the page — each `*Tab` already renders exactly that row (and its own message
- * slot above its own table), and lifting five independent search states up here would only make
+ * slot above its own table), and lifting six independent search states up here would only make
  * the page own state it has no use for.
  */
 export function CatalogPage() {
-  const { places, expenseTemplates, noteTemplates, regions, tags } = useLoaderData<typeof catalogLoader>()
+  const { places, expenseTemplates, noteTemplates, regions, tags, vehicleClasses } =
+    useLoaderData<typeof catalogLoader>()
   const copy = useCopy(catalogCopy)
   const revalidator = useRevalidator()
 
@@ -83,6 +87,7 @@ export function CatalogPage() {
   const notesPermission = useScreenPermission(AdminScreen.CatalogNoteTemplates)
   const regionsPermission = useScreenPermission(AdminScreen.CatalogRegions)
   const tagsPermission = useScreenPermission(AdminScreen.CatalogTags)
+  const vehicleClassesPermission = useScreenPermission(AdminScreen.CatalogVehicleClasses)
 
   const revalidate = () => revalidator.revalidate()
 
@@ -94,6 +99,7 @@ export function CatalogPage() {
     noteTemplates !== null && { id: 'notes', label: copy.common.tabs.notes },
     regions !== null && { id: 'regions', label: copy.common.tabs.regions },
     tags !== null && { id: 'tags', label: copy.common.tabs.tags },
+    vehicleClasses !== null && { id: 'vehicle-classes', label: copy.common.tabs.vehicleClasses },
   ].filter((tab): tab is TabItem => tab !== false)
 
   // Seeded from the first AVAILABLE tab, not the constant `'places'`: the loader guarantees at
@@ -143,6 +149,9 @@ export function CatalogPage() {
       )}
       {activeTab === 'tags' && tags !== null && (
         <TagsTab items={tags} permission={tagsPermission} onMutated={revalidate} />
+      )}
+      {activeTab === 'vehicle-classes' && vehicleClasses !== null && (
+        <VehicleClassesTab items={vehicleClasses} permission={vehicleClassesPermission} onMutated={revalidate} />
       )}
     </MaintenanceFormLayout>
   )

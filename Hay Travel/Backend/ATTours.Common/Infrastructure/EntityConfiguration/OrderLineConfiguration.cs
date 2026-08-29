@@ -17,10 +17,23 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
 
             // Restrict, как раньше на Order: тур с бронями нельзя удалить молча
             // (TourDeletionService отбивает это заранее явным TourHasOrders).
+            // FK стал nullable (2026-08-29) — у строки-заявки кастомного трансфера продукта
+            // в каталоге нет; связь от этого становится опциональной, поведение удаления то же.
             builder.HasOne(x => x.Tour)
                 .WithMany()
                 .HasForeignKey(x => x.TourId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Класс авто трансфера. Restrict по той же причине, что и тур: класс, на который
+            // ссылается оформленная бронь, удалять нельзя (гард в сервисе удаления справочника).
+            // Название класса продублировано снапшотом на самой строке.
+            builder.HasOne(x => x.VehicleClass)
+                .WithMany()
+                .HasForeignKey(x => x.VehicleClassId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Property(x => x.VehicleClassNameSnapshot)
+                .HasMaxLength(100);
 
             // Связь с исполнителем и индекс по нему переехали в OrderLineEmployeeConfiguration
             // (редизайн 2026-08-23: исполнителей на строке может быть несколько).

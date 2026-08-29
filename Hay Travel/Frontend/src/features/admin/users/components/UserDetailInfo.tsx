@@ -22,8 +22,10 @@ interface UserDetailInfoProps {
    * go to clients and admins just as much as to employees. Non-nullable — there is no "clear". */
   onChangePreferredLanguage: (language: LanguageCode) => void
   languagePending: boolean
-  /** `users.Update`. The row stays VISIBLE without it (it is information, not just a control) and
-   * the picker is merely disabled — the practice `UserDangerZone` already follows. */
+  /** `users.Update`, already narrowed by the page's SuperAdmin lock (`canEditUser`, 2026-08-27) —
+   * a capability, resolved once by the container, never a permission lookup in here. The row stays
+   * VISIBLE without it (it is information, not just a control) and the picker is merely disabled —
+   * the practice `UserDangerZone` already follows. */
   canUpdate: boolean
 }
 

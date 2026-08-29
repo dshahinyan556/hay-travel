@@ -4,7 +4,12 @@ import { useCopy } from '@/shared/i18n/defineCopy'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { SidePanel } from '@/features/admin/ui/SidePanel'
 import type { TourInfoModel } from '@/shared/types/attours'
-import type { CalendarDayModel, ClosureRuleInfoModel, DayOfWeekCode } from '@/shared/types/booking'
+import type {
+  CalendarDayModel,
+  ClosureRuleInfoModel,
+  ClosureRuleScope,
+  DayOfWeekCode,
+} from '@/shared/types/booking'
 import { calendarCopy, type CalendarCopy } from '../lib/calendarCopy'
 import { tourTitleResolver, type CalendarOrderLine } from '../lib/calendarModel'
 import { DayClosureControls } from './DayClosureControls'
@@ -28,7 +33,9 @@ export interface DayDetailPanelProps {
   /** Why the closure block is read-only when `canManage` is false. */
   readOnlyHint: string
   onClose: () => void
-  onToggleClosure: (tourIds: (number | null)[], close: boolean, reason: string | null) => void
+  /** Цели закрытия/открытия — весь день, отдельные продукты, целые типы продукта (решение 0.27).
+   * См. `DayClosureControlsProps.onToggle`. */
+  onToggleClosure: (targets: ClosureRuleScope[], close: boolean, reason: string | null) => void
 }
 
 /** "12 августа 2026, среда" / "12 August 2026, Wednesday" — genitive month, which is what a date

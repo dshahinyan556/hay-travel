@@ -25,5 +25,11 @@ namespace ATTours.BusinessServices.Notifications
             CancellationToken cancellationToken = default);
 
         Task SendOrderDocumentAsync(OrderInfoModel order, CancellationToken cancellationToken = default);
+
+        // Бронь отменена фоновой задачей (OrderAutoCancellationJob), а не человеком. Список
+        // получателей у события свой (по умолчанию — системный ящик админов): клиенту это
+        // событие по умолчанию не уходит, но админ может добавить его в настройках, ничего
+        // не меняя в коде.
+        Task SendOrderAutoCancelledAsync(OrderInfoModel order, CancellationToken cancellationToken = default);
     }
 }

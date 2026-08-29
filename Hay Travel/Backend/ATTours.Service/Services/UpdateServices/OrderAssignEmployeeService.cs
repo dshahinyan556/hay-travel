@@ -65,7 +65,7 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                                          .AsNoTracking()
                                          .Include(x => x.Role)
                                          .Where(x => employeeIds.Contains(x.Id) && x.Role.Type == RoleType.Employee)
-                                         .Select(x => new { x.Id, x.Email, x.FirstName, x.LastName, x.PreferredLanguage })
+                                         .Select(x => new { x.Id, x.Email, x.FirstName, x.LastName, x.PreferredLanguage, x.TelegramChatId })
                                          .ToListAsync(cancellationToken);
 
             var missing = employeeIds.Except(employees.Select(employee => employee.Id)).ToList();
@@ -137,6 +137,7 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                         FullName = $"{employee.FirstName} {employee.LastName}".Trim(),
                         EmployeeRole = item.EmployeeRole,
                         PreferredLanguage = employee.PreferredLanguage,
+                        TelegramChatId = employee.TelegramChatId,
                         LineIds = lineIdsByEmployee.GetValueOrDefault(item.EmployeeId, [])
                     };
                 })]

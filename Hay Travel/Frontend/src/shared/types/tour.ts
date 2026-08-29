@@ -14,13 +14,21 @@
  */
 
 import type { RegionSlug } from '@/shared/data/armeniaRegions'
+import type { TourFormat } from './tourFormat'
 
 /**
  * Product kind. Mirrors the domain rule enforced by the admin panel and backend:
  * an excursion is exactly 1 day (no overnight stay), a tour is 2+ days (at least 1 night).
  * See `docs/product-model.md`.
+ *
+ * `'transfer'` (батч 2026-08-29, решение 0.2) — третий тип продукта, а не отдельная сущность.
+ * В `Tour` он встречается РОВНО в одном месте: секция «Избранное» на главной, куда трансферы
+ * попадают наравне с турами (`GetFeaturedToursClient` фильтра по типу не имеет). В каталог
+ * `/trips` он не приходит никогда — бэк исключает его из `GetToursClient` (решение 0.15), — а
+ * у собственного раздела `/transfers` своя модель (`shared/types/transfer.ts`), потому что у
+ * трансфера нет ни дней, ни регионов, ни тегов.
  */
-export type TourKind = 'tour' | 'excursion'
+export type TourKind = 'tour' | 'excursion' | 'transfer'
 
 export interface ItineraryDay {
   day: number
@@ -74,6 +82,36 @@ export interface Tour {
   shortDescription: string
   /** Up to 3. Empty when the product has none. */
   tags: readonly TourTag[]
+  /**
+   * Формат продажи (батч 2026-08-29). `null` — у продуктов, созданных до батча: они
+   * индивидуальные, ровно как были (`resolveEffectiveFormat`, `shared/booking/format.ts`).
+   * Бейдж формата на карточке/детальной показывается только при непустом значении.
+   */
+  format: TourFormat | null
+  /**
+   * Маршрут «откуда → куда» — ТОЛЬКО у карточки трансфера (`kind === 'transfer'`), иначе `null`.
+   *
+   * Нужен потому, что карточка в «Избранном» рисует для трансфера маршрут на месте регионов: у
+   * трансфера регионов нет, и строка с иконкой булавки осталась бы пустой. Заполняется в
+   * `shared/api/tours.ts` из публичного списка трансферов — `TourCardModel` маршрута не несёт.
+   */
+  transferRoute: readonly string[] | null
+  /**
+   * Цена ЗА ОДНОГО ЧЕЛОВЕКА группового формата, AMD. Заполнена при `Group`/`Both`, иначе `null`.
+   *
+   * Отдельное поле, а не «`priceFrom`, только за человека»: у продукта с форматом `Both`
+   * существуют ОБЕ цены сразу, и подменить одну другой нельзя. У чисто группового продукта
+   * `priceFrom` (сумма цен дней) остаётся заполненной, но клиент платит не по ней — решение
+   * 0.26, поэтому карточка группового продукта показывает именно это поле.
+   */
+  groupPricePerPerson: number | null
+}
+
+/** Одно из предопределённых времён начала продукта. `time` — каноничный `HH:mm`
+ * (`shared/booking/startTime.ts`), порядок в списке задаёт админ. */
+export interface TourStartTime {
+  id: number
+  time: string
 }
 
 /**
@@ -117,4 +155,22 @@ export interface TourDetail extends Tour {
   /** What the price does not cover (`TourNoteType.NotIncluded`) — shown under "Не включено". */
   notIncluded: readonly string[]
   expenses: readonly TourExpense[]
+  /**
+   * Предопределённые времена начала (решение 0.21) — посетитель выбирает ОДНО из них, свой
+   * ввод невозможен. Только на детальной проекции: карточке каталога время не нужно, и
+   * `GetToursClient` его не отдаёт.
+   *
+   * Пустой список технически возможен (запись, до которой не дошла миграция) и означает, что
+   * записаться на продукт нельзя: блок брони показывает это словами, а не пустым селектом.
+   * Минимум одно время — правило и формы продукта, и `TourValidationService`.
+   */
+  startTimes: readonly TourStartTime[]
+  /**
+   * «Мест на выезд» группового формата — ОДНО число на весь продукт; остаток считается на пару
+   * (дата + время старта). `null` у индивидуального формата.
+   *
+   * Живая занятость приходит отдельным запросом (`getGroupSeats`) — здесь только ёмкость, и
+   * она используется как запасной вариант, когда тот запрос не удался.
+   */
+  groupCapacity: number | null
 }

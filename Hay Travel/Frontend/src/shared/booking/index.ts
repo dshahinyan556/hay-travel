@@ -19,3 +19,17 @@ export { PREPAYMENT_SHARE, useTierPrice } from './useTierPrice'
 export type { TierPriceView } from './useTierPrice'
 
 export { MAX_GUESTS, MIN_GUESTS, clampGuests } from './guests'
+
+/* Формат брони и время старта (батч «Трансферы + формат», 2026-08-29) — те же две фичи
+   потребителей: блок брони на странице продукта и строка/итог корзины. */
+export {
+  applyFormatPricing,
+  catalogBasePrice,
+  isPerPersonPricing,
+  resolveBasePrice,
+  resolveEffectiveFormat,
+} from './format'
+
+export { isDisplayTime, toDisplayTime, toWireTime } from './startTime'
+
+export { seatsLeftOn } from './groupSeats'

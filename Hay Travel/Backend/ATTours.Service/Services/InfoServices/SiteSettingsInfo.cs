@@ -5,6 +5,7 @@ using ATTours.Common.Infrastructure.SiteSettings;
 using ATTours.Common.Settings;
 using ATTours.ContextRepository.ContextAbstraction;
 using ATTours.ContextRepository.RepositoryAbstraction.Relational;
+using System.Globalization;
 
 namespace ATTours.BusinessServices.Services.InfoServices
 {
@@ -59,6 +60,80 @@ namespace ATTours.BusinessServices.Services.InfoServices
             }
 
             return values;
+        }
+
+        // Точечное чтение числовой настройки (SettingValueType.Number) — то, чем пользуются
+        // фоновые задачи и валидация заказа: им не нужен весь каталог, нужен один порог.
+        //
+        // Никогда не бросает и никогда не возвращает «ничего»: испорченное или отсутствующее
+        // значение молча заменяется дефолтом каталога. Иначе опечатка в одной настройке
+        // роняла бы задачу целиком, а порог автозакрытия обязан существовать всегда.
+        // Валидация не даёт положить в БД нечисло (SiteSettingsValidationService), так что
+        // фолбэк — страховка от данных, попавших в таблицу мимо API.
+        public async Task<int> GetNumberAsync(string key)
+        {
+            var definition = SiteSettingCatalog.ByKey(key)
+                ?? throw new ArgumentException($"Site setting key '{key}' is unknown.", nameof(key));
+
+            var raw = (await GetRawValuesAsync([key])).GetValueOrDefault(key);
+
+            if (TryParseNumber(raw, out var value))
+                return value;
+
+            // Дефолт каталога обязан быть числом у Number-ключа — это ошибка разработчика,
+            // а не данных, и падать на ней надо громко.
+            if (TryParseNumber(definition.DefaultValue, out var fallback))
+                return fallback;
+
+            throw new InvalidOperationException(
+                $"Site setting '{key}' is declared as Number but its catalog default '{definition.DefaultValue}' is not an integer.");
+        }
+
+        // Сырые (неразрешённые по языку) значения набора ключей одним чтением — то, что
+        // нужно экрану «Джобы»: параметры задач язык-нейтральны, а весь каталог настроек
+        // ради двух порогов тянуть незачем.
+        //
+        // Правило фолбэка ровно одно на весь класс: сохранённое непустое значение, иначе
+        // дефолт каталога. Его же использует GetNumberAsync (и, через него, сами джобы) —
+        // второй копии этого правила быть не должно, иначе экран показывал бы одно, а
+        // задача читала другое.
+        //
+        // Неизвестный ключ молча пропускается: состав ключей задаёт каталог, и «ключа нет»
+        // здесь означает рассинхрон каталогов, а не запрос пользователя.
+        public async Task<Dictionary<string, string>> GetRawValuesAsync(IReadOnlyCollection<string> keys)
+        {
+            var values = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (keys is null || keys.Count == 0)
+                return values;
+
+            // Материализуем в List: Contains по нему EF транслирует в IN (...).
+            var requestedKeys = keys.Distinct(StringComparer.Ordinal).ToList();
+
+            var stored = await GetAllAsync(setting => requestedKeys.Contains(setting.Key));
+            var storedByKey = stored.Where(setting => setting.Key is not null)
+                                    .ToDictionary(setting => setting.Key, StringComparer.Ordinal);
+
+            foreach (var key in requestedKeys)
+            {
+                var definition = SiteSettingCatalog.ByKey(key);
+                if (definition is null)
+                    continue;
+
+                var raw = storedByKey.TryGetValue(key, out var setting) ? setting.Value : null;
+
+                values[key] = string.IsNullOrWhiteSpace(raw)
+                    ? definition.DefaultValue ?? string.Empty
+                    : raw;
+            }
+
+            return values;
+        }
+
+        private static bool TryParseNumber(string? raw, out int value)
+        {
+            value = 0;
+            return !string.IsNullOrWhiteSpace(raw)
+                && int.TryParse(raw.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
         }
 
         // Правило разрешения значения: перевод(язык) ?? Value ?? DefaultValue.

@@ -10,11 +10,13 @@ import { useCopy } from '@/shared/i18n/defineCopy'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { adminEnumsCopy } from '@/features/admin/lib/adminEnumsCopy'
 import { employeeRoleLabel, formatOrderMoney, ordersCopy } from '../lib/ordersCopy'
+import { isCustomTransferLine, lineTitle } from '../lib/ordersModel'
 import {
   NO_ORDER_PERMISSION_HINTS,
   type OrderPermissionHints,
 } from '../lib/orderPermissionHints'
 import type { UnassignTarget } from '../OrderDetailPage'
+import { OrderLineMeta } from './OrderLineMeta'
 
 export interface OrderLinesGridProps {
   order: OrderInfoModel
@@ -221,76 +223,97 @@ export function OrderLinesGrid({
             </tr>
           </thead>
           <tbody>
-            {order.lines.map((line) => (
-              <tr key={line.id} className="border-t border-neutral-100">
-                <td className="px-3 py-2.5">
-                  <Checkbox
-                    label=""
-                    aria-label={copy.selectLine(line.tourTitle ?? String(line.tourId))}
-                    checked={selected.has(line.id)}
-                    onChange={() => toggleSelected(line.id)}
-                  />
-                </td>
-                <td className="px-3 py-2.5">
-                  <Link
-                    to={`/admin/tours/${line.tourId}/edit`}
-                    target="_blank"
-                    className="text-neutral-900 hover:underline"
-                  >
-                    {line.tourTitle ?? copy.tourFallback(line.tourId)}
-                  </Link>
-                </td>
-                <td className="px-3 py-2.5 whitespace-nowrap text-neutral-700">{line.tourDate}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-neutral-700">{line.guestCount}</td>
-                <td className="px-3 py-2.5 align-top">
-                  <LineEmployeesCell
-                    line={line}
-                    pending={pending}
-                    updateHint={hints.update}
-                    onRequestAssign={() => onRequestAssign(line.id)}
-                    onRequestUnassign={(employee) =>
-                      onRequestUnassign({
-                        lineId: line.id,
-                        employeeId: employee.employeeId,
-                        employeeName: employee.employeeFullName,
-                      })
-                    }
-                  />
-                </td>
-                <td className="px-3 py-2.5">
-                  {/* Предоплата — `UpdateLine` (`Update`). Гейтится вместе с Save: иначе правки
-                      копились бы в черновик, который этот пользователь никогда не сможет
-                      сохранить. Тултип один на всю пару контролов, а не по одному на каждый. */}
-                  <Tooltip enabled={hints.update !== null} content={hints.update} cursor="not-allowed">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        label=""
-                        aria-label={copy.colPrepayment}
-                        checked={line.requiresPrepayment}
-                        disabled={pending || hints.update !== null}
-                        onChange={(e) => onToggleRequiresPrepayment(line, e.target.checked)}
-                      />
-                      {line.requiresPrepayment && (
-                        <PrepaymentAmountInput
-                          line={line}
+            {order.lines.map((line) => {
+              const title = lineTitle(line, copy)
+              const isRequest = isCustomTransferLine(line)
+              return (
+                <tr key={line.id} className="border-t border-neutral-100">
+                  <td className="px-3 py-2.5">
+                    <Checkbox
+                      label=""
+                      aria-label={copy.selectLine(title)}
+                      checked={selected.has(line.id)}
+                      onChange={() => toggleSelected(line.id)}
+                    />
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {/* Ссылка на продукт — только когда продукт есть. У строки-заявки `tourId`
+                        равен `null`, и прежний шаблон повёл бы на `/admin/tours/null/edit`. */}
+                    {line.tourId === null ? (
+                      <span className="text-neutral-900">{title}</span>
+                    ) : (
+                      <Link
+                        to={`/admin/tours/${line.tourId}/edit`}
+                        target="_blank"
+                        className="text-neutral-900 hover:underline"
+                      >
+                        {title}
+                      </Link>
+                    )}
+                    {/* Ширина ограничена, чтобы длинное название класса авто не растягивало
+                        единственную «резиновую» колонку грида за его 960px. */}
+                    <OrderLineMeta line={line} className="mt-1 max-w-[20rem]" />
+                  </td>
+                  <td className="px-3 py-2.5 whitespace-nowrap text-neutral-700">{line.tourDate}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-neutral-700">{line.guestCount}</td>
+                  <td className="px-3 py-2.5 align-top">
+                    <LineEmployeesCell
+                      line={line}
+                      pending={pending}
+                      updateHint={hints.update}
+                      onRequestAssign={() => onRequestAssign(line.id)}
+                      onRequestUnassign={(employee) =>
+                        onRequestUnassign({
+                          lineId: line.id,
+                          employeeId: employee.employeeId,
+                          employeeName: employee.employeeFullName,
+                        })
+                      }
+                    />
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {/* Предоплата — `UpdateLine` (`Update`). Гейтится вместе с Save: иначе правки
+                        копились бы в черновик, который этот пользователь никогда не сможет
+                        сохранить. Тултип один на всю пару контролов, а не по одному на каждый. */}
+                    <Tooltip enabled={hints.update !== null} content={hints.update} cursor="not-allowed">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          label=""
+                          aria-label={copy.colPrepayment}
+                          checked={line.requiresPrepayment}
                           disabled={pending || hints.update !== null}
-                          onChange={(amount) => onSavePrepaymentAmount(line, amount)}
+                          onChange={(e) => onToggleRequiresPrepayment(line, e.target.checked)}
                         />
-                      )}
-                    </div>
-                  </Tooltip>
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-neutral-700">
-                  {formatOrderMoney(line.priceSnapshot, order.currency, locale)}
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-neutral-900">
-                  {line.discountPercent ? copy.discountBadge(line.discountPercent) : copy.dash}
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-neutral-900">
-                  {formatOrderMoney(line.lineTotal, order.currency, locale)}
-                </td>
-              </tr>
-            ))}
+                        {line.requiresPrepayment && (
+                          <PrepaymentAmountInput
+                            line={line}
+                            disabled={pending || hints.update !== null}
+                            onChange={(amount) => onSavePrepaymentAmount(line, amount)}
+                          />
+                        )}
+                      </div>
+                    </Tooltip>
+                  </td>
+                  {/* У заявки нет продукта, а значит нет ни цены продукта, ни скидки на неё:
+                      `0 ֏` в этих колонках читалось бы как «бесплатно», а не «неприменимо». */}
+                  <td className="px-3 py-2.5 text-right tabular-nums text-neutral-700">
+                    {isRequest ? copy.dash : formatOrderMoney(line.priceSnapshot, order.currency, locale)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-neutral-900">
+                    {!isRequest && line.discountPercent ? copy.discountBadge(line.discountPercent) : copy.dash}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-neutral-900">
+                    {/* Итог заявки правится в блоке «Детали заявки» под гридом — здесь он только
+                        читается, как и у обычной строки. */}
+                    {isRequest && line.lineTotal === 0 ? (
+                      <span className="text-xs font-medium text-neutral-500">{copy.requestPriceNotSet}</span>
+                    ) : (
+                      formatOrderMoney(line.lineTotal, order.currency, locale)
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

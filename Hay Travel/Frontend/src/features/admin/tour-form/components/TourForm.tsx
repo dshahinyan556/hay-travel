@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Card, Tabs } from '@/shared/ui'
 import type { TabItem } from '@/shared/ui'
 import { useCopy } from '@/shared/i18n/defineCopy'
-import { TourType } from '@/features/admin/lib/enums'
+import { TourFormat, TourType } from '@/features/admin/lib/enums'
 import { tourFormCopy } from '@/features/admin/tour-form/lib/tourFormCopy'
 import type { CatalogSuggestions, TourFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
@@ -10,7 +10,7 @@ import type { TourFormValidation } from '@/features/admin/tour-form/lib/validati
 import type { RegionInfoModel, TagInfoModel } from '@/shared/types/attours'
 import { ImageListEditor } from '@/features/admin/ui/ImageListEditor'
 import type { RoutePointFormState } from '@/features/admin/types/form'
-import type { DaySource } from '@/features/admin/lib/tourMapper'
+import type { DaySource, VehicleClassOption } from '@/features/admin/lib/tourMapper'
 import { hasFillableDayContent } from '@/features/admin/lib/tourMapper'
 import { TourFormHeader } from './TourFormHeader'
 import { TourDaysEditor } from './TourDaysEditor'
@@ -18,15 +18,14 @@ import { LocalizedListEditor } from './LocalizedListEditor'
 import { RoutePointPlaceSelect } from './RoutePointPlaceSelect'
 import { DayFillTrigger } from './DayFillTrigger'
 import { AdditionalExpensesEditor } from './AdditionalExpensesEditor'
-import { FormActions } from './FormActions'
+import { TourStartTimesEditor } from './TourStartTimesEditor'
+import { TransferPricesEditor } from './TransferPricesEditor'
+import { TransferRouteEditor } from './TransferRouteEditor'
 
 interface TourFormProps {
   state: TourFormState
   actions: TourFormActions
   validation: TourFormValidation
-  hasAttemptedSubmit: boolean
-  isSubmitting: boolean
-  submitError: string | null
   /** True in edit mode — locks the tour/excursion type toggle (type is immutable after creation). */
   typeLocked?: boolean
   /** Existing catalog entries offered as autocomplete — see `CatalogSuggestions`. */
@@ -37,6 +36,10 @@ interface TourFormProps {
   tags: TagInfoModel[]
   /** Other products' days offered as a "заполнить из другого продукта" source (F13, part 2). */
   daySources: DaySource[]
+  /** The vehicle-class catalog, for the transfer's price table. Empty is a legitimate state —
+   * the catalog may simply not have been filled in yet (the editor says so). */
+  vehicleClasses: VehicleClassOption[]
+  /** Submitting the form (Enter inside a field) — the same action the toolbar's Save runs. */
   onSubmit: () => void
 }
 
@@ -51,25 +54,35 @@ type TabId = 'days' | 'org' | 'restrictions' | 'included' | 'notIncluded' | 'exp
  *  - Excursion: no "Дни" tab — its single day IS the tour. Its route points and gallery render
  *    as flat sections directly under the header, and the tabbed card holds only the optional
  *    lists (organizational details, restrictions, expenses).
+ *  - Transfer (батч 2026-08-29): no tabs AT ALL. A transfer has no days, gallery, regions, tags,
+ *    discount, organizational details, restrictions, extra costs, start times or format — only
+ *    the header's identity fields plus its own route and price table. Rendering the tabbed card
+ *    with every tab hidden would leave an empty chrome; the branch returns a different body
+ *    instead (решение 0.4).
  *
- * Holds no domain state; only the active tab is local UI state.
+ * Holds no domain state; only the active tab is local UI state. The screen chrome around it —
+ * заголовок, тулбар Save/Отмена/«В архив» и слот сообщений — принадлежит `TourFormScreen`
+ * (шаблон A), а не этой форме.
  */
 export function TourForm({
   state,
   actions,
   validation,
-  hasAttemptedSubmit,
-  isSubmitting,
-  submitError,
   typeLocked,
   catalogSuggestions,
   regions,
   tags,
   daySources,
+  vehicleClasses,
   onSubmit,
 }: TourFormProps) {
   const copy = useCopy(tourFormCopy)
   const isExcursion = state.type === TourType.Excursion
+  const isTransfer = state.type === TourType.Transfer
+  // При «Групповом» продаётся только цена за человека: «Цена за группу» в шапке спрятана
+  // (решение 0.26), а вместе с ней и цены дней, которые её и составляют. Данные при этом целы —
+  // см. доккомментарий `TourDayFields.showPrice`. При «Оба» цена за группу нужна, и всё видно.
+  const isGroupOnly = state.format === TourFormat.Group
   const singleDay = state.days[0]
   // placeId -> image urls, for the excursion's own "заполнить из другого продукта" gallery
   // autofill — same lookup `TourDayFields` builds for the multi-day accordion.
@@ -79,7 +92,7 @@ export function TourForm({
   )
 
   const tabs: TabItem[] = [
-    ...(isExcursion
+    ...(isExcursion || isTransfer
       ? []
       : [{ id: 'days', label: copy.tabs.days, badge: state.days.length } as TabItem]),
     { id: 'org', label: copy.tabs.org },
@@ -103,16 +116,6 @@ export function TourForm({
       className="flex flex-col gap-4"
       noValidate
     >
-      {submitError && (
-        <div
-          role="alert"
-          className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
-        >
-          <span aria-hidden="true">⚠️</span>
-          <span>{submitError}</span>
-        </div>
-      )}
-
       <TourFormHeader
         state={state}
         actions={actions}
@@ -122,10 +125,61 @@ export function TourForm({
         discountPercentError={validation.discountPercent}
         discountStartDateError={validation.discountStartDate}
         discountValidUntilError={validation.discountValidUntil}
+        formatError={validation.format}
+        groupPricePerPersonError={validation.groupPricePerPerson}
+        groupCapacityError={validation.groupCapacity}
         typeLocked={typeLocked}
         regions={regions}
         tags={tags}
       />
+
+      {isTransfer && (
+        <Card padding="lg">
+          <div className="flex flex-col gap-5">
+            <TransferRouteEditor
+              from={state.transferFrom}
+              stops={state.transferStops}
+              to={state.transferTo}
+              suggestions={catalogSuggestions.routePoints}
+              fromError={validation.transferFrom}
+              toError={validation.transferTo}
+              stopErrors={validation.transferStopErrors}
+              onChangeEndpointText={actions.setTransferEndpointText}
+              onAddStop={actions.addTransferStop}
+              onRemoveStop={actions.removeTransferStop}
+              onReorderStops={actions.moveTransferStop}
+              onChangeStopText={actions.setTransferStopText}
+            />
+
+            <TransferPricesEditor
+              items={state.transferPrices}
+              vehicleClasses={vehicleClasses}
+              error={validation.transferPrices}
+              rowErrors={validation.transferPriceErrors}
+              onAdd={actions.addTransferPrice}
+              onRemove={actions.removeTransferPrice}
+              onChangeClass={actions.setTransferPriceClass}
+              onChangeAmount={actions.setTransferPriceAmount}
+            />
+          </div>
+        </Card>
+      )}
+
+      {/* Времена старта — у тура и экскурсии, но не у трансфера: время подачи трансфера
+          выбирает клиент при бронировании, у продукта его нет (решение 0.21). */}
+      {!isTransfer && (
+        <Card padding="lg">
+          <TourStartTimesEditor
+            items={state.startTimes}
+            error={validation.startTimes}
+            rowErrors={validation.startTimeErrors}
+            onAdd={actions.addStartTime}
+            onRemove={actions.removeStartTime}
+            onChange={actions.setStartTime}
+            onSort={actions.sortStartTimes}
+          />
+        </Card>
+      )}
 
       {isExcursion && singleDay && (
         <Card padding="lg">
@@ -193,6 +247,7 @@ export function TourForm({
         </Card>
       )}
 
+      {!isTransfer && (
       <Card className="!p-0">
         <Tabs
           tabs={tabs}
@@ -211,6 +266,7 @@ export function TourForm({
               dayRoutePointErrors={validation.dayRoutePointErrors}
               daysError={validation.days}
               actions={actions}
+              showDayPrice={!isGroupOnly}
               routePointSuggestions={catalogSuggestions.routePoints}
               placeOptions={catalogSuggestions.placeOptions}
               daySources={daySources}
@@ -297,14 +353,7 @@ export function TourForm({
           )}
         </div>
       </Card>
-
-      <FormActions
-        isSubmitting={isSubmitting}
-        isValid={validation.isValid}
-        hasAttemptedSubmit={hasAttemptedSubmit}
-        submitError={submitError}
-        onSubmit={onSubmit}
-      />
+      )}
     </form>
   )
 }

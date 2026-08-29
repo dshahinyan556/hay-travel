@@ -15,6 +15,10 @@ namespace ATTours.Common.Enums
         SentToClient = 8,
         PaymentAdded = 9,
         // Снятие исполнителя со строки/всех строк заказа (Задача D).
-        EmployeeUnassigned = 10
+        EmployeeUnassigned = 10,
+        // Заказ отменён фоновой задачей, а не человеком (OrderAutoCancellationJob).
+        // Отдельный тип, а не StatusChanged: в истории заказа должно быть видно, что автора
+        // у этого действия нет — иначе «Отклонён» без актора выглядит как потерянный автор.
+        AutoCancelled = 11
     }
 }

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Checkbox, DatePicker, Input, Modal, Textarea } from '@/shared/ui'
+import { HelpButton } from '@/shared/ui/HelpButton'
+import { HelpRevealZone } from '@/shared/ui/HelpReveal'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { SidePanel } from '@/features/admin/ui/SidePanel'
-import { TourType } from '@/features/admin/lib/enums'
+import type { TourType } from '@/features/admin/lib/enums'
 import type { TourInfoModel } from '@/shared/types/attours'
 import { REGIONS, type RegionSlug } from '@/shared/data/armeniaRegions'
 import {
@@ -12,13 +14,15 @@ import {
   type DayOfWeekCode,
 } from '@/shared/types/booking'
 import { calendarCopy, weekdayOrder } from '../lib/calendarCopy'
-import { tourTitleResolver } from '../lib/calendarModel'
+import { TOUR_TYPE_ORDER, tourTitleResolver, tourTypePluralLabel } from '../lib/calendarModel'
+import { ScopeChip } from './ScopeChip'
 import {
   compileBulkForm,
   emptyBulkForm,
   MAX_REASON_LENGTH,
   type BulkClosureForm,
   type BulkMode,
+  type BulkScope,
 } from '../lib/closureRuleForm'
 
 /** Above this many rules the operation gets a confirmation step — 300 rules created by a
@@ -36,9 +40,15 @@ export interface BulkClosurePanelProps {
 /**
  * Closing (or re-opening) many days at once: a date range, or a weekday that repeats.
  *
- * There are no tags on tours in this system, so "bulk by tag" is expressed as scope — «Все туры»
- * (one global rule) or an explicit multi-select, with «Все · Туры · Экскурсии» presets that just
- * fill that multi-select from `TourType`. No new "tag" concept is invented on the frontend.
+ * ОБЛАСТЬ (решение 0.27, 2026-08-29) — настоящая, из трёх взаимоисключающих вариантов, которые
+ * понимает бэк: «Все продукты» (одно глобальное правило), «Тип продукта» (правило на КАТЕГОРИЮ —
+ * действует и на продукты, заведённые позже) и «Выбранные продукты» (мультивыбор).
+ *
+ * До этого типовой области не существовало, а «Туры»/«Экскурсии» были ПРЕСЕТАМИ, которые просто
+ * набивали мультивыбор идентификаторами из текущего каталога. Они убраны: два способа сделать
+ * «закрыть все экскурсии» с разным результатом — это ловушка, а не удобство. Фильтр по региону
+ * остался пресетом сознательно: области «регион» на бэке нет и не планируется, там это честный
+ * помощник выбора, а не имитация правила.
  *
  * The form compiles through `compileBulkForm` on every change, so the "N rules will be created"
  * line and the submitted payload can never disagree — they are the same call.
@@ -48,7 +58,6 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
   const { locale } = useLocale()
   const [form, setForm] = useState<BulkClosureForm>(emptyBulkForm)
   const [tourSearch, setTourSearch] = useState('')
-  const [scopeAll, setScopeAll] = useState(true)
   const [confirming, setConfirming] = useState(false)
 
   // A half-filled operation must not survive into the next opening of the panel.
@@ -56,7 +65,6 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
     if (open) return
     setForm(emptyBulkForm)
     setTourSearch('')
-    setScopeAll(true)
     setConfirming(false)
   }, [open])
 
@@ -80,12 +88,10 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
   // Memoized on the two things that actually change it — `form` is only replaced by `patch`, so
   // this does not recompile on unrelated renders. Worth memoizing: a wide range × many tours is a
   // few hundred objects per call.
-  // «Все туры» is a SCOPE, expressed as an empty `tourIds` (one global rule), not as "every tour
-  // ticked" — so the selection made under «Выбранные туры» is preserved if the admin toggles back.
-  const validation = useMemo(
-    () => compileBulkForm(scopeAll ? { ...form, tourIds: [] } : form, copy),
-    [form, scopeAll, copy],
-  )
+  // Область живёт В ФОРМЕ: `compileBulkForm` сама решает, что взять — `tourTypes`, `tourIds` или
+  // ничего, — поэтому выбор, сделанный в одной области, переживает переключение на другую и
+  // обратно, а компилятору не приходится угадывать по пустоте списка.
+  const validation = useMemo(() => compileBulkForm(form, copy), [form, copy])
 
   function patch(changes: Partial<BulkClosureForm>) {
     setForm((prev) => ({ ...prev, ...changes }))
@@ -99,9 +105,11 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
     })
   }
 
-  function applyPreset(type: TourType | 'all') {
+  function toggleTourType(tourType: TourType) {
     patch({
-      tourIds: tours.filter((tour) => type === 'all' || tour.type === type).map((tour) => tour.id),
+      tourTypes: form.tourTypes.includes(tourType)
+        ? form.tourTypes.filter((value) => value !== tourType)
+        : [...form.tourTypes, tourType],
     })
   }
 
@@ -239,54 +247,60 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
             </div>
           </div>
 
-          <fieldset>
+          {/* Зона наведения — сам `fieldset` (`as`), а не лишняя обёртка внутри него: `legend`
+              обязан оставаться ПЕРВЫМ ребёнком fieldset, иначе браузер рисует его как обычный
+              блок. Кнопка «?» живёт внутри legend'а — так подпись и триггер стоят в одну строку. */}
+          <HelpRevealZone as="fieldset">
             <legend className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              {copy.bulkScopeTitle}
+              <span className="inline-flex items-center gap-2">
+                {copy.bulkScopeTitle}
+                {/* Пояснение области — через «?», не инлайн-текстом: конвенция админки. */}
+                <HelpButton surface="admin" title={copy.bulkScopeTitle}>
+                  {copy.bulkScopeHelp}
+                </HelpButton>
+              </span>
             </legend>
             <div className="mt-1 flex flex-col">
-              <label className={radioClass}>
-                <input
-                  type="radio"
-                  name="bulk-scope"
-                  checked={scopeAll}
-                  onChange={() => setScopeAll(true)}
-                  className="h-4 w-4 text-neutral-900"
-                />
-                {copy.bulkScopeAll}
-              </label>
-              <label className={radioClass}>
-                <input
-                  type="radio"
-                  name="bulk-scope"
-                  checked={!scopeAll}
-                  onChange={() => setScopeAll(false)}
-                  className="h-4 w-4 text-neutral-900"
-                />
-                {copy.bulkScopeSelected}
-              </label>
+              {(
+                [
+                  { value: 'global', label: copy.bulkScopeAll },
+                  { value: 'types', label: copy.bulkScopeTypes },
+                  { value: 'products', label: copy.bulkScopeSelected },
+                ] as { value: BulkScope; label: string }[]
+              ).map((option) => (
+                <label key={option.value} className={radioClass}>
+                  <input
+                    type="radio"
+                    name="bulk-scope"
+                    checked={form.scope === option.value}
+                    onChange={() => patch({ scope: option.value })}
+                    className="h-4 w-4 text-neutral-900"
+                  />
+                  {option.label}
+                </label>
+              ))}
             </div>
 
-            {!scopeAll && (
-              <div className="mt-2 flex flex-col gap-2">
-                {/* Presets only FILL the multi-select — the selection stays explicit and editable,
-                    so "Экскурсии" never becomes an invisible saved criterion. */}
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    { label: copy.bulkPresetAll, value: 'all' as const },
-                    { label: copy.bulkPresetTours, value: TourType.Tour },
-                    { label: copy.bulkPresetExcursions, value: TourType.Excursion },
-                  ].map((preset) => (
-                    <button
-                      key={String(preset.value)}
-                      type="button"
-                      onClick={() => applyPreset(preset.value)}
-                      className="cursor-pointer rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/20"
-                    >
-                      {preset.label}
-                    </button>
+            {form.scope === 'types' && (
+              <div className="mt-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                  {copy.bulkTypesTitle}
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {TOUR_TYPE_ORDER.map((tourType) => (
+                    <ScopeChip
+                      key={tourType}
+                      label={tourTypePluralLabel(tourType, copy)}
+                      selected={form.tourTypes.includes(tourType)}
+                      onClick={() => toggleTourType(tourType)}
+                    />
                   ))}
                 </div>
+              </div>
+            )}
 
+            {form.scope === 'products' && (
+              <div className="mt-2 flex flex-col gap-2">
                 {availableRegions.length > 0 && (
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
@@ -359,7 +373,7 @@ export function BulkClosurePanel({ open, tours, pending, onClose, onApply }: Bul
                 </div>
               </div>
             )}
-          </fieldset>
+          </HelpRevealZone>
 
           <div>
             <label className="text-xs font-semibold uppercase tracking-wide text-neutral-500">

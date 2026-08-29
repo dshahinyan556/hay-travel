@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { useAuth } from '@/shared/auth'
-import { CompassIcon, GuideIcon, HomeIcon, MapIcon } from '@/shared/ui/icons'
+import { CarIcon, CompassIcon, GuideIcon, HomeIcon, MapIcon } from '@/shared/ui/icons'
 
 /**
  * Нижний док — мобильная навигация «Стеклянной ленты» (`theme.navStyle === 'rail'`, макет
@@ -25,6 +25,10 @@ export function FrostedRailDock() {
   const tabItems = [
     { to: '/', label: t('nav.home'), end: true, Icon: HomeIcon },
     { to: '/trips', label: t('nav.trips'), end: false, Icon: CompassIcon },
+    // Пятая вкладка (батч 2026-08-29). Подписи с этого момента обрезаются многоточием
+    // (`truncate` ниже): на 375px пять колонок дают ~71px, и «Путешествия» в них не помещается
+    // целиком — но подпись под иконкой это подсказка, а не единственный носитель смысла.
+    { to: '/transfers', label: t('nav.transfersShort'), end: false, Icon: CarIcon },
     { to: '/regions', label: t('nav.regionsShort'), end: false, Icon: MapIcon },
     // Одна вкладка, два адреса: у кабинета свой маршрут (`/account`), и `/auth` всё равно
     // отправил бы вошедшего туда же — незачем гонять через редирект на каждом тапе. `end`
@@ -52,7 +56,7 @@ export function FrostedRailDock() {
       <div className="seam dock-seam" />
 
       <div
-        className="relative grid grid-cols-4 px-2 pt-2"
+        className="relative grid grid-cols-5 px-1.5 pt-2"
         style={{ paddingBottom: 'calc(0.875rem + env(safe-area-inset-bottom))' }}
       >
         {tabItems.map(({ to, label, end, Icon }) => (
@@ -60,11 +64,11 @@ export function FrostedRailDock() {
             key={to}
             to={to}
             end={end}
-            // `min-h-13` (52px) — зона нажатия с запасом к минимуму 44×44; по ширине это четверть
-            // экрана (~97px при 390px), так что горизонталь недобрать невозможно.
+            // `min-h-13` (52px) — зона нажатия с запасом к минимуму 44×44; по ширине это пятая
+            // часть экрана (~75px при 390px), так что горизонталь всё ещё с запасом.
             className={({ isActive }) =>
               [
-                'relative flex min-h-13 flex-col items-center gap-1 pt-1.5 pb-0.5 text-[11px] transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)]',
+                'relative flex min-h-13 min-w-0 flex-col items-center gap-1 pt-1.5 pb-0.5 text-[11px] transition-colors duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)]',
                 isActive ? 'text-gold-ink' : 'text-ink-muted hover:text-gold-ink',
               ].join(' ')
             }
@@ -84,7 +88,9 @@ export function FrostedRailDock() {
                   ].join(' ')}
                 />
                 <Icon size={20} />
-                <span className={isActive ? 'font-bold' : undefined}>{label}</span>
+                <span className={`w-full truncate text-center ${isActive ? 'font-bold' : ''}`}>
+                  {label}
+                </span>
               </>
             )}
           </NavLink>

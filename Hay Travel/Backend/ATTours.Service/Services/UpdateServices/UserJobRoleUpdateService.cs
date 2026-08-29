@@ -1,4 +1,5 @@
 using ArmeniaTours.DataLayer;
+using ATTours.BusinessServices.Services.Authorization;
 using ATTours.Common.Entities;
 using ATTours.Common.Enums;
 using ATTours.Common.Settings;
@@ -12,8 +13,8 @@ namespace ATTours.BusinessServices.Services.UpdateServices
     // Рабочая специализация сотрудника по умолчанию (Задача D). Точечная операция по образцу
     // UserPhoneUpdateService: грузит одну строку и меняет одно скалярное поле.
     //
-    // Ролевых guard'ов внутри нет: доступ ограничен UsersController ([Authorize(Roles=Admin)]).
-    // RoleType.Employee тоже не проверяется — дефолт можно проставить заранее, до выдачи
+    // Ролевых guard'ов внутри нет, кроме SuperAdminGuard: доступ ограничен правами экрана
+    // «Пользователи» в UsersController. RoleType.Employee тоже не проверяется — дефолт можно проставить заранее, до выдачи
     // роли Employee, и это ничего не ломает: настоящий гейт стоит на самом назначении.
     public class UserJobRoleUpdateService : RepositoryCoreBase<User, ATToursContextFactory>
     {
@@ -26,7 +27,9 @@ namespace ATTours.BusinessServices.Services.UpdateServices
         }
 
         // null — валидное значение: «снять роль по умолчанию».
-        public async Task<User> UpdateJobRoleAsync(int userId, EmployeeJobRole? jobRole)
+        // actingUserId (2026-08-27) — только ради SuperAdminGuard: остальная логика от того,
+        // кто выполняет операцию, по-прежнему не зависит.
+        public async Task<User> UpdateJobRoleAsync(int userId, EmployeeJobRole? jobRole, int actingUserId)
         {
             if (jobRole is not null && !Enum.IsDefined(jobRole.Value))
                 throw new ErrorModelException(GlobalErrorCode.EmployeeRoleRequired, HttpStatusCode.BadRequest,
@@ -39,6 +42,8 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                                              .SingleOrDefaultAsync(x => x.Id == userId && !x.IsDeleted, cancellationToken)
                        ?? throw new ErrorModelException(GlobalErrorCode.RelationalEntityNotFound, HttpStatusCode.NotFound,
                            $"User with id {userId} not found.");
+
+            SuperAdminGuard.GuardSuperAdminTarget(user, actingUserId);
 
             user.DefaultJobRole = jobRole;
             await EntityRepository.SaveChangesAsync(cancellationToken);

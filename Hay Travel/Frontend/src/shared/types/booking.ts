@@ -48,6 +48,7 @@
 
 import type { EmployeeJobRole } from './employeeRole'
 import type { LanguageCode } from './language'
+import type { TourFormat } from './tourFormat'
 
 export const OrderStatus = {
   /** Just created (site booking OR added manually in admin), no line requires prepayment yet. */
@@ -64,6 +65,12 @@ export const OrderStatus = {
   PendingPayment: 6,
   /** Fulfilled ("Завершить" action). */
   Completed: 7,
+  /** Заявка без цены (батч «Трансферы + формат», 2026-08-29): кастомный трансфер, собранный
+   * клиентом в конструкторе. Каждая её строка — `OrderLineKind.CustomTransfer` с `lineTotal === 0`;
+   * цену проставляет менеджер (`OrderLineUpdateModel.lineTotal`), после чего заказ идёт по
+   * обычному флоу. НЕ «до-решения»-статус вроде `Open`: заявку как раз и нужно править до
+   * одобрения, иначе одобрять было бы нечего. */
+  Request: 8,
 } as const
 
 export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus]
@@ -147,25 +154,94 @@ export interface OrderLineEmployeeInfoModel {
   commentEn: string | null
 }
 
+/** Одна остановка маршрута кастомной заявки — одноязычный свободный текст, ровно как его ввёл
+ * клиент (перевода у него нет и быть не может). Порядок — `From` → `Stop` по `sortOrder` → `To`,
+ * сервер отдаёт список уже отсортированным. */
+export interface CustomTransferStopInfoModel {
+  id: number
+  /** `TransferRoutePointKind`: 1 = From, 2 = Stop, 3 = To. Число, а не импорт из
+   * `features/admin/lib/enums.ts`: `shared` не может зависеть от `features`, и это ровно тот же
+   * приём, которым `shared/types/attours.ts` описывает `TransferRoutePointInfoModel.kind`. */
+  kind: number
+  sortOrder: number
+  text: string
+}
+
+/** Детали кастомной заявки на трансфер (батч 2026-08-29) — заполнено РОВНО у строки с
+ * `lineKind === OrderLineKind.CustomTransfer`, `null` у брони продукта.
+ *
+ * Дата/время подачи, обратный рейс и число гостей здесь НЕ дублируются: они на самой строке, как
+ * и у обычной брони. */
+export interface CustomTransferDetailsInfoModel {
+  id: number
+  passengerCount: number
+  luggageMediumCount: number
+  luggageLargeCount: number
+  /** Свободный текст «другое» — то, что не описывается двумя счётчиками (велосипед, коляска…). */
+  luggageOther: string | null
+  /** Багаж в «единицах» (средний = 3, большой = 5, решение 0.13) — считает СЕРВЕР, чтобы админка
+   * и публичный конструктор не пересчитывали курс каждый по-своему. */
+  luggageUnits: number
+  /** Пожелание клиента, а не бронь класса: цену и фактический транспорт согласует менеджер. */
+  desiredVehicleClassId: number | null
+  /** Денормализовано сервером — экран заказа не ходит в справочник классов отдельным запросом. */
+  desiredVehicleClassName: string | null
+  comment: string | null
+  stops: CustomTransferStopInfoModel[]
+}
+
 /**
  * One line of an order — its own tour/date/guests/money/fulfillment details (ADR 019).
  * `tourTitle`/`tourMainImageUrl` are denormalized server-side so the list and detail screens never
  * need a second request to resolve them.
+ *
+ * ── Строка перестала быть обязательно «строкой по продукту» (батч 2026-08-29) ─────────────────
+ * У заявки кастомного трансфера продукта НЕТ: `tourId === null`, `lineKind === CustomTransfer`, а
+ * маршрут и пожелания лежат в `customTransferDetails`. Читать нужно `lineKind`, а не
+ * `tourId === null` — отсутствие продукта это следствие типа строки, а не его определение.
  */
 export interface OrderLineInfoModel {
   id: number
-  tourId: number
-  /** Already resolved to a language server-side: RU in the admin list/detail. */
+  /** `OrderLineKind`: 1 = Product, 2 = CustomTransfer. Число по той же причине, что `kind` выше. */
+  lineKind: number
+  /** `null` ровно у строки-заявки — всё, что ведёт на карточку продукта, обязано это учитывать. */
+  tourId: number | null
+  /** Already resolved to a language server-side: RU in the admin list/detail. У заявки сервер
+   * подставляет осмысленную подпись («Кастомный трансфер»), а не пустоту. */
   tourTitle: string | null
   tourMainImageUrl: string | null
   /** `DateOnly` on the wire — `YYYY-MM-DD`, NOT an ISO timestamp. */
   tourDate: string
+  /** `TimeOnly` on the wire — `"HH:mm:ss"`. Выбранный слот тура/экскурсии либо время подачи
+   * трансфера; `null` у строк, созданных до появления слотов. */
+  startTime: string | null
+  /** По какому формату посчитана строка — снапшот выбора клиента, когда продукт продаётся в
+   * обоих. `null` у трансфера и у строк, созданных до батча. */
+  format: TourFormat | null
   guestCount: number
+
+  /** Обратный рейс трансфера со своей датой и временем; у тура/экскурсии всегда `false`. */
+  isRoundTrip: boolean
+  /** `YYYY-MM-DD`; непусто только при `isRoundTrip`. */
+  returnDate: string | null
+  /** `"HH:mm:ss"`; непусто только при `isRoundTrip`. */
+  returnTime: string | null
+
+  vehicleClassId: number | null
+  /** Снапшот названия класса на момент брони: переименование класса в справочнике не должно
+   * менять уже подтверждённую бронь. */
+  vehicleClassNameSnapshot: string | null
+
+  /** Заполнено ровно у строки-заявки (`lineKind === CustomTransfer`), `null` у брони продукта. */
+  customTransferDetails: CustomTransferDetailsInfoModel | null
 
   requiresPrepayment: boolean
   prepaymentAmount: number
 
-  /** Tour price at the moment this line was added, BEFORE any discount. */
+  /** Base product price at the moment this line was added, BEFORE any discount: за бронь целиком
+   * (индивидуальный формат), ЗА ЧЕЛОВЕКА (групповой) либо цена выбранного класса авто (трансфер).
+   * У заявки продукта нет — здесь `0`, пока менеджер не проставит `lineTotal` (сервер тогда
+   * приравнивает снапшот к согласованной сумме). */
   priceSnapshot: number
   /** Snapshot of the tour's discount percent at that moment, `null` — no discount was applied. A
    * later edit/removal of the tour's discount never changes this retroactively. */
@@ -227,6 +303,31 @@ export interface OrderCreateLineModel {
   /** `YYYY-MM-DD`. */
   tourDate: string
   guestCount: number
+  /** Выбранный слот выезда, `"HH:mm:ss"` (`TimeOnly` на бэке — см. `shared/booking/startTime.ts`).
+   * Обязан быть ОДНИМ ИЗ `TourDetail.startTimes` продукта: свой ввести нельзя (решение 0.21),
+   * чужое значение бэк отбивает `InvalidStartTimeSelection`/2045. У ТРАНСФЕРА это, наоборот,
+   * свободное время подачи — расписания у него нет, но поле так же обязательно (решение 0.9). */
+  startTime: string
+  /** `TourFormat` — выбор посетителя. Обязателен, только когда продукт продаётся в обоих
+   * форматах (`Both`), иначе бэк значение игнорирует и формат продукта не переопределяется.
+   * `null` при `Both` — отказ `OrderLineFormatRequired`/2046. У трансфера формата нет — `null`. */
+  format: TourFormat | null
+
+  /* ── Поля ТРАНСФЕРА (батч 2026-08-29) ────────────────────────────────────────────────────
+     Опциональны, потому что позиция по туру/экскурсии их не посылает вовсе, а бэк у не-трансфера
+     их всё равно не сохраняет (`OrderCreateLineModel` на сервере). */
+
+  /** Обратный рейс со СВОЕЙ датой и временем (решение 0.12), а не «плюс N часов». При `true`
+   * обе даты обязательны и не могут быть раньше поездки — иначе `InvalidReturnTrip`/2058. */
+  isRoundTrip?: boolean
+  /** `YYYY-MM-DD`. */
+  returnDate?: string | null
+  /** `"HH:mm:ss"`. */
+  returnTime?: string | null
+  /** Класс авто из цен этого трансфера: его цена и ЕСТЬ цена строки, поэтому у трансфера поле
+   * обязательно (`VehicleClassNotAvailable`/2047), а пассажиров больше вместимости класса —
+   * `PassengersExceedVehicleCapacity`/2049. */
+  vehicleClassId?: number | null
 }
 
 /** `POST api/Order/Create` (ADR 025). Создаёт ОДИН заказ с N строками, атомарно: либо все строки,
@@ -240,7 +341,10 @@ export interface OrderCreateModel {
  * массиве `lines`, порядок сервер сохраняет. */
 export interface OrderLineErrorItem {
   index: number
-  tourId: number
+  /** `null` у строки без продукта (`OrderLineKind.CustomTransfer`) — с корзины это недостижимо,
+   * она шлёт только `tourId`, но контракт `OrderLineErrorItem.TourId` стал nullable вместе со
+   * строкой заказа, и читатель обязан это выдержать, а не отбрасывать такой пункт. */
+  tourId: number | null
   /** `YYYY-MM-DD`. */
   tourDate: string
   /** Пер-строчный `GlobalErrorCode`: 2004 / 2014 / 2015 / 2016. */
@@ -257,7 +361,70 @@ export interface OrderLinesErrorModel {
   lines: OrderLineErrorItem[]
 }
 
-/** `POST api/Order/AddLine` — admin adds a line to an existing order. */
+/**
+ * Одна точка маршрута кастомной заявки в теле `POST api/Order/CreateTransferRequest`.
+ *
+ * Одноязычная: это ровно тот текст, который ввёл клиент (перевода у него нет и быть не может),
+ * в отличие от точки предопределённого трансфера, которую админ заводит на двух языках.
+ */
+export interface CustomTransferStopCreateModel {
+  /** `TransferRoutePointKind`: 1 = From, 2 = Stop, 3 = To. Число по той же причине, что и у
+   * `CustomTransferStopInfoModel.kind` выше: `shared` не зависит от `features`. */
+  kind: number
+  /** Порядок промежуточных точек (drag-n-drop). У From/To значения не имеет — сервер всё равно
+   * пересобирает порядок сам (`CustomTransferRequestCreationService.BuildStops`). */
+  sortOrder: number
+  text: string
+}
+
+/**
+ * `POST api/Order/CreateTransferRequest` — кастомная заявка из конструктора (решения 0.11-0.14).
+ *
+ * Отдельная модель, а НЕ `OrderCreateModel` с особой строкой: у заявки нет продукта, нет цены и
+ * нет корзины — она всегда ровно одна позиция и создаёт заказ в статусе `Request`. Всё, что
+ * определяет деньги, статус и владельца, задаёт сервер: цена 0, предоплаты нет, `userId` из
+ * токена. Требует авторизации (`authFetch`).
+ *
+ * Отказы, которые видит фронт: `InvalidTransferRoute`/2053 (нет «откуда»/«куда» или пустой
+ * текст точки), `InvalidReturnTrip`/2058, `VehicleClassNotFound`/2057,
+ * `PassengersExceedVehicleCapacity`/2049, `LuggageExceedsVehicleCapacity`/2048,
+ * `TourDateUnavailable`/2014 (день закрыт правилом «весь сайт» или «все трансферы»),
+ * `OrderDateInPast`/2016, `InvalidStartTimeSelection`/2045 (не указано время подачи).
+ */
+export interface CustomTransferRequestCreateModel {
+  /** `YYYY-MM-DD`. */
+  pickupDate: string
+  /** `"HH:mm:ss"`. Формально nullable на бэке, чтобы отличить «не прислали» от полуночи, —
+   * но заявка без времени подачи отбивается (2045). */
+  pickupTime: string | null
+  isRoundTrip: boolean
+  /** `YYYY-MM-DD`. */
+  returnDate: string | null
+  /** `"HH:mm:ss"`. */
+  returnTime: string | null
+  passengerCount: number
+  /** Штуки, а не «единицы»: перевод в единицы (средний = 3, большой = 5) делает СЕРВЕР, чтобы
+   * курс не пересчитывался в двух местах по-разному. */
+  luggageMediumCount: number
+  luggageLargeCount: number
+  /** Нестандартный багаж свободным текстом; в единицы не переводится. */
+  luggageOther: string
+  /** ПОЖЕЛАНИЕ, а не бронь класса: цену и машину согласует менеджер. `null` — «подберите сами»
+   * (в том числе когда пассажиров больше вместимости любого класса, решение 0.14). */
+  desiredVehicleClassId: number | null
+  comment: string
+  /** Ровно одна точка `From`, 0..N `Stop`, ровно одна `To`. */
+  stops: CustomTransferStopCreateModel[]
+}
+
+/**
+ * `POST api/Order/AddLine` — admin adds a line to an existing order.
+ *
+ * Батч «Трансферы + формат» (2026-08-29): те же поля выбора, что и у брони с сайта — админская
+ * строка считается по тому же правилу (`OrderLinePricing`) и проходит ту же проверку мест, иначе
+ * групповой выезд можно было бы перебронировать из админки. Кастовая заявка этим эндпоинтом НЕ
+ * создаётся: у неё нет продукта (`api/Order/CreateTransferRequest`).
+ */
 export interface OrderLineCreateModel {
   orderId: number
   tourId: number
@@ -266,6 +433,29 @@ export interface OrderLineCreateModel {
   guestCount: number
   requiresPrepayment: boolean
   prepaymentAmount: number
+
+  /** `"HH:mm:ss"` (`TimeOnly` на бэке — приводит `shared/booking/startTime.ts`).
+   *  - тур/экскурсия: ОДНО из `TourInfoModel.startTimes` продукта, своё значение бэк отбивает
+   *    `InvalidStartTimeSelection`/2045; при групповом формате обязательно (по нему считается
+   *    остаток мест);
+   *  - трансфер: свободное время подачи, обязательно (2045). */
+  startTime?: string | null
+  /** `TourFormat` — обязателен, только когда у продукта `format === Both`; иначе бэк значение
+   * игнорирует и формат продукта не переопределяется. `null` при `Both` — 400
+   * (`OrderLineFormatRequired`/2046). */
+  format?: TourFormat | null
+
+  /** Обратный рейс — только у трансфера; у тура/экскурсии бэк поля не сохраняет. Дата и время
+   * обязательны при `true` и не могут быть раньше самой поездки (`InvalidReturnTrip`/2058). */
+  isRoundTrip?: boolean
+  /** `YYYY-MM-DD`. */
+  returnDate?: string | null
+  /** `"HH:mm:ss"`. */
+  returnTime?: string | null
+
+  /** Класс авто из цен трансфера (`TourInfoModel.transferPrices`). Обязателен у трансфера
+   * (`VehicleClassNotAvailable`/2047); гостей больше вместимости класса — 2049. */
+  vehicleClassId?: number | null
 }
 
 /** `PUT api/Order/UpdateLine` — admin edits one line's prepayment, and nothing else. «Детали для
@@ -275,6 +465,14 @@ export interface OrderLineUpdateModel {
   id: number
   requiresPrepayment: boolean
   prepaymentAmount: number
+  /** Цена, которую менеджер согласовал по кастомной заявке (решение 0.11 — заявка приходит с
+   * нулём). `null`/опущено — «не трогать сумму»; ноль — осмысленное «пока не согласована»,
+   * поэтому поле nullable, а не 0.
+   *
+   * Работает ТОЛЬКО на строке-заявке (`lineKind === CustomTransfer`). На строке по продукту сумма
+   * — снапшот расчёта (ADR 019), и сервер отбивает попытку переписать её руками (400,
+   * `OrderNotEditable`/2021), а не игнорирует молча. */
+  lineTotal?: number | null
 }
 
 /** `PATCH api/Order/SetStatus` — replaces the old Confirm/Cancel pair (ADR 019, 7 statuses). Any
@@ -378,10 +576,30 @@ export interface OrderPaymentCreateModel {
 /*  Closure rules                                                              */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Область действия правила закрытия. Три взаимоисключающих варианта (решение 0.27 батча
+ * `checklist-transfers-format-2026-08-29`), и бэк отбивает попытку задать первые два разом
+ * (`InvalidClosureRule`/2017):
+ *  - `tourId` задан → правило про ОДИН продукт;
+ *  - `tourType` задан → правило про ВСЕ продукты этого типа, включая заведённые ПОЗЖЕ;
+ *  - оба `null` → глобальное правило.
+ *
+ * Тип продукта здесь `number`, а не импорт `TourType` из `features/admin/lib/enums.ts`:
+ * `shared` не может зависеть от `features` — ровно та же причина и тот же приём, что у
+ * `CustomTransferStopInfoModel.kind` выше. Значения: 1 = тур, 2 = экскурсия, 3 = трансфер.
+ */
+export interface ClosureRuleScope {
+  tourId: number | null
+  tourType: number | null
+}
+
 export interface ClosureRuleInfoModel {
   id: number
   /** `null` = global rule, applying to every tour. */
   tourId: number | null
+  /** `TourType` (1/2/3) или `null` — см. `ClosureRuleScope`. Правила, созданные до батча
+   * 2026-08-29, всегда приходят с `null` и работают как работали. */
+  tourType: number | null
   type: ClosureRuleType
   action: ClosureAction
   /** Set iff `type === SpecificDate`. */
@@ -403,6 +621,8 @@ export interface ClosureRuleInfoModel {
 /** One element of the `POST api/Availability/CreateRules` list payload. */
 export interface ClosureRuleCreateModel {
   tourId: number | null
+  /** См. `ClosureRuleScope`. Отправлять вместе с непустым `tourId` нельзя — 400. */
+  tourType?: number | null
   type: ClosureRuleType
   action: ClosureAction
   date?: string | null
@@ -432,6 +652,13 @@ export interface CalendarDayModel {
    * указывалась. Только для глобального закрытия. */
   closureReason: string | null
   closedTourIds: number[]
+  /** Типы продукта, закрытые в этот день правилом области «весь тип» (`ClosureRuleScope`),
+   * когда день НЕ закрыт глобально. Значения — `TourType` (1/2/3), см. `ClosureRuleScope` о том,
+   * почему это `number`, а не импортированный enum.
+   *
+   * Отдельный список, а НЕ развёрнутый в `closedTourIds`: правило адресует категорию, и продукт,
+   * заведённый завтра, тоже попадёт под него — перечисление сегодняшних id было бы враньём. */
+  closedTourTypes: number[]
   /** Sum over `ordersByTour`. Rejected orders are excluded server-side (`OrderCalendarInfo`). */
   totalOrders: number
   ordersByTour: CalendarDayTourOrdersModel[]
@@ -442,4 +669,41 @@ export interface CalendarMonthModel {
   /** 1–12, as the backend sends it. `Date`'s month is 0-based — convert at the boundary. */
   month: number
   days: CalendarDayModel[]
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Остаток мест группового формата                                            */
+/* -------------------------------------------------------------------------- */
+
+/** Занятость ОДНОГО выезда — пары (дата + время старта). Приходит только для слотов, на
+ * которых уже что-то забронировано. */
+export interface TourGroupSeatsSlotModel {
+  /** `YYYY-MM-DD`. */
+  date: string
+  /** `"HH:mm:ss"` — к каноничному `HH:mm` приводит `shared/booking/startTime.ts`. */
+  startTime: string
+  /** Сумма гостей по строкам заказов на этом слоте во всех статусах, кроме отклонённого. */
+  bookedSeats: number
+  seatsLeft: number
+}
+
+/**
+ * `GET api/Availability/GetGroupSeats?tourId=&from=&to=` — остаток мест группового формата
+ * (решения 0.19/0.20 чек-листа 2026-08-29). Публичный эндпоинт, как и `GetClosedDates`: блок
+ * брони обязан гасить недоступные слоты ещё до логина.
+ *
+ * `slots` содержит ТОЛЬКО слоты С БРОНЯМИ. Отсутствие даты в списке означает «занято 0,
+ * свободно `capacity`», а не «такого выезда нет»: гонять по проводу сетку «90 дней × все
+ * времена старта» из одних нулей незачем.
+ *
+ * У индивидуального формата (а также у скрытого/несуществующего продукта) `capacity` = 0 и
+ * `slots` пуст — ограничителя по местам у него не существует вовсе.
+ */
+export interface TourGroupSeatsModel {
+  tourId: number
+  /** `TourFormat` продукта; `null` у продуктов, созданных до батча. */
+  format: TourFormat | null
+  /** `Tour.GroupCapacity` — «мест на выезд», ОДНО число на весь продукт. */
+  capacity: number
+  slots: TourGroupSeatsSlotModel[]
 }

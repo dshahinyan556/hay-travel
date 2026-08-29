@@ -6,7 +6,14 @@ import {
   NotificationRecipientType,
   OrderLinkedRecipient,
 } from '@/features/admin/types/notifications'
-import { EmployeeJobRole, LanguageCode, TagColor, TourType } from './enums'
+import {
+  EmployeeJobRole,
+  LanguageCode,
+  TagColor,
+  TourFormat,
+  TourType,
+  TransferRoutePointKind,
+} from './enums'
 
 /**
  * Interface labels for the wire enums.
@@ -25,7 +32,21 @@ export const adminEnumsCopy = defineCopy(
     tourType: {
       [TourType.Tour]: 'Тур',
       [TourType.Excursion]: 'Экскурсия',
+      [TourType.Transfer]: 'Трансфер',
     } as Record<TourType, string>,
+    tourFormat: {
+      [TourFormat.Individual]: 'Индивидуальный',
+      [TourFormat.Group]: 'Групповой',
+      [TourFormat.Both]: 'Оба',
+    } as Record<TourFormat, string>,
+    /** Роль точки в маршруте — и у предопределённого трансфера, и в кастомной заявке. Форма
+     * продукта пишет свои («Откуда»/«Куда» как заголовки полей), эти — для ЧТЕНИЯ уже собранного
+     * маршрута, где все три вида идут одним списком. */
+    transferRoutePointKind: {
+      [TransferRoutePointKind.From]: 'Откуда',
+      [TransferRoutePointKind.Stop]: 'Остановка',
+      [TransferRoutePointKind.To]: 'Куда',
+    } as Record<TransferRoutePointKind, string>,
     tagColor: {
       [TagColor.Gold]: 'Золотой',
       [TagColor.Wine]: 'Бордовый',
@@ -76,7 +97,18 @@ export const adminEnumsCopy = defineCopy(
     tourType: {
       [TourType.Tour]: 'Tour',
       [TourType.Excursion]: 'Excursion',
+      [TourType.Transfer]: 'Transfer',
     } as Record<TourType, string>,
+    tourFormat: {
+      [TourFormat.Individual]: 'Individual',
+      [TourFormat.Group]: 'Group',
+      [TourFormat.Both]: 'Both',
+    } as Record<TourFormat, string>,
+    transferRoutePointKind: {
+      [TransferRoutePointKind.From]: 'From',
+      [TransferRoutePointKind.Stop]: 'Stop',
+      [TransferRoutePointKind.To]: 'To',
+    } as Record<TransferRoutePointKind, string>,
     tagColor: {
       [TagColor.Gold]: 'Gold',
       [TagColor.Wine]: 'Wine',

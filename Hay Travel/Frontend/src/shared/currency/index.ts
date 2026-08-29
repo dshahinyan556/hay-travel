@@ -25,6 +25,7 @@ export {
   amdFromCurrency,
   amountInCurrency,
   applyGroupTier,
+  applyPerPersonPrice,
   convertFromAmd,
   priceInCurrency,
   resolveTier,

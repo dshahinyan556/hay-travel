@@ -29,10 +29,14 @@ namespace ATTours.Common.Authorization
         public const string CatalogNoteTemplates = "catalog.note-templates";
         public const string CatalogRegions = "catalog.regions";
         public const string CatalogTags = "catalog.tags";
+        // Классы авто для трансферов (батч 2026-08-29, решение 0.7). Отдельного пункта меню
+        // у трансферов нет (решение 0.3) — это вкладка в Справочниках, как теги.
+        public const string CatalogVehicleClasses = "catalog.vehicle-classes";
         public const string Users = "users";
         public const string Roles = "roles";
         public const string Notifications = "notifications";
         public const string Settings = "settings";
+        public const string Jobs = "jobs";
 
         private static readonly IReadOnlyList<PermissionAction> ViewOnly =
             [PermissionAction.View];
@@ -63,6 +67,9 @@ namespace ATTours.Common.Authorization
             // Набор регионов фиксирован сидом — редактируется только тизер.
             new(CatalogRegions, "Каталог: регионы", ViewUpdate),
             new(CatalogTags, "Каталог: теги", FullCrud),
+            // Новый экран без строк в RolePermission виден только SuperAdmin (deny by default,
+            // §5) — миграция прав не нужна, доступ раздаётся с экрана «Роли и права».
+            new(CatalogVehicleClasses, "Классы авто", FullCrud),
             // Create нет: пользователи регистрируются сами.
             new(Users, "Пользователи", ViewUpdateDelete),
             // Управление самой системой ролей/прав — теперь обычный гейтируемый экран, а не
@@ -72,7 +79,12 @@ namespace ATTours.Common.Authorization
             // Набор шаблонов писем фиксирован кодом (4 action-key) — Create/Delete не нужны.
             new(Notifications, "Настройки уведомлений", ViewUpdate),
             // Набор ключей настроек фиксирован каталогом в коде (ADR 002).
-            new(Settings, "Настройки сайта", ViewUpdate)
+            new(Settings, "Настройки сайта", ViewUpdate),
+            // Набор фоновых задач фиксирован BackgroundJobCatalog — Create/Delete не нужны.
+            // Update покрывает и рубильник, и расписание, и «Запустить сейчас»: все трое
+            // меняют поведение планировщика, отдельного действия под ручной запуск в
+            // PermissionAction нет (и заводить его ради одной кнопки незачем).
+            new(Jobs, "Фоновые задачи", ViewUpdate)
         ];
 
         // Инициализируется после All (статические поля выполняются в текстовом порядке).

@@ -16,6 +16,12 @@ namespace ATTours.Common.DTO.Info
     {
         public int Id { get; set; }
         public TourType Type { get; set; }
+        // Бейдж формата на карточке (решение 0.16). null у трансфера — карточка трансфера
+        // в общий каталог не попадает, но в «Избранном» на главной трансферы есть.
+        public TourFormat? Format { get; set; }
+        // Групповой формат: цена за человека — то, что карточка показывает вместо TotalPrice
+        // (без тирной наценки). null у индивидуального формата.
+        public decimal? GroupPricePerPerson { get; set; }
         public decimal? TotalPrice { get; set; }
         // Резолвнутая цена со скидкой (Фаза 3) — null, если активной скидки нет.
         // TotalPrice остаётся «старой» ценой для зачёркнутого отображения.

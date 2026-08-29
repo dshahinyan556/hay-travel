@@ -9,7 +9,7 @@
  * `features/admin/lib/tourMapper.ts`. Components never touch the wire format.
  */
 
-import type { TourType } from '@/features/admin/lib/enums'
+import type { TourFormat, TourType, TransferRoutePointKind } from '@/features/admin/lib/enums'
 import type { Localized } from '@/features/admin/types/localized'
 import type { ImageListItem } from '@/features/admin/ui/ImageListEditor'
 
@@ -82,6 +82,38 @@ export interface TourDayFormState {
   autofilledImageKeys: Record<string, string[]>
 }
 
+/** One predefined start time of the product (батч 2026-08-29). `time` is the browser's own
+ * `<input type="time">` value — `'HH:mm'`, or `''` while the row is half-filled. The wire format
+ * is `'HH:mm:ss'`; the two are converted in `tourMapper` only. A transfer has no start times at
+ * all (its departure time is picked by the client when booking), a tour/excursion needs at least
+ * one. Order is derived from array index, but the list is kept chronological — see the
+ * `sortStartTimes` action in the reducer. */
+export interface StartTimeFormState {
+  key: string
+  serverId?: number
+  time: string
+}
+
+/** One route point of a TRANSFER's route. Unlike a day's `RoutePointFormState` it carries no
+ * `placeId`: the Place catalog only *suggests* text here, it is never hard-linked (решение 0.8).
+ * `kind` is structural, not editable — `From`/`To` live in their own single-valued fields on the
+ * form state, so only `Stop` rows ever appear in a list. */
+export interface TransferRoutePointFormState extends LocalizedListItem {
+  kind: TransferRoutePointKind
+}
+
+/** One row of the transfer's price table: a vehicle class from the catalog plus its two prices.
+ * `roundTripPrice` is an independent number, NOT `oneWayPrice * 2` (решение 0.6). Both prices are
+ * kept as strings while in the inputs, like every other price in this form.
+ * `vehicleClassId === null` = the row was just added and no class is picked yet. */
+export interface TransferPriceFormState {
+  key: string
+  serverId?: number
+  vehicleClassId: number | null
+  oneWayPrice: string
+  roundTripPrice: string
+}
+
 /** Existing catalog entries offered as autocomplete while typing route points, organizational
  * details, restrictions, included/not-included items and additional expenses — loader-provided
  * reference data, not part of the form's own state (nothing here is submitted). */
@@ -115,6 +147,29 @@ export interface TourTagFormState {
 /** The whole create/edit form. */
 export interface TourFormState {
   type: TourType
+  /** Формат проведения (батч 2026-08-29). Обязателен у тура/экскурсии, ВСЕГДА `null` у
+   * трансфера — там поля просто нет. `Individual` = текущее поведение цены (фикс за группу +
+   * тирная наценка), `Group` = цена за человека × гости, `Both` = клиент выбирает при брони. */
+  format: TourFormat | null
+  /** Цена за ОДНОГО человека при групповом формате. Строковый ввод, как остальные цены формы.
+   * Обязательна при `format` Group/Both; при Individual и у трансфера уходит на бэк как `null`
+   * (иначе `InvalidGroupPricing`/2051). */
+  groupPricePerPerson: string
+  /** Мест на выезд при групповом формате — одно число на весь продукт; остаток считается по паре
+   * (дата + время старта). Тот же контракт «обязательно при Group/Both, иначе null». */
+  groupCapacity: string
+  /** Предопределённые времена начала. Минимум одно у тура/экскурсии, пусто у трансфера. */
+  startTimes: StartTimeFormState[]
+  /** Маршрут трансфера — «откуда». Ровно одна точка, поэтому это поле, а не список: инвариант
+   * «ровно одна From и ровно одна To» держится структурой состояния, а не проверкой. Пусто
+   * (но присутствует) у тура/экскурсии — мэппер его туда не отправляет. */
+  transferFrom: TransferRoutePointFormState
+  /** Промежуточные остановки трансфера — 0..N, порядок задаётся перетаскиванием. */
+  transferStops: TransferRoutePointFormState[]
+  /** Маршрут трансфера — «куда». См. `transferFrom`. */
+  transferTo: TransferRoutePointFormState
+  /** Цены трансфера по классам авто: минимум одна строка, класс не повторяется. */
+  transferPrices: TransferPriceFormState[]
   mainImageUrl: string
   isActive: boolean
   /** Показывать ли блок предоплаты на публичной странице тура (B12, 2026-08-13). В отличие

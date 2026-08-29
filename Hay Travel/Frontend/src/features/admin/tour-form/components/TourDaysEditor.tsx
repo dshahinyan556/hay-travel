@@ -21,6 +21,10 @@ interface TourDaysEditorProps {
   /** Day-count error (a Tour needs at least two days). */
   daysError?: string
   actions: TourFormActions
+  /** `false` при формате «Групповой» — цена дня прячется вместе с «Ценой за группу», которую она
+   * и составляет (решение 0.26; подробности — в доккомментарии `TourDayFields`).
+   * @default true */
+  showDayPrice?: boolean
   /** Existing route-point catalog entries offered as autocomplete. */
   routePointSuggestions: Localized[]
   /** Place catalog entries a route point can be hard-linked to (F13 gap closure). */
@@ -49,6 +53,7 @@ export function TourDaysEditor({
   dayRoutePointErrors,
   daysError,
   actions,
+  showDayPrice = true,
   routePointSuggestions,
   placeOptions,
   daySources,
@@ -76,6 +81,7 @@ export function TourDaysEditor({
               priceError={dayPriceErrors[day.key]}
               routePointError={dayRoutePointErrors[day.key]}
               actions={actions}
+              showPrice={showDayPrice}
               routePointSuggestions={routePointSuggestions}
               placeOptions={placeOptions}
               daySources={daySources}

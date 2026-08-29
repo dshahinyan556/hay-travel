@@ -63,5 +63,15 @@ namespace ATTours.DataLayer
         public DbSet<EmailTemplate> EmailTemplates { get; set; }
         public DbSet<NotificationChannel> NotificationChannels { get; set; }
         public DbSet<NotificationRecipient> NotificationRecipients { get; set; }
+        public DbSet<ScheduledJob> ScheduledJobs { get; set; }
+        public DbSet<ScheduledJobRun> ScheduledJobRuns { get; set; }
+        public DbSet<TourStartTime> TourStartTimes { get; set; }
+        public DbSet<VehicleClass> VehicleClasses { get; set; }
+        public DbSet<VehicleClassTranslation> VehicleClassTranslations { get; set; }
+        public DbSet<TransferRoutePoint> TransferRoutePoints { get; set; }
+        public DbSet<TransferRoutePointTranslation> TransferRoutePointTranslations { get; set; }
+        public DbSet<TransferPrice> TransferPrices { get; set; }
+        public DbSet<CustomTransferDetails> CustomTransferDetails { get; set; }
+        public DbSet<CustomTransferStop> CustomTransferStops { get; set; }
     }
 }

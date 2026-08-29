@@ -16,7 +16,7 @@ import {
   deleteClosureRules,
   getClosureRules,
 } from '@/features/admin/api/adminAvailability'
-import type { ClosureRuleCreateModel } from '@/shared/types/booking'
+import type { ClosureRuleCreateModel, ClosureRuleScope } from '@/shared/types/booking'
 import { CalendarToolbar } from './components/CalendarToolbar'
 import { CalendarMonthGrid } from './components/CalendarMonthGrid'
 import { DayDetailPanel } from './components/DayDetailPanel'
@@ -116,6 +116,12 @@ export function CalendarPage() {
   )
 
   const tourTitle = useMemo(() => tourTitleResolver(tours, locale, copy), [tours, locale, copy])
+  /** `TourType` продукта по id — нужен планировщику закрытий (`planDayToggle`), чтобы правила
+   * области «весь тип» участвовали в базовом состоянии продукта, как на сервере. */
+  const tourTypeById = useMemo(
+    () => new Map(tours.map((tour) => [tour.id, tour.type])),
+    [tours],
+  )
   const days = useMemo(
     () => buildCalendarGrid(view.year, view.month, data?.calendar ?? null, now),
     [view.year, view.month, data, now],
@@ -155,15 +161,29 @@ export function CalendarPage() {
 
   async function applyDayToggle(
     dateISO: string,
-    tourIds: (number | null)[],
+    targets: ClosureRuleScope[],
     close: boolean,
     reason: string | null,
   ) {
     if (pending) return
-    // Мультивыбор (B12, 2026-08-13): каждый tourId планируется отдельно (собственный
+    // Мультивыбор (B12, 2026-08-13): каждая цель планируется отдельно (собственный
     // deleteIds/create), планы сливаются в один batch — иначе N параллельных applyDayToggle
-    // гонялись бы за одним и тем же pending-флагом.
-    const plans = tourIds.map((tourId) => planDayToggle(rules, dateISO, tourId, close, reason))
+    // гонялись бы за одним и тем же pending-флагом. Цель — продукт, тип продукта или весь день
+    // (решение 0.27); планировщику разница видна только через `ClosureRuleScope`.
+    //
+    // Тип продукта подставляется ЗДЕСЬ, а не в панели дня: список продуктов живёт на этой
+    // странице, а планировщику он нужен, чтобы считать базовое состояние так же, как сервер —
+    // с учётом правил области «весь тип» (см. `planDayToggle`).
+    const plans = targets.map((scope) =>
+      planDayToggle(
+        rules,
+        dateISO,
+        scope,
+        close,
+        reason,
+        scope.tourId === null ? null : (tourTypeById.get(scope.tourId) ?? null),
+      ),
+    )
     const plan = {
       deleteIds: plans.flatMap((p) => p.deleteIds),
       create: plans.flatMap((p) => p.create),
@@ -306,6 +326,17 @@ export function CalendarPage() {
               <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-neutral-900" />
               {copy.legendPartial}
             </li>
+            {/* Закрытие целого типа продукта (решение 0.27) — тот же угол клетки, но кольцо, а не
+                заливка: «закрыты трансферы» и «закрыт вот этот тур» не должны выглядеть одинаково,
+                а места на слово в 55px-клетке нет. Что именно закрыто, клетка проговаривает в
+                aria-label/title. */}
+            <li className="flex items-center gap-1.5">
+              <span
+                aria-hidden="true"
+                className="h-2 w-2 rounded-full border-[1.5px] border-neutral-900 bg-white"
+              />
+              {copy.legendPartialTypes}
+            </li>
             <li className="flex items-center gap-1.5">
               <span
                 aria-hidden="true"
@@ -343,9 +374,9 @@ export function CalendarPage() {
         canManage={permission.canCreate && permission.canDelete}
         readOnlyHint={copy.closureReadOnlyHint}
         onClose={() => setSelectedISO(null)}
-        onToggleClosure={(tourIds, close, reason) => {
+        onToggleClosure={(targets, close, reason) => {
           if (selectedISO === null) return
-          void applyDayToggle(selectedISO, tourIds, close, reason)
+          void applyDayToggle(selectedISO, targets, close, reason)
         }}
       />
 

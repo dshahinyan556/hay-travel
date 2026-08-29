@@ -22,10 +22,12 @@ export const AdminScreen = {
   CatalogNoteTemplates: 'catalog.note-templates',
   CatalogRegions: 'catalog.regions',
   CatalogTags: 'catalog.tags',
+  CatalogVehicleClasses: 'catalog.vehicle-classes',
   Users: 'users',
   Roles: 'roles',
   Notifications: 'notifications',
   Settings: 'settings',
+  Jobs: 'jobs',
 } as const
 
 /** A key this build of the frontend knows about. Every predicate call is typed with it. */
@@ -48,10 +50,12 @@ export const ALL_SCREEN_KEYS: readonly KnownScreenKey[] = [
   AdminScreen.CatalogNoteTemplates,
   AdminScreen.CatalogRegions,
   AdminScreen.CatalogTags,
+  AdminScreen.CatalogVehicleClasses,
   AdminScreen.Users,
   AdminScreen.Roles,
   AdminScreen.Notifications,
   AdminScreen.Settings,
+  AdminScreen.Jobs,
 ]
 
 /**
@@ -106,7 +110,7 @@ export function levelAllows(level: AccessLevel, action: PermissionAction): boole
 }
 
 /**
- * The five catalog keys. `/admin/catalog` is ONE route with five independent permission keys, so
+ * The six catalog keys. `/admin/catalog` is ONE route with six independent permission keys, so
  * both its guard (`canViewAny`) and its nav entry need the group as a unit (§0.8).
  */
 export const CATALOG_SCREEN_KEYS: readonly KnownScreenKey[] = [
@@ -115,4 +119,5 @@ export const CATALOG_SCREEN_KEYS: readonly KnownScreenKey[] = [
   AdminScreen.CatalogNoteTemplates,
   AdminScreen.CatalogRegions,
   AdminScreen.CatalogTags,
+  AdminScreen.CatalogVehicleClasses,
 ]

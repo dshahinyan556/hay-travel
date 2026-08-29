@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router'
 import { REGION_BY_SLUG, type RegionSlug } from '@/shared/data/armeniaRegions'
 import { useDeferredCommit } from '@/shared/hooks'
+import { catalogBasePrice } from '@/shared/booking'
 import type { Tour, TourKind } from '@/shared/types/tour'
 
 /** Catalog sort order — `'default'` keeps the list in the order the API returned it. */
@@ -219,15 +220,19 @@ export function applyTourFilters(tours: readonly Tour[], filters: TourFilters): 
     // OR across selected regions: a multi-day tour crossing several regions matches if ANY of
     // them is picked, not all — picking more regions should only ever widen the result set.
     if (filters.region.length > 0 && !filters.region.some((slug) => tour.regionSlugs.includes(slug))) return false
-    if (filters.minPrice !== null && tour.priceFrom < filters.minPrice) return false
-    if (filters.maxPrice !== null && tour.priceFrom > filters.maxPrice) return false
+    /* Витринная цена, а не `priceFrom`: у чисто группового продукта карточка показывает цену
+       ЗА ЧЕЛОВЕКА (батч 2026-08-29), и фильтр обязан отбирать по той же цифре, которую видит
+       посетитель — иначе «до 20 000» прячет карточку с ценником 8 000. */
+    const price = catalogBasePrice(tour)
+    if (filters.minPrice !== null && price < filters.minPrice) return false
+    if (filters.maxPrice !== null && price > filters.maxPrice) return false
     if (query !== '' && !tour.title.toLowerCase().includes(query)) return false
     return true
   })
   // `.filter()` above always hands back a fresh array, so sorting it in place here never touches
   // the caller's own `tours`.
-  if (filters.sort === 'price-asc') filtered.sort((a, b) => a.priceFrom - b.priceFrom)
-  if (filters.sort === 'price-desc') filtered.sort((a, b) => b.priceFrom - a.priceFrom)
+  if (filters.sort === 'price-asc') filtered.sort((a, b) => catalogBasePrice(a) - catalogBasePrice(b))
+  if (filters.sort === 'price-desc') filtered.sort((a, b) => catalogBasePrice(b) - catalogBasePrice(a))
   return filtered
 }
 
@@ -244,7 +249,7 @@ export interface PriceRange {
 export function usePriceRange(tours: readonly Tour[]): PriceRange {
   return useMemo(() => {
     if (tours.length === 0) return { floor: 0, ceiling: 0 }
-    const prices = tours.map((t) => t.priceFrom)
+    const prices = tours.map(catalogBasePrice)
     const ceiling = Math.ceil(Math.max(...prices) / PRICE_CEILING_ALIGNMENT) * PRICE_CEILING_ALIGNMENT
     // Floor rounds down to a whole step: a range input can only land on `min + n * step`, so an
     // unaligned floor would make `max` itself unreachable — and reaching max is how the filter

@@ -1,3 +1,4 @@
+using ATTours.Common.Constants;
 using ATTours.Common.Enums;
 
 namespace ATTours.Common.Infrastructure.SiteSettings
@@ -146,6 +147,43 @@ namespace ATTours.Common.Infrastructure.SiteSettings
                     new SiteSettingOption("pill", "Плавающая капсула"),
                     new SiteSettingOption("rail", "Стеклянная лента"),
                 ]),
+
+            // ---- Booking ----
+            // sortOrder 28-31 — следующие свободные номера в конце глобальной
+            // последовательности (то же правило, что у seo.faviconUrl).
+            //
+            // За сколько часов до начала дня (по времени Армении) день перестаёт продаваться.
+            // Читают трое: фоновое автозакрытие (материализует ClosureRule для админ-календаря),
+            // валидация заказа (силовой чек, если джоба ещё не тикнула) и публичный
+            // GetClosedDates (чтобы дата-пикер гасил дату сразу). Отдельного
+            // booking.minLeadTimeHours нет намеренно: смысл тот же, два ключа с одним смыслом
+            // гарантированно разъехались бы.
+            //
+            // isPublic: false у всех четырёх — это операционные настройки, а не контент.
+            // Публичный сайт получает не сам порог, а его следствие (список закрытых дат).
+            //
+            // Ключи этих четырёх строк заданы константами, а не литералами (в отличие от
+            // контентных ключей выше): их читает код из нескольких мест, и разъехавшийся
+            // литерал означал бы молча взятый дефолт вместо настроенного порога.
+            new(SiteSettingKeys.BookingAutoCloseLeadTimeHours, SiteSettingGroup.Booking, SettingValueType.Number, isTranslatable: false, isPublic: false, sortOrder: 28,
+                defaultValue: "24"),
+
+            // ---- Jobs ----
+            // Сколько часов у неподтверждённого заказа есть до автоотмены, отсчёт от
+            // МИНИМАЛЬНОЙ даты тура в заказе. Инвариант: должно быть меньше
+            // booking.autoCloseLeadTimeHours, иначе бронь, созданная в последний разрешённый
+            // час, отменялась бы сразу; нарушение задача обязана отражать в истории
+            // прогонов (Skipped с причиной), а не работать молча.
+            new(SiteSettingKeys.OrderAutoCancelDeadlineHours, SiteSettingGroup.Jobs, SettingValueType.Number, isTranslatable: false, isPublic: false, sortOrder: 29,
+                defaultValue: "12"),
+
+            // Глубина хранения журнала входов (LoginHistory).
+            new(SiteSettingKeys.LoginHistoryRetentionDays, SiteSettingGroup.Jobs, SettingValueType.Number, isTranslatable: false, isPublic: false, sortOrder: 30,
+                defaultValue: "90"),
+
+            // Глубина хранения истории прогонов самих задач (ScheduledJobRun).
+            new(SiteSettingKeys.RunHistoryRetentionDays, SiteSettingGroup.Jobs, SettingValueType.Number, isTranslatable: false, isPublic: false, sortOrder: 31,
+                defaultValue: "90"),
         ];
 
         // Ключи сравниваются точно (Ordinal): ключ — часть контракта API,

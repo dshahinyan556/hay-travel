@@ -1,3 +1,4 @@
+using ATTours.BusinessServices.Jobs;
 using ATTours.BusinessServices.Notifications;
 using ATTours.Common.Authorization;
 using ATTours.Common.Constants;
@@ -28,6 +29,9 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
             CreateMap<Tour, TourInfoModel>()
                 .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
                 .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.Type))
+                .ForMember(dest => dest.Format, opt => opt.MapFrom(src => src.Format))
+                .ForMember(dest => dest.GroupPricePerPerson, opt => opt.MapFrom(src => src.GroupPricePerPerson))
+                .ForMember(dest => dest.GroupCapacity, opt => opt.MapFrom(src => src.GroupCapacity))
                 .ForMember(dest => dest.IsActive, opt => opt.MapFrom(src => src.IsActive))
                 .ForMember(dest => dest.IsFeatured, opt => opt.MapFrom(src => src.IsFeatured))
                 .ForMember(dest => dest.FeaturedSortOrder, opt => opt.MapFrom(src => src.FeaturedSortOrder))
@@ -50,6 +54,14 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                     opt => opt.MapFrom(src => src.TourRegions.OrderBy(tr => tr.SortOrder)))
                 .ForMember(dest => dest.Tags,
                     opt => opt.MapFrom(src => src.TourTags))
+                // Батч 2026-08-29: слоты и трансферные коллекции идут в своём SortOrder —
+                // порядок задаёт админ, сортировка по значению времени не подразумевается.
+                .ForMember(dest => dest.StartTimes,
+                    opt => opt.MapFrom(src => src.StartTimes.OrderBy(startTime => startTime.SortOrder)))
+                .ForMember(dest => dest.TransferRoutePoints,
+                    opt => opt.MapFrom(src => src.TransferRoutePoints.OrderBy(point => point.SortOrder)))
+                .ForMember(dest => dest.TransferPrices,
+                    opt => opt.MapFrom(src => src.TransferPrices))
                 // TourDays собираем из TourDetails, сохраняя порядок по SortOrder
                 .ForMember(dest => dest.TourDays, opt => opt.MapFrom(src =>
                     src.TourDetails
@@ -66,6 +78,12 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Id, opt => opt.Ignore())
                 .ForMember(dest => dest.TotalPrice, opt => opt.Ignore())
                 .ForMember(dest => dest.IsActive, opt => opt.MapFrom(src => src.IsActive))
+                .ForMember(dest => dest.Format, opt => opt.MapFrom(src => src.Format))
+                .ForMember(dest => dest.GroupPricePerPerson, opt => opt.MapFrom(src => src.GroupPricePerPerson))
+                .ForMember(dest => dest.GroupCapacity, opt => opt.MapFrom(src => src.GroupCapacity))
+                .ForMember(dest => dest.StartTimes, opt => opt.MapFrom(src => src.StartTimes))
+                .ForMember(dest => dest.TransferRoutePoints, opt => opt.MapFrom(src => src.TransferRoutePoints))
+                .ForMember(dest => dest.TransferPrices, opt => opt.MapFrom(src => src.TransferPrices))
                 .ForMember(dest => dest.RequiresPrepayment, opt => opt.MapFrom(src => src.RequiresPrepayment))
                 .ForMember(dest => dest.DiscountPercent, opt => opt.MapFrom(src => src.DiscountPercent))
                 .ForMember(dest => dest.DiscountStartDate, opt => opt.MapFrom(src => src.DiscountStartDate))
@@ -85,6 +103,14 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
             CreateMap<TourInfoModel, Tour>()
                 .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
                 .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.Type))
+                // Батч 2026-08-29: в отличие от IsActive/IsFeatured эти поля UpdateTour
+                // сохраняет — они часть формы продукта (TourUpdateService копирует их вручную).
+                .ForMember(dest => dest.Format, opt => opt.MapFrom(src => src.Format))
+                .ForMember(dest => dest.GroupPricePerPerson, opt => opt.MapFrom(src => src.GroupPricePerPerson))
+                .ForMember(dest => dest.GroupCapacity, opt => opt.MapFrom(src => src.GroupCapacity))
+                .ForMember(dest => dest.StartTimes, opt => opt.MapFrom(src => src.StartTimes))
+                .ForMember(dest => dest.TransferRoutePoints, opt => opt.MapFrom(src => src.TransferRoutePoints))
+                .ForMember(dest => dest.TransferPrices, opt => opt.MapFrom(src => src.TransferPrices))
                 .ForMember(dest => dest.MainImageUrl, opt => opt.MapFrom(src => src.MainImageUrl))
                 .ForMember(dest => dest.TotalPrice, opt => opt.Ignore())
                 .ForMember(dest => dest.IsActive, opt => opt.Ignore())
@@ -109,6 +135,10 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
             CreateMap<Tour, TourCardModel>()
                 .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
                 .ForMember(dest => dest.Type, opt => opt.MapFrom(src => src.Type))
+                // Бейдж формата и цена за человека — карточка группового продукта считает
+                // цену как GroupPricePerPerson x гости, без тирной наценки (решение 0.18).
+                .ForMember(dest => dest.Format, opt => opt.MapFrom(src => src.Format))
+                .ForMember(dest => dest.GroupPricePerPerson, opt => opt.MapFrom(src => src.GroupPricePerPerson))
                 .ForMember(dest => dest.TotalPrice, opt => opt.MapFrom(src => src.TotalPrice))
                 .ForMember(dest => dest.DiscountedPrice, opt => opt.Ignore())
                 // Границы показываем только у РЕАЛЬНО активной сегодня скидки: будущая акция
@@ -329,6 +359,44 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.UserEmail, opt => opt.Ignore())
                 .AfterMap((src, dest) => ApplyNotificationRecipientDenormalizedFields(src, dest));
 
+            // ============= Mappings for BACKGROUND JOBS =============
+            // Экран «Джобы». Сшивку «каталог + строка состояния + последний прогон» делает
+            // ScheduledJobInfo (ScheduledJobView), маппер только разворачивает её в DTO —
+            // включая метаданные каталога, которых в БД нет (то же осознанное исключение,
+            // что у SiteSetting: каталог статичен, без DI и без состояния).
+
+            CreateMap<ScheduledJobRun, ScheduledJobRunInfoModel>();
+
+            // Параметр задачи с текущим значением: значения едут вместе с задачей, чтобы
+            // экран правил их прямо на карточке, не спрашивая api/SiteSettings (тот закрыт
+            // правом settings:View, которого у роли «джобы» может не быть).
+            CreateMap<ScheduledJobParameterView, JobParameterInfoModel>()
+                .ForMember(dest => dest.Key, opt => opt.MapFrom(src => src.Definition.Key))
+                .ForMember(dest => dest.ValueType, opt => opt.MapFrom(src => src.Definition.ValueType))
+                .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value))
+                // Человекочитаемой подписи у ключа настройки в каталоге нет
+                // (SiteSettingDefinition её не объявляет), поэтому поле остаётся null.
+                // Сочинять текст здесь нельзя: он разъехался бы с подписями экрана
+                // «Настройки сайта», где те же ключи рисует фронт.
+                .ForMember(dest => dest.DisplayName, opt => opt.Ignore());
+
+            CreateMap<ScheduledJobView, ScheduledJobInfoModel>()
+                .ForMember(dest => dest.Key, opt => opt.MapFrom(src => src.Definition.Key))
+                .ForMember(dest => dest.DisplayName, opt => opt.MapFrom(src => src.Definition.DisplayName))
+                .ForMember(dest => dest.DefaultCronExpression, opt => opt.MapFrom(src => src.Definition.DefaultCronExpression))
+                .ForMember(dest => dest.Parameters, opt => opt.MapFrom(src => src.Parameters))
+                // Эффективное расписание считает сам view: то же правило «override, иначе
+                // дефолт», по которому работает планировщик.
+                .ForMember(dest => dest.CronExpression, opt => opt.MapFrom(src => src.EffectiveCronExpression))
+                // Нет строки реестра (задача добавлена в каталог, но приложение ещё не
+                // перезапускалось) — показываем дефолт каталога, а не «выключена».
+                .ForMember(dest => dest.IsEnabled,
+                    opt => opt.MapFrom(src => src.State != null ? src.State.IsEnabled : src.Definition.EnabledByDefault))
+                .ForMember(dest => dest.UpdatedAtUtc, opt => opt.MapFrom(src => src.State != null ? src.State.UpdatedAtUtc : null))
+                .ForMember(dest => dest.IsRunning, opt => opt.MapFrom(src => src.IsRunning))
+                .ForMember(dest => dest.NextRunAtUtc, opt => opt.MapFrom(src => src.NextRunAtUtc))
+                .ForMember(dest => dest.LastRun, opt => opt.MapFrom(src => src.LastRun));
+
             // ============= Mappings for REGION =============
 
             // Region -> RegionInfoModel. TourCount не заполняется здесь: он приходит
@@ -420,6 +488,155 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Tour, opt => opt.Ignore())
                 .ForMember(dest => dest.Tag, opt => opt.Ignore())
                 .ForMember(dest => dest.TagId, opt => opt.MapFrom(src => src.TagId));
+
+            // ============= Mappings for TOURSTARTTIME =============
+            // Предопределённые времена начала продукта (батч 2026-08-29). Id сохраняется на
+            // обновлении — TourUpdateService сверяет коллекцию по Id, как остальные части графа.
+
+            CreateMap<TourStartTime, TourStartTimeInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.Time, opt => opt.MapFrom(src => src.Time))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder));
+
+            CreateMap<TourStartTimeCreateModel, TourStartTime>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.TourId, opt => opt.Ignore())
+                .ForMember(dest => dest.Tour, opt => opt.Ignore())
+                .ForMember(dest => dest.Time, opt => opt.MapFrom(src => src.Time))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder));
+
+            CreateMap<TourStartTimeInfoModel, TourStartTime>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.TourId, opt => opt.Ignore())
+                .ForMember(dest => dest.Tour, opt => opt.Ignore())
+                .ForMember(dest => dest.Time, opt => opt.MapFrom(src => src.Time))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder));
+
+            // ============= Mappings for TRANSFER (маршрут и цены) =============
+            // Только для TourType.Transfer. Точка маршрута — своя сущность, не RoutePoint:
+            // она висит на продукте и несёт роль (откуда/стоп/куда), а ссылки на каталог
+            // Place у неё нет (решение 0.8 — каталог тут только подсказка на фронте).
+
+            CreateMap<TransferRoutePoint, TransferRoutePointInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.Kind, opt => opt.MapFrom(src => src.Kind))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+
+            CreateMap<TransferRoutePointCreateModel, TransferRoutePoint>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.TourId, opt => opt.Ignore())
+                .ForMember(dest => dest.Tour, opt => opt.Ignore())
+                .ForMember(dest => dest.Kind, opt => opt.MapFrom(src => src.Kind))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+
+            CreateMap<TransferRoutePointInfoModel, TransferRoutePoint>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.TourId, opt => opt.Ignore())
+                .ForMember(dest => dest.Tour, opt => opt.Ignore())
+                .ForMember(dest => dest.Kind, opt => opt.MapFrom(src => src.Kind))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+
+            // Плоская проекция FK на класс авто (как TourTag): название/вместимость админка
+            // резолвит через api/VehicleClass.
+            CreateMap<TransferPrice, TransferPriceInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.VehicleClassId, opt => opt.MapFrom(src => src.VehicleClassId))
+                .ForMember(dest => dest.OneWayPrice, opt => opt.MapFrom(src => src.OneWayPrice))
+                .ForMember(dest => dest.RoundTripPrice, opt => opt.MapFrom(src => src.RoundTripPrice));
+
+            CreateMap<TransferPriceCreateModel, TransferPrice>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.TourId, opt => opt.Ignore())
+                .ForMember(dest => dest.Tour, opt => opt.Ignore())
+                .ForMember(dest => dest.VehicleClass, opt => opt.Ignore())
+                .ForMember(dest => dest.VehicleClassId, opt => opt.MapFrom(src => src.VehicleClassId))
+                .ForMember(dest => dest.OneWayPrice, opt => opt.MapFrom(src => src.OneWayPrice))
+                .ForMember(dest => dest.RoundTripPrice, opt => opt.MapFrom(src => src.RoundTripPrice));
+
+            CreateMap<TransferPriceInfoModel, TransferPrice>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.TourId, opt => opt.Ignore())
+                .ForMember(dest => dest.Tour, opt => opt.Ignore())
+                .ForMember(dest => dest.VehicleClass, opt => opt.Ignore())
+                .ForMember(dest => dest.VehicleClassId, opt => opt.MapFrom(src => src.VehicleClassId))
+                .ForMember(dest => dest.OneWayPrice, opt => opt.MapFrom(src => src.OneWayPrice))
+                .ForMember(dest => dest.RoundTripPrice, opt => opt.MapFrom(src => src.RoundTripPrice));
+
+            // ---- Публичные модели трансфера (/transfers, /transfers/:id) ----
+            // Класс авто здесь развёрнут прямо в строку цены: публичная таблица «класс -> две
+            // цены» иначе потребовала бы второго запроса к справочнику ради названий.
+            // Переводы к этому моменту уже сведены к одной локали (ExtractTransferWithNeededLanguage),
+            // поэтому FirstOrDefault по названию однозначен; пустая строка — честное «нет перевода».
+            CreateMap<TransferPrice, TransferPriceClientModel>()
+                .ForMember(dest => dest.VehicleClassId, opt => opt.MapFrom(src => src.VehicleClassId))
+                .ForMember(dest => dest.VehicleClassName, opt => opt.MapFrom(src =>
+                    src.VehicleClass.Translations.Select(translation => translation.Value).FirstOrDefault() ?? string.Empty))
+                .ForMember(dest => dest.Capacity, opt => opt.MapFrom(src => src.VehicleClass.Capacity))
+                .ForMember(dest => dest.LuggageCapacity, opt => opt.MapFrom(src => src.VehicleClass.LuggageCapacity))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.VehicleClass.SortOrder))
+                .ForMember(dest => dest.OneWayPrice, opt => opt.MapFrom(src => src.OneWayPrice))
+                .ForMember(dest => dest.RoundTripPrice, opt => opt.MapFrom(src => src.RoundTripPrice));
+
+            CreateMap<Tour, TransferCardModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.MainImageUrl, opt => opt.MapFrom(src => src.MainImageUrl))
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations))
+                .ForMember(dest => dest.RoutePoints,
+                    opt => opt.MapFrom(src => src.TransferRoutePoints.OrderBy(point => point.SortOrder)))
+                // Цена «от» — минимум среди цен в одну сторону, только по АКТИВНЫМ классам
+                // авто (скрытый класс не продаётся, но остаётся в ценах трансфера).
+                // null, если активных строк цен нет — валидация такого не пропускает, но
+                // публичное чтение не должно падать на данных, испорченных руками в БД.
+                .ForMember(dest => dest.MinOneWayPrice, opt => opt.MapFrom(src =>
+                    src.TransferPrices.Any(price => price.VehicleClass.IsActive)
+                        ? src.TransferPrices.Where(price => price.VehicleClass.IsActive).Min(price => price.OneWayPrice)
+                        : (decimal?)null));
+
+            CreateMap<Tour, TransferInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.MainImageUrl, opt => opt.MapFrom(src => src.MainImageUrl))
+                .ForMember(dest => dest.RequiresPrepayment, opt => opt.MapFrom(src => src.RequiresPrepayment))
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations))
+                .ForMember(dest => dest.RoutePoints,
+                    opt => opt.MapFrom(src => src.TransferRoutePoints.OrderBy(point => point.SortOrder)))
+                // Скрытый класс авто (IsActive == false) в публичную таблицу не попадает:
+                // его нельзя выбрать при бронировании, значит и цену показывать незачем.
+                .ForMember(dest => dest.Prices,
+                    opt => opt.MapFrom(src => src.TransferPrices
+                        .Where(price => price.VehicleClass.IsActive)
+                        .OrderBy(price => price.VehicleClass.SortOrder)));
+
+            // ============= Mappings for VEHICLECLASS =============
+            // Справочник классов авто (решение 0.7) — та же структура, что у каталога тегов.
+
+            CreateMap<VehicleClass, VehicleClassInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.Capacity, opt => opt.MapFrom(src => src.Capacity))
+                .ForMember(dest => dest.LuggageCapacity, opt => opt.MapFrom(src => src.LuggageCapacity))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
+                .ForMember(dest => dest.IsActive, opt => opt.MapFrom(src => src.IsActive))
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+
+            CreateMap<VehicleClassCreateModel, VehicleClass>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.TransferPrices, opt => opt.Ignore())
+                .ForMember(dest => dest.Capacity, opt => opt.MapFrom(src => src.Capacity))
+                .ForMember(dest => dest.LuggageCapacity, opt => opt.MapFrom(src => src.LuggageCapacity))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
+                .ForMember(dest => dest.IsActive, opt => opt.MapFrom(src => src.IsActive))
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
+
+            CreateMap<VehicleClassInfoModel, VehicleClass>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.TransferPrices, opt => opt.Ignore())
+                .ForMember(dest => dest.Capacity, opt => opt.MapFrom(src => src.Capacity))
+                .ForMember(dest => dest.LuggageCapacity, opt => opt.MapFrom(src => src.LuggageCapacity))
+                .ForMember(dest => dest.SortOrder, opt => opt.MapFrom(src => src.SortOrder))
+                .ForMember(dest => dest.IsActive, opt => opt.MapFrom(src => src.IsActive))
+                .ForMember(dest => dest.Translations, opt => opt.MapFrom(src => src.Translations));
 
             // ============= Mappings for PLACE =============
             // Каталог точек (3.4). RegionSlug денормализуется из связанного Region (переводы
@@ -556,10 +773,26 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
             // OrderLine -> OrderLineInfoModel. TourTitle/TourMainImageUrl денормализуются так
             // же, как раньше делал Order -> OrderInfoModel (D-1, 2026-08-16 логика) — требует
             // загруженного Tour.Translations (см. OrderInfo). Employees мапится по имени.
+            //
+            // Батч 2026-08-29: слот, формат, класс авто, обратный рейс и детали кастомной
+            // заявки мапятся по имени — на строке они лежат плоско и переименований не знают.
             CreateMap<OrderLine, OrderLineInfoModel>()
                 .ForMember(dest => dest.TourTitle, opt => opt.Ignore())
                 .ForMember(dest => dest.TourMainImageUrl, opt => opt.Ignore())
                 .AfterMap((src, dest) => ApplyOrderLineDenormalizedFields(src, dest));
+
+            // Детали кастомной заявки (решения 0.12-0.14). Единицы багажа считает сервер, а
+            // не админка: правило пересчёта (средний = 3, большой = 5) живёт в одном месте.
+            CreateMap<CustomTransferDetails, CustomTransferDetailsInfoModel>()
+                .ForMember(dest => dest.LuggageUnits, opt => opt.MapFrom(src =>
+                    LuggageUnits.Resolve(src.LuggageMediumCount, src.LuggageLargeCount)))
+                .ForMember(dest => dest.DesiredVehicleClassName, opt => opt.Ignore())
+                // Маршрут читается в том порядке, в котором по нему поедут: SortOrder задал
+                // сервер при приёме заявки (From -> стопы -> To).
+                .ForMember(dest => dest.Stops, opt => opt.MapFrom(src => src.Stops.OrderBy(stop => stop.SortOrder)))
+                .AfterMap((src, dest) => ApplyCustomTransferDenormalizedFields(src, dest));
+
+            CreateMap<CustomTransferStop, CustomTransferStopInfoModel>();
 
             // OrderLineEmployee -> OrderLineEmployeeInfoModel. ФИО денормализуется из
             // загруженного Employee (см. OrderInfo) — тем же приёмом, что у строки заказа.
@@ -768,6 +1001,21 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
                 .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
 
+            // Батч 2026-08-29 — у обоих переводов своего Type нет (игнорируется).
+            CreateMap<TranslatableCreateModel, VehicleClassTranslation>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.VehicleClassId, opt => opt.Ignore())
+                .ForMember(dest => dest.VehicleClass, opt => opt.Ignore())
+                .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
+                .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
+
+            CreateMap<TranslatableCreateModel, TransferRoutePointTranslation>()
+                .ForMember(dest => dest.Id, opt => opt.Ignore())
+                .ForMember(dest => dest.TransferRoutePointId, opt => opt.Ignore())
+                .ForMember(dest => dest.TransferRoutePoint, opt => opt.Ignore())
+                .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
+                .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
+
             // ---- InfoModel -> Entity (обновление) ----
             // Id сохраняется, чтобы слой обновления сверял переводы по Id
 
@@ -840,6 +1088,20 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
                 .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
 
+            CreateMap<TranslatableInfoModel, VehicleClassTranslation>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.VehicleClassId, opt => opt.Ignore())
+                .ForMember(dest => dest.VehicleClass, opt => opt.Ignore())
+                .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
+                .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
+
+            CreateMap<TranslatableInfoModel, TransferRoutePointTranslation>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.TransferRoutePointId, opt => opt.Ignore())
+                .ForMember(dest => dest.TransferRoutePoint, opt => opt.Ignore())
+                .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
+                .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
+
             // ---- Entity -> InfoModel (чтение) ----
 
             CreateMap<AdditionalExpenseTranslation, TranslatableInfoModel>()
@@ -895,6 +1157,18 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
 
             CreateMap<TagTranslation, TranslatableInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.Type, opt => opt.MapFrom(src => 0))
+                .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
+                .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
+
+            CreateMap<VehicleClassTranslation, TranslatableInfoModel>()
+                .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
+                .ForMember(dest => dest.Type, opt => opt.MapFrom(src => 0))
+                .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
+                .ForMember(dest => dest.Value, opt => opt.MapFrom(src => src.Value));
+
+            CreateMap<TransferRoutePointTranslation, TranslatableInfoModel>()
                 .ForMember(dest => dest.Id, opt => opt.MapFrom(src => src.Id))
                 .ForMember(dest => dest.Type, opt => opt.MapFrom(src => 0))
                 .ForMember(dest => dest.LanguageCode, opt => opt.MapFrom(src => src.LanguageCode))
@@ -969,22 +1243,68 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
             if (source.Lines is null)
                 return;
 
-            destination.DiscountTotal = source.Lines.Sum(line =>
-                line.DiscountPercent is null or <= 0
-                    ? 0m
-                    : Math.Round(line.PriceSnapshot * (line.DiscountPercent.Value / 100m), 0, MidpointRounding.AwayFromZero));
+            destination.DiscountTotal = source.Lines.Sum(ResolveLineDiscount);
             destination.Total = source.Lines.Sum(line => line.LineTotal);
         }
+
+        // Сколько клиент сэкономил на строке. PriceSnapshot — БАЗОВАЯ цена: за бронь целиком
+        // у индивидуального формата и ЗА ЧЕЛОВЕКА у группового (батч 2026-08-29), поэтому у
+        // группового скидка умножается на число гостей — иначе «было / стало» в шапке заказа
+        // занижало бы экономию ровно в GuestCount раз.
+        //
+        // Тирная наценка 5-6 гостей в этой цифре по-прежнему не учитывается: она была
+        // приближением и до этого батча, а показывать «скидку с наценкой» админу вреднее,
+        // чем показывать скидку от базовой цены.
+        private static decimal ResolveLineDiscount(OrderLine line)
+        {
+            if (line.DiscountPercent is null or <= 0)
+                return 0m;
+
+            var perUnit = Math.Round(line.PriceSnapshot * (line.DiscountPercent.Value / 100m), 0,
+                MidpointRounding.AwayFromZero);
+
+            return line.Format == TourFormat.Group ? perUnit * line.GuestCount : perUnit;
+        }
+
+        // Подпись строки-заявки там, где у обычной строки стоит название продукта. Ту же
+        // строку пишет в журнал OrderEventLog: письма, PDF, грид заказа и история должны
+        // называть кастомный трансфер одинаково, а не «Тур #0» / «—» / пустотой.
+        private const string CustomTransferLineTitle = "Кастомный трансфер";
 
         // Денормализованные поля строки заказа: заголовок/обложка тура.
         // Требует загруженного Tour.Translations (см. OrderInfo).
         private static void ApplyOrderLineDenormalizedFields(OrderLine source, OrderLineInfoModel destination)
         {
+            // У заявки продукта нет вовсе — ни названия, ни обложки. Подпись ставит сервер:
+            // все читатели этой модели (PDF, письма, Telegram, админский грид) печатают
+            // TourTitle как есть, и «додумывать» её каждому по-своему нельзя.
+            if (source.LineKind == OrderLineKind.CustomTransfer)
+            {
+                destination.TourTitle = CustomTransferLineTitle;
+                return;
+            }
+
             if (source.Tour is not null)
             {
                 destination.TourMainImageUrl = source.Tour.MainImageUrl;
                 destination.TourTitle = ResolveTourTitle(source.Tour);
             }
+        }
+
+        // Название желаемого класса авто в деталях заявки. Требует загруженного
+        // DesiredVehicleClass.Translations (см. OrderInfo) — правило выбора перевода то же,
+        // что у названия тура: RU, иначе любой оставшийся.
+        private static void ApplyCustomTransferDenormalizedFields(CustomTransferDetails source,
+            CustomTransferDetailsInfoModel destination)
+        {
+            if (source.DesiredVehicleClass?.Translations is null)
+                return;
+
+            var names = source.DesiredVehicleClass.Translations.ToList();
+
+            destination.DesiredVehicleClassName =
+                names.FirstOrDefault(translation => translation.LanguageCode == LanguageCode.Russian)?.Value
+                ?? names.FirstOrDefault()?.Value;
         }
 
         // ФИО исполнителя на строке. Требует загруженного Employee (см. OrderInfo).

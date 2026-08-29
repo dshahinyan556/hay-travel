@@ -23,6 +23,10 @@ const statusTones: Record<OrderStatus, OrderStatusBadgeTone> = {
   [OrderStatus.ReadyForAssignment]: 'neutral',
   [OrderStatus.PendingPayment]: 'neutral',
   [OrderStatus.Completed]: 'strong',
+  /** Заявка без цены (батч 2026-08-29). Её строки в календарь не попадают вовсе — продукта у них
+   * нет, а `flattenOrderLines` группирует именно по туру, — но `Record<OrderStatus, …>` обязан
+   * быть полным, иначе бейдж такого заказа однажды отрисуется без стиля. */
+  [OrderStatus.Request]: 'neutral',
 }
 
 /**

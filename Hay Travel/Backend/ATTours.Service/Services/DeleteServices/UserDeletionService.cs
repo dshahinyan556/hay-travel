@@ -1,4 +1,5 @@
 using ArmeniaTours.DataLayer;
+using ATTours.BusinessServices.Services.Authorization;
 using ATTours.Common.Entities;
 using ATTours.Common.Settings;
 using ATTours.ContextRepository;
@@ -71,6 +72,10 @@ namespace ATTours.BusinessServices.Services.DeleteServices
         // фактическим состоянием строки.
         private async Task GuardAdminAccountAsync(User target, int actingUserId)
         {
+            // Раньше early-return ниже: аккаунт SuperAdmin'а закрыт для всех остальных
+            // безотносительно того, какая на нём роль (2026-08-27).
+            SuperAdminGuard.GuardSuperAdminTarget(target, actingUserId);
+
             // Удаление аккаунта без этого флага привилегий не требует — лишний запрос в БД
             // не нужен.
             if (!target.Role.CanManageAdmins)

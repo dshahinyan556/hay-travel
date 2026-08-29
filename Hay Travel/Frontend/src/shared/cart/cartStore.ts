@@ -19,11 +19,34 @@
  */
 
 import { formatISODate, stripTime } from '@/shared/lib/date'
-import { clampGuests } from '@/shared/booking'
-import type { AddCartItemInput, AddCartItemResult, CartItem, CartItemSnapshot, CartState } from './types'
+import { clampGuests, isDisplayTime } from '@/shared/booking'
+import { TourFormat } from '@/shared/types/tourFormat'
+import type {
+  AddCartItemInput,
+  AddCartItemResult,
+  CartItem,
+  CartItemSnapshot,
+  CartState,
+  CartTransferSelection,
+} from './types'
 
 export const CART_STORAGE_KEY = 'hay-travel-cart'
-export const CART_STORAGE_VERSION = 1
+/**
+ * 2 (2026-08-29) — у позиции появились обязательное время старта и формат.
+ *
+ * Версия поднята, а не «дочитана со значением по умолчанию», намеренно: подставить старой
+ * позиции произвольное время значило бы записать посетителя на выезд, который он не выбирал.
+ * Корзины, сохранённые до батча, читаются как пустые — это единственный честный вариант.
+ */
+export const CART_STORAGE_VERSION = 2
+
+/**
+ * Позиции-трансферы (2026-08-29) версию НЕ поднимают, и это осознанно: `transfer` — поле, которого
+ * у старых позиций просто нет, и его отсутствие читается как «обычная бронь» — ровно то, чем эти
+ * позиции и были. Поднять версию значило бы выбросить живые корзины ради поля, которое их не
+ * касается; версия 2 поднималась только потому, что там подставлять пришлось бы ВЫБОР посетителя
+ * (время выезда), а этого делать нельзя.
+ */
 
 /**
  * Hard cap on cart size. Mirrored by the backend (`OrderTooManyLines` 2032, spec 013) — this is
@@ -42,14 +65,67 @@ interface StoredCart {
 }
 
 /**
- * Позиция адресуется парой «тур + дата», а не UUID, и это не деталь реализации (§4.3 п.1):
- *  - повторное добавление того же тура на ту же дату обязано ОБНОВИТЬ строку, а не создать
+ * Позиция адресуется тройкой «тур + дата + время старта», а не UUID, и это не деталь
+ * реализации (§4.3 п.1):
+ *  - повторное добавление того же тура на тот же ВЫЕЗД обязано ОБНОВИТЬ строку, а не создать
  *    визуальный дубль;
- *  - чекаут раскладывает пер-строчные ошибки сервера обратно по позициям и в запасном пути
- *    собирает ключ из `tourId` + `tourDate` ответа (§7.5) — с UUID это было бы невозможно.
+ *  - чекаут раскладывает пер-строчные ошибки сервера обратно по позициям, сопоставляя их с
+ *    отправленным массивом по `tourId` + `tourDate` (§7.5) — с UUID это было бы невозможно.
+ *
+ * Время вошло в ключ 2026-08-29 (решение 0.19): один продукт 12-го в 09:00 и 12-го в 14:00 —
+ * это ДВА разных выезда с независимыми местами, и складывать их в одну позицию нельзя.
+ * Формат в ключ НЕ входит: тот же выезд, купленный «индивидуально» и «в группе», — это одна
+ * позиция, повторное добавление меняет ей формат.
  */
-function itemId(tourId: number, tourDate: string): string {
-  return `${tourId}:${tourDate}`
+function itemId(tourId: number, tourDate: string, startTime: string): string {
+  return `${tourId}:${tourDate}:${startTime}`
+}
+
+/** Формат из localStorage: чужое/устаревшее значение читается как «формат не выбран», а не
+ * как случайный тариф — эффективный формат всё равно резолвится от свежего продукта. */
+function sanitizeFormat(value: unknown): TourFormat | null {
+  return value === TourFormat.Individual || value === TourFormat.Group || value === TourFormat.Both
+    ? value
+    : null
+}
+
+/**
+ * Выбор трансфера из localStorage. Любая неполнота = «это не трансфер», а не «трансфер с
+ * дырками»: позиция без класса авто не имеет цены, и сервер отбил бы её (2047).
+ *
+ * Обратный рейс требует ОБЕ величины сразу — дата без времени (или наоборот) отбивается как
+ * `InvalidReturnTrip`/2058, поэтому такая половинчатая пара читается как «обратного рейса нет».
+ */
+function sanitizeTransfer(value: unknown): CartTransferSelection | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { vehicleClassId, isRoundTrip, returnDate, returnTime } = value as Partial<CartTransferSelection>
+  if (typeof vehicleClassId !== 'number' || !Number.isFinite(vehicleClassId)) return null
+
+  const hasReturn =
+    isRoundTrip === true &&
+    typeof returnDate === 'string' &&
+    ISO_DATE.test(returnDate) &&
+    typeof returnTime === 'string' &&
+    isDisplayTime(returnTime)
+
+  return {
+    vehicleClassId,
+    isRoundTrip: hasReturn,
+    returnDate: hasReturn ? returnDate : null,
+    returnTime: hasReturn ? returnTime : null,
+  }
+}
+
+/** Обратный рейс не может начинаться раньше поездки (то же правило, что у бэка — 2058). */
+export function isReturnLegValid(
+  tourDate: string,
+  startTime: string,
+  selection: CartTransferSelection,
+): boolean {
+  if (!selection.isRoundTrip) return true
+  if (selection.returnDate === null || selection.returnTime === null) return false
+  if (selection.returnDate < tourDate) return false
+  return selection.returnDate !== tourDate || selection.returnTime >= startTime
 }
 
 /* -------------------------------------------------------------------------- */
@@ -86,11 +162,15 @@ function sanitizeItems(raw: unknown): CartItem[] {
 
   for (const row of raw) {
     if (typeof row !== 'object' || row === null) continue
-    const { tourId, tourDate, guestCount, addedAt, snapshot } = row as Partial<CartItem>
+    const { tourId, tourDate, guestCount, startTime, format, transfer, addedAt, snapshot } =
+      row as Partial<CartItem>
 
     if (typeof tourId !== 'number' || !Number.isFinite(tourId)) continue
     if (typeof tourDate !== 'string' || !ISO_DATE.test(tourDate)) continue
     if (tourDate < todayISO) continue
+    // Позиции без слота не существует (решение 0.28): подставить время «по умолчанию» значило
+    // бы записать посетителя на выезд, который он не выбирал.
+    if (typeof startTime !== 'string' || !isDisplayTime(startTime)) continue
 
     const snap = sanitizeSnapshot(snapshot)
     if (snap === null) continue
@@ -98,12 +178,15 @@ function sanitizeItems(raw: unknown): CartItem[] {
     const added = typeof addedAt === 'number' && Number.isFinite(addedAt) ? addedAt : now
     if (now - added > MAX_ITEM_AGE_MS) continue
 
-    const id = itemId(tourId, tourDate)
+    const id = itemId(tourId, tourDate, startTime)
     const item: CartItem = {
       id,
       tourId,
       tourDate,
       guestCount: clampGuests(typeof guestCount === 'number' ? guestCount : Number.NaN),
+      startTime,
+      format: sanitizeFormat(format),
+      transfer: sanitizeTransfer(transfer),
       addedAt: added,
       snapshot: snap,
     }
@@ -179,22 +262,30 @@ function commit(items: readonly CartItem[]): void {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Adds a position, or updates the guest count of the one already holding this exact
- * "tour + date" pair. The same tour on a DIFFERENT date is a legitimate second position.
+ * Adds a position, or updates the one already holding this exact "tour + date + start time"
+ * triple. The same tour on a DIFFERENT date — or on the same date at a different departure time —
+ * is a legitimate second position.
  *
  * `addedAt` is deliberately NOT refreshed on update: a position must not jump to the end of the
  * list just because the guest count changed. The snapshot IS refreshed — the caller always has
- * fresher tour data than localStorage does, and a stale title helps nobody.
+ * fresher tour data than localStorage does, and a stale title helps nobody. Формат обновляется
+ * по той же причине: повторное добавление — это «я передумал», а не второй товар.
  */
 export function addCartItem(input: AddCartItemInput): AddCartItemResult {
-  const id = itemId(input.tourId, input.tourDate)
+  const id = itemId(input.tourId, input.tourDate, input.startTime)
   const existing = state.items.find((item) => item.id === id)
 
   if (existing) {
     commit(
       state.items.map((item) =>
         item.id === id
-          ? { ...item, guestCount: clampGuests(input.guestCount), snapshot: input.snapshot }
+          ? {
+              ...item,
+              guestCount: clampGuests(input.guestCount),
+              format: input.format,
+              transfer: input.transfer ?? null,
+              snapshot: input.snapshot,
+            }
           : item,
       ),
     )
@@ -211,6 +302,9 @@ export function addCartItem(input: AddCartItemInput): AddCartItemResult {
       tourId: input.tourId,
       tourDate: input.tourDate,
       guestCount: clampGuests(input.guestCount),
+      startTime: input.startTime,
+      format: input.format,
+      transfer: input.transfer ?? null,
       addedAt: Date.now(),
       snapshot: input.snapshot,
     },
@@ -236,8 +330,30 @@ export function updateCartItem(id: string, patch: { tourDate?: string; guestCoun
 
   if (tourDate === current.tourDate && guestCount === current.guestCount) return
 
-  const nextId = itemId(current.tourId, tourDate)
-  const next: CartItem = { ...current, id: nextId, tourDate, guestCount }
+  // Время старта в корзине НЕ правится (и потому не входит в `patch`): расписание принадлежит
+  // продукту, а не дате, поэтому выбранный слот остаётся валидным при любой смене даты.
+  // Другое время — это другой выезд, и выбирается он там же, где выбирался, — в блоке брони.
+  const nextId = itemId(current.tourId, tourDate, current.startTime)
+  const next: CartItem = { ...current, id: nextId, tourDate, guestCount, transfer: current.transfer }
+
+  /*
+    Перенос даты «туда» может увести обратный рейс в прошлое относительно поездки — сервер такую
+    строку отбивает (`InvalidReturnTrip`/2058). Чинится здесь, а не показом ошибки: обратный
+    рейс НЕ редактируется в корзине (он часть выбора, сделанного на странице трансфера), поэтому
+    строка с ошибкой стала бы тупиком — исправить её было бы нечем, кроме удаления позиции.
+    Подтягиваем обратный рейс к минимально допустимому моменту; обе величины видны в самой
+    строке, так что правка не молчаливая.
+  */
+  if (next.transfer !== null && !isReturnLegValid(next.tourDate, next.startTime, next.transfer)) {
+    next.transfer = {
+      ...next.transfer,
+      returnDate: next.tourDate,
+      returnTime:
+        next.transfer.returnTime !== null && next.transfer.returnTime >= next.startTime
+          ? next.transfer.returnTime
+          : next.startTime,
+    }
+  }
 
   commit([
     // Drops both the old row (replaced below) and any row already sitting on the new id.
@@ -256,9 +372,10 @@ export function clearCart(): void {
   commit([])
 }
 
-/** Позиция для этого тура на эту дату, если она уже в корзине. Для подписи кнопки в BookingCard. */
-export function findCartItem(tourId: number, tourDate: string): CartItem | undefined {
-  return state.items.find((item) => item.id === itemId(tourId, tourDate))
+/** Позиция для этого выезда (тур + дата + время), если она уже в корзине. Для подписи кнопки
+ * в BookingCard. */
+export function findCartItem(tourId: number, tourDate: string, startTime: string): CartItem | undefined {
+  return state.items.find((item) => item.id === itemId(tourId, tourDate, startTime))
 }
 
 /* -------------------------------------------------------------------------- */

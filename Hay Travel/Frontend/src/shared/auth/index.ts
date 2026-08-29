@@ -56,6 +56,7 @@ export { AuthErrorCode, authErrorCodeOf, authErrorMessageKey } from './authError
 
 export {
   forgotPasswordRequest,
+  resendVerificationRequest,
   resetPasswordRequest,
   verifyEmailRequest,
 } from './authApi'

@@ -11,6 +11,8 @@ import type {
   OrderLineInfoModel,
 } from '@/shared/types/booking'
 import { employeeRoleLabel, ordersCopy } from '../lib/ordersCopy'
+import { lineTitle } from '../lib/ordersModel'
+import { OrderLineMeta } from './OrderLineMeta'
 
 /** Значения — всегда `string`, хотя в `OrderLineEmployeeInfoModel` эти четыре поля nullable:
  * контролируемый инпут не умеет выдать `null`, а «пусто → `null`» — правило сериализации при
@@ -173,9 +175,11 @@ function LineFulfillmentCard({
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="font-semibold text-neutral-900">{line.tourTitle ?? copy.tourFallback(line.tourId)}</p>
+        <div className="min-w-0">
+          <p className="break-words font-semibold text-neutral-900">{lineTitle(line, copy)}</p>
           <p className="text-xs text-neutral-500">{line.tourDate}</p>
+          {/* Исполнителю строки-заявки нужны те же время подачи и обратный рейс, что и остальным. */}
+          <OrderLineMeta line={line} className="mt-1" />
         </div>
         <p className="text-xs text-neutral-500">{copy.fulfillmentEmployeesCount(line.employees.length)}</p>
       </div>

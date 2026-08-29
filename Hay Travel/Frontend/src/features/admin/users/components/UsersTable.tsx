@@ -92,10 +92,18 @@ export function UsersTable({
             // so this is a lookup by `roleId` rather than a straight field comparison (решение
             // Давида 2026-08-22 — no fixed `RoleType` means anything about privilege any more).
             const isTargetAdmin = roleHoldsCanManageAdmins(user.roleId, roles) && !isSelf
+            // A SEPARATE question from the tier above, deliberately asked off the account's own
+            // flag (`SuperAdminGuard`, 2026-08-27): the backend refuses `ChangeRole` on the
+            // SuperAdmin's row for everyone but that account itself, whatever role it holds and
+            // however privileged the caller is. The tier check would usually catch it too — but
+            // only by coincidence, and not at all for a SuperAdmin sitting on a role without
+            // `CanManageAdmins`.
+            const isTargetSuperAdmin = user.isSuperAdmin && !isSelf
             // D3 (2026-08-09) relaxed B6's unconditional lock: another admin-tier role is still
             // frozen for everyone EXCEPT the SuperAdmin, who may now demote them. Previously this
-            // was just `isTargetAdmin`.
-            const roleLocked = isTargetAdmin && !canManageAdmins
+            // was just `isTargetAdmin`. The SuperAdmin lock is NOT part of that relaxation — no
+            // `&& !canManageAdmins` on it, that is the whole point of the guard.
+            const roleLocked = isTargetSuperAdmin || (isTargetAdmin && !canManageAdmins)
             const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ')
             return (
               <tr
@@ -135,7 +143,11 @@ export function UsersTable({
                     </p>
                   ) : (
                     roleLocked && (
-                      <p className="mt-1 text-[11px] text-neutral-500">{copy.adminRoleImmutableHint}</p>
+                      <p className="mt-1 text-[11px] text-neutral-500">
+                        {isTargetSuperAdmin
+                          ? copy.superAdminImmutableHint
+                          : copy.adminRoleImmutableHint}
+                      </p>
                     )
                   )}
                 </td>

@@ -2,6 +2,7 @@ using ATTours.BusinessServices.Email;
 using ATTours.BusinessServices.Html;
 using ATTours.BusinessServices.Services.InfoServices;
 using ATTours.BusinessServices.Services.PdfServices;
+using ATTours.BusinessServices.Telegram;
 using ATTours.Common.Constants;
 using ATTours.Common.DTO.Info;
 using ATTours.Common.Entities;
@@ -28,14 +29,16 @@ namespace ATTours.BusinessServices.Notifications
     public partial class OrderNotificationService : IOrderNotificationService
     {
         private readonly IEmailSender emailSender;
+        private readonly ITelegramSender telegramSender;
         private readonly EmailSettings emailSettings;
         private readonly ILogger<OrderNotificationService> logger;
         private readonly NotificationRecipientResolver resolver;
 
-        public OrderNotificationService(IEmailSender emailSender, EmailSettings emailSettings,
-            ILogger<OrderNotificationService> logger)
+        public OrderNotificationService(IEmailSender emailSender, ITelegramSender telegramSender,
+            EmailSettings emailSettings, ILogger<OrderNotificationService> logger)
         {
             this.emailSender = emailSender;
+            this.telegramSender = telegramSender;
             this.emailSettings = emailSettings;
             this.logger = logger;
             resolver = new NotificationRecipientResolver(emailSettings, logger);
@@ -45,6 +48,13 @@ namespace ATTours.BusinessServices.Notifications
         // на этом событии просто ни во что не резолвится.
         public Task SendOrderCreatedAsync(OrderInfoModel order, CancellationToken cancellationToken = default)
             => DispatchAsync(EmailActionKey.OrderCreated,
+                new OrderNotificationContext { Order = order }, cancellationToken);
+
+        // Исполнителей в контексте нет намеренно: отменяются заказы, до назначения которых
+        // дело так и не дошло, а если исполнитель всё же был — событие всё равно адресовано
+        // тому, кто следит за флоу заказов, и его состав получателей настраивается отдельно.
+        public Task SendOrderAutoCancelledAsync(OrderInfoModel order, CancellationToken cancellationToken = default)
+            => DispatchAsync(EmailActionKey.OrderAutoCancelled,
                 new OrderNotificationContext { Order = order }, cancellationToken);
 
         public Task SendAssignmentAsync(OrderInfoModel order, IReadOnlyCollection<OrderEmployeeRecipient> assigned,
@@ -68,9 +78,19 @@ namespace ATTours.BusinessServices.Notifications
                 new OrderNotificationContext { Order = order, Employees = employees }, cancellationToken);
         }
 
-        // Единая точка: резолв получателей -> выбор языковых версий -> группировка -> отправка.
-        // Telegram сюда не попадает вовсе: канал настраивается, но отправки в этой задаче нет.
+        // Единая точка события: оба канала подряд, в одном потоке запроса. Email первым как
+        // основной, Telegram вторым как дублирующий. Оба транспорта глотают сбои провайдера
+        // (swallow-and-log), поэтому недоступный канал не роняет уже сохранённую операцию —
+        // выносить Telegram в фон отдельно от email осознанно не стали (ADR 031 §3).
         private async Task DispatchAsync(EmailActionKey key, OrderNotificationContext context,
+            CancellationToken cancellationToken)
+        {
+            await DispatchEmailAsync(key, context, cancellationToken);
+            await DispatchTelegramAsync(key, context, cancellationToken);
+        }
+
+        // Резолв получателей -> выбор языковых версий -> группировка -> отправка.
+        private async Task DispatchEmailAsync(EmailActionKey key, OrderNotificationContext context,
             CancellationToken cancellationToken)
         {
             var recipients = await resolver.ResolveAsync(key, NotificationPlatform.Email, context, cancellationToken);
@@ -185,6 +205,7 @@ namespace ATTours.BusinessServices.Notifications
                     FullName = $"{group.First().Employee.FirstName} {group.First().Employee.LastName}".Trim(),
                     EmployeeRole = group.First().EmployeeRole,
                     PreferredLanguage = group.First().Employee.PreferredLanguage,
+                    TelegramChatId = group.First().Employee.TelegramChatId,
                     LineIds = [.. group.Select(assignment => assignment.OrderLineId)]
                 })];
         }

@@ -1,6 +1,9 @@
+using ATTours.BusinessServices.Jobs;
 using ATTours.ClientAPI.DependencyInjection;
+using ATTours.ClientAPI.Jobs;
 using ATTours.ClientAPI.Mapper.MappingProfile;
 using ATTours.ClientAPI.Middleware;
+using ATTours.Common.Infrastructure.Jobs;
 using ATTours.Common.Settings;
 using ATTours.ContextRepository.Extensions;
 using ATTours.DataLayer;
@@ -8,6 +11,7 @@ using ATTours.Helper.Interfaces;
 using ATTours.Helper.MiddlewareAbstraction;
 using ATTours.Helper.MvcRegistrars;
 using ATTours.Helper.StartupAbstraction.ApiAbstraction;
+using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -31,6 +35,7 @@ namespace ATTours.ClientAPI
             base.ConfigureServices(services);
             services.AddDAL();
             services.AddServices();
+            services.AddBackgroundJobs();
             ConfigureAuthentication(services);
             services.AddAutoMapper(cfg =>
             {
@@ -46,6 +51,10 @@ namespace ATTours.ClientAPI
             // Применяем ожидающие миграции при каждом старте API, чтобы не гонять
             // dotnet ef database update руками — БД сама подтягивается до актуальной схемы.
             app.ApplicationServices.MigrateDatabase<ATToursContext>();
+
+            // Строго после миграций: синхронизация реестра пишет в таблицу ScheduledJob,
+            // которую эти же миграции и создают.
+            SynchronizeBackgroundJobs(app.ApplicationServices);
 
             // Раньше всего в конвейере: всё, что читает HttpContext.Connection.RemoteIpAddress
             // (GeoController, AuthController.BuildRequestContext -> LoginHistory/RegisteredIp,
@@ -68,7 +77,55 @@ namespace ATTours.ClientAPI
                 RequestPath = UploadSettings.PublicUrlPrefix,
             });
 
+            ConfigureHangfireDashboard(app);
+
             base.ConfigureFactory(app, env);
+        }
+
+        // Реестр задач приводится к каталогу и расписание — к реестру на каждом старте.
+        // Не hosted-сервисом: и то и другое обязано случиться ДО того, как планировщик
+        // начнёт разбирать очередь, а порядок запуска IHostedService такой гарантии не даёт.
+        private static void SynchronizeBackgroundJobs(IServiceProvider serviceProvider)
+        {
+            using var scope = serviceProvider.CreateScope();
+            var logger = scope.ServiceProvider.GetService<ILoggerFactory>()?.CreateLogger("ATTours.Startup.Jobs");
+
+            try
+            {
+                using var registrySync = new ScheduledJobRegistrySync();
+                var created = registrySync.SyncAsync().GetAwaiter().GetResult();
+
+                if (created > 0)
+                    logger?.LogInformation("Реестр фоновых задач пополнен: добавлено {Created} задач(и).", created);
+
+                scope.ServiceProvider.GetRequiredService<IJobDispatcher>()
+                     .RescheduleAsync()
+                     .GetAwaiter()
+                     .GetResult();
+            }
+            catch (Exception exception)
+            {
+                // Уровень Error, а не Warning: API продолжит обслуживать запросы, но
+                // фоновые задачи по расписанию работать не будут — это ровно тот
+                // молчаливый провал, который нельзя оставлять незаметным. Ронять при этом
+                // весь сайт из-за планировщика — несоразмерно.
+                logger?.LogError(exception, "Не удалось синхронизировать фоновые задачи: расписание не обновлено.");
+            }
+        }
+
+        // Дашборд Hangfire — отладочный инструмент, а не часть админки: по умолчанию
+        // выключен, а включённый пускает только локальные адреса (в проде — SSH-туннель,
+        // в nginx маршрут не проксируется). Управление задачами для Давида — экран «Джобы»
+        // с обычной ролевой моделью.
+        private static void ConfigureHangfireDashboard(IApplicationBuilder app)
+        {
+            if (!HangfireSettings.Instance.DashboardEnabled)
+                return;
+
+            app.UseHangfireDashboard("/hangfire", new DashboardOptions
+            {
+                Authorization = [new LocalRequestsOnlyAuthorizationFilter()]
+            });
         }
 
         // За Netlify -> Azure App Service до Kestrel доезжает исходный IP клиента только

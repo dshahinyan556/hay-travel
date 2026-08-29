@@ -13,6 +13,10 @@ namespace ATTours.BusinessServices.Notifications
         public EmployeeJobRole EmployeeRole { get; set; }
         public LanguageCode PreferredLanguage { get; set; } = LanguageCode.Russian;
 
+        // Привязанный чат бота (ADR 031 §5). null — исполнитель Telegram не привязал:
+        // Telegram-уведомление ему просто не уходит (лог + skip в DispatchTelegramAsync).
+        public long? TelegramChatId { get; set; }
+
         // Строки заказа, к которым относится ЭТО письмо.
         public List<int> LineIds { get; set; } = [];
     }
