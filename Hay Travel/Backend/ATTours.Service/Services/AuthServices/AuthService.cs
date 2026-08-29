@@ -35,6 +35,11 @@ namespace ATTours.BusinessServices.Services.AuthServices
         private const int EmailChangeCodeLifetimeMinutes = 15;
         private const int EmailChangeCodeLength = 6;
 
+        // Кулдаун повторной отправки письма подтверждения (2026-08-27): считается по
+        // RequestedAtUtc уже выпущенного токена, а не по счётчику в памяти — иначе
+        // рестарт процесса или второй инстанс API обнуляли бы защиту.
+        private const int ResendVerificationCooldownSeconds = 60;
+
         // Один и тот же текст для «письмо ушло» и «такого аккаунта нет» — иначе по ответу
         // перебирались бы зарегистрированные адреса.
         private const string GenericEmailSentMessage =
@@ -42,6 +47,10 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
         private const string PasswordChangedMessage = "Password has been changed.";
         private const string EmailVerifiedMessage = "Email has been verified.";
+
+        // Админ-инициированный сброс (2026-08-27): адресат известен, поэтому текст прямой,
+        // а не generic — скрывать здесь нечего.
+        private const string PasswordResetEmailSentMessage = "Password reset email has been sent.";
 
         private const string EmailChangeCodeSentMessage = "A verification code has been sent to your current email address.";
         private const string EmailChangeCodeConfirmedMessage = "Code confirmed. You can now request the new email address.";
@@ -103,14 +112,14 @@ namespace ATTours.BusinessServices.Services.AuthServices
             var existingUser = await validationService.FindByEmailAsync(model.Email, cancellationToken);
             if (existingUser is not null)
             {
-                // Неверифицированному аккаунту переотправляем письмо — это закрывает
-                // потребность в отдельном эндпоинте "resend".
+                // Неверифицированному аккаунту переотправляем письмо. Тот же путь, что у
+                // ResendVerificationEmailAsync (2026-08-27), включая кулдаун: повторная
+                // отправка формы регистрации не должна обходить ограничение, доступное
+                // отдельному эндпоинту.
                 if (existingUser.IsEmailVerified)
                     return GenericEmailSent(null);
 
-                var resentToken = await UpsertUserTokenAsync(existingUser, UserTokenType.EmailVerification, requestContext, cancellationToken);
-                await emailSender.SendEmailVerificationAsync(existingUser.Email, existingUser.FirstName, resentToken, cancellationToken);
-                return GenericEmailSent(resentToken);
+                return await ResendEmailVerificationAsync(existingUser, requestContext, cancellationToken);
             }
 
             var regularRole = await UserRoleRepository.AsQueryable()
@@ -146,6 +155,21 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
             await emailSender.SendEmailVerificationAsync(user.Email, user.FirstName, verificationToken, cancellationToken);
             return GenericEmailSent(verificationToken);
+        }
+
+        // Отдельная переотправка письма подтверждения (2026-08-27): до неё пользователю
+        // приходилось заново отправлять всю форму регистрации. Ответ ровно тот же
+        // generic, что у Register/ForgotPassword — по нему не отличить несуществующий
+        // адрес от уже подтверждённого и от попавшего в кулдаун.
+        public async Task<MessageResultModel> ResendVerificationEmailAsync(ResendVerificationModel model, RequestContextModel requestContext, CancellationToken cancellationToken = default)
+        {
+            var user = await UserRepository.AsQueryable()
+                                           .SingleOrDefaultAsync(x => x.Email == model.Email, cancellationToken);
+
+            if (user is null || user.IsEmailVerified)
+                return GenericEmailSent(null);
+
+            return await ResendEmailVerificationAsync(user, requestContext, cancellationToken);
         }
 
         public async Task<MessageResultModel> VerifyEmailAsync(VerifyEmailModel model, CancellationToken cancellationToken = default)
@@ -551,10 +575,27 @@ namespace ATTours.BusinessServices.Services.AuthServices
             if (user is null)
                 return GenericEmailSent(null);
 
-            var resetToken = await UpsertUserTokenAsync(user, UserTokenType.PasswordReset, requestContext, cancellationToken);
-            await emailSender.SendPasswordResetAsync(user.Email, user.FirstName, resetToken, cancellationToken);
-
+            var resetToken = await IssuePasswordResetTokenAsync(user, requestContext, cancellationToken);
             return GenericEmailSent(resetToken);
+        }
+
+        // Админ-инициированный сброс пароля клиента (2026-08-27). Выпуск токена и письмо —
+        // ровно те же, что в ForgotPasswordAsync (один активный токен на (UserId, Type),
+        // ADR 006), поэтому механика живёт здесь, а не дублируется в UpdateServices;
+        // вызывающий сервис отвечает только за поиск цели и права на действие.
+        //
+        // Пользователь приходит уже загруженным (из контекста вызывающего сервиса) — здесь
+        // читаются только Id/Email/FirstName, так что чужой tracking-контекст не задевается.
+        // Ответ обычный, без анти-энумерации: адресат админу и так известен.
+        public async Task<MessageResultModel> SendPasswordResetEmailAsync(User user, RequestContextModel requestContext, CancellationToken cancellationToken = default)
+        {
+            var resetToken = await IssuePasswordResetTokenAsync(user, requestContext, cancellationToken);
+
+            return new MessageResultModel
+            {
+                Message = PasswordResetEmailSentMessage,
+                DevToken = emailSender.ExposesTokenToCaller ? resetToken : null
+            };
         }
 
         public async Task<MessageResultModel> ResetPasswordAsync(ResetPasswordModel model, CancellationToken cancellationToken = default)
@@ -814,6 +855,39 @@ namespace ATTours.BusinessServices.Services.AuthServices
                 return null;
 
             return storedToken;
+        }
+
+        // Общий путь переотправки письма подтверждения для Register (повторная отправка
+        // формы) и ResendVerificationEmailAsync — семантика токена одна и та же
+        // (перезапись строки по (UserId, Type), ADR 006), новых правил гашения не вводим.
+        private async Task<MessageResultModel> ResendEmailVerificationAsync(User user, RequestContextModel requestContext, CancellationToken cancellationToken)
+        {
+            var existingToken = await UserTokenRepository.AsQueryable()
+                                                         .SingleOrDefaultAsync(x => x.UserId == user.Id && x.Type == UserTokenType.EmailVerification, cancellationToken);
+
+            // Кулдаун 60с (2026-08-27) против спама письмами с чужого адреса. Ответ при
+            // этом тот же generic, что и при реальной отправке: отдельная ошибка или
+            // другой текст сами по себе подтверждали бы, что аккаунт существует и ждёт
+            // подтверждения.
+            if (existingToken is not null &&
+                existingToken.RequestedAtUtc.AddSeconds(ResendVerificationCooldownSeconds) > DateTime.UtcNow)
+                return GenericEmailSent(null);
+
+            var verificationToken = await UpsertUserTokenAsync(user, UserTokenType.EmailVerification, requestContext, cancellationToken);
+            await emailSender.SendEmailVerificationAsync(user.Email, user.FirstName, verificationToken, cancellationToken);
+
+            return GenericEmailSent(verificationToken);
+        }
+
+        // Общий путь «выпустить токен сброса и отправить письмо» для самообслуживания
+        // (ForgotPasswordAsync) и админского сценария (SendPasswordResetEmailAsync).
+        // Различаются они только тем, как найден пользователь и что уходит в ответ.
+        private async Task<string> IssuePasswordResetTokenAsync(User user, RequestContextModel requestContext, CancellationToken cancellationToken)
+        {
+            var resetToken = await UpsertUserTokenAsync(user, UserTokenType.PasswordReset, requestContext, cancellationToken);
+            await emailSender.SendPasswordResetAsync(user.Email, user.FirstName, resetToken, cancellationToken);
+
+            return resetToken;
         }
 
         // Один активный токен на (UserId, Type): существующая строка переписывается,

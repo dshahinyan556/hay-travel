@@ -24,6 +24,7 @@ namespace ATTours.BusinessServices.Services.ValidationServices
         {
             foreach (var entity in Entities)
             {
+                ValidateScope(entity);
                 ValidateShape(entity);
                 ValidateEffectiveRange(entity);
                 ValidateNotInPast(entity);
@@ -45,6 +46,24 @@ namespace ATTours.BusinessServices.Services.ValidationServices
             if (rule.Type == ClosureRuleType.Weekly && rule.EffectiveFrom is not null && rule.EffectiveFrom < today)
                 throw new ErrorModelException(GlobalErrorCode.ClosureDateInPast, HttpStatusCode.BadRequest,
                     $"Closure effective-from date {rule.EffectiveFrom:yyyy-MM-dd} is in the past.");
+        }
+
+        // Область действия правила (решение 0.27): ЛИБО один продукт, ЛИБО целый тип
+        // продукта, ЛИБО глобально. Оба поля сразу резолвер трактовать не сможет —
+        // такое правило пришлось бы одновременно ранжировать как tour-scope и как
+        // type-scope, и его исход зависел бы от порядка проверок, а не от данных.
+        private static void ValidateScope(ClosureRule rule)
+        {
+            if (rule.TourType is null)
+                return;
+
+            if (rule.TourId is not null)
+                throw new ErrorModelException(GlobalErrorCode.InvalidClosureRule, HttpStatusCode.BadRequest,
+                    "Closure rule cannot target a single tour and a whole product type at the same time.");
+
+            if (!Enum.IsDefined(rule.TourType.Value))
+                throw new ErrorModelException(GlobalErrorCode.InvalidClosureRule, HttpStatusCode.BadRequest,
+                    $"Closure rule product type {(int)rule.TourType.Value} is unknown.");
         }
 
         private static void ValidateShape(ClosureRule rule)

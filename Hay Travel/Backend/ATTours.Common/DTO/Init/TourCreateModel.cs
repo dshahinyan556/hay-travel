@@ -6,6 +6,11 @@ namespace ATTours.Common.Dto.Init
     public class TourCreateModel
     {
         public TourType Type { get; set; }
+        // Формат проведения (батч 2026-08-29): обязателен у тура/экскурсии, всегда null
+        // у трансфера. Групповые поля обязательны при Format == Group/Both.
+        public TourFormat? Format { get; set; }
+        public decimal? GroupPricePerPerson { get; set; }
+        public int? GroupCapacity { get; set; }
         public string MainImageUrl { get; set; }
         public bool IsActive { get; set; }
         public bool RequiresPrepayment { get; set; }
@@ -22,5 +27,10 @@ namespace ATTours.Common.Dto.Init
         public List<TourNoteCreateModel> Notes { get; set; }
         public List<TourRegionCreateModel> Regions { get; set; }
         public List<TourTagCreateModel> Tags { get; set; }
+        // Времена начала (минимум одно у тура/экскурсии, ни одного у трансфера).
+        public List<TourStartTimeCreateModel> StartTimes { get; set; }
+        // Только для TourType.Transfer (решение 0.4/0.6).
+        public List<TransferRoutePointCreateModel> TransferRoutePoints { get; set; }
+        public List<TransferPriceCreateModel> TransferPrices { get; set; }
     }
 }

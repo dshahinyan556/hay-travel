@@ -3,6 +3,7 @@ import { createOrder } from '@/shared/api/booking'
 import { getAuthState } from '@/shared/auth'
 import { ApiError } from '@/shared/lib/http'
 import { clearCart, type CartItem } from '@/shared/cart'
+import { toWireTime } from '@/shared/booking'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import {
   ORDER_HAS_INVALID_LINES,
@@ -113,6 +114,30 @@ export function useCheckout(): UseCheckout {
             tourId: item.tourId,
             tourDate: item.tourDate,
             guestCount: item.guestCount,
+            /* Время старта уезжает в `HH:mm:ss` — форма, которую бэк парсит как `TimeOnly`
+               (`shared/booking/startTime.ts`). `?? ''` недостижим: позиция без валидного слота
+               не проходит санитайзер стора, — но молча отправить пустую строку честнее, чем
+               подставить полночь: сервер отобьёт её как невалидный слот (2045). */
+            startTime: toWireTime(item.startTime) ?? '',
+            /* Формат отправляется КАК ЕСТЬ, включая `null`: сервер сам решает, значим ли выбор
+               (`ResolveEffectiveFormat`), и подставлять за него «индивидуальный» нельзя —
+               у продукта с обоими форматами это была бы другая цена. */
+            format: item.format,
+            /* Поля трансфера (батч 2026-08-29) — только у позиции-трансфера. У брони продукта
+               они не отправляются вовсе: сервер их у не-трансфера всё равно не сохраняет, а
+               посылать `isRoundTrip: false` на каждую экскурсию значило бы делать вид, что у неё
+               есть обратный рейс. */
+            ...(item.transfer === null
+              ? {}
+              : {
+                  isRoundTrip: item.transfer.isRoundTrip,
+                  returnDate: item.transfer.returnDate,
+                  /* `HH:mm` → `HH:mm:ss`, как и время подачи. `null` при пустом обратном рейсе:
+                     подставить полночь значило бы записать рейс, которого никто не заказывал. */
+                  returnTime:
+                    item.transfer.returnTime === null ? null : toWireTime(item.transfer.returnTime),
+                  vehicleClassId: item.transfer.vehicleClassId,
+                }),
           })),
         })
         // The order exists in full — the cart has nothing left to hold.
@@ -145,12 +170,19 @@ export function useCheckout(): UseCheckout {
           const reason = lineFailureReason(lineError.errorCode)
           const candidate = submitted[lineError.index]
           /* `index` is the primary key (spec 013 guarantees the order is preserved); the
-             tour+date pair is a CHECKSUM on top of it. Both paths only work because a cart id is
-             deterministic (`${tourId}:${tourDate}`) — the second reason ADR 022 forbids UUIDs. */
+             tour+date pair is a CHECKSUM on top of it.
+
+             Запасной путь ищет позицию ПО ПОЛЯМ, а не собирает её id из ответа: с 2026-08-29 в
+             ключ входит ещё и время старта (`${tourId}:${tourDate}:${startTime}`), а его сервер
+             в пер-строчной ошибке не возвращает. При двух выездах одного дня запасной путь
+             выберет первый — приблизительно, но он и нужен-то лишь тогда, когда `index` уже
+             разошёлся с отправленным массивом. */
           const matched =
             candidate && candidate.tourId === lineError.tourId && candidate.tourDate === lineError.tourDate
               ? candidate.id
-              : submitted.find((item) => item.id === `${lineError.tourId}:${lineError.tourDate}`)?.id
+              : submitted.find(
+                  (item) => item.tourId === lineError.tourId && item.tourDate === lineError.tourDate,
+                )?.id
 
           if (!matched) {
             unmatched = true
@@ -158,7 +190,10 @@ export function useCheckout(): UseCheckout {
           }
           nextErrors.set(matched, reason)
 
-          if (reason === 'dateUnavailable' || reason === 'datePast') {
+          // `tourId` теперь nullable (строка-заявка продукта не имеет). Из корзины такой пункт
+          // прийти не может, но `serverClosed` ключуется именно туром — без продукта запоминать
+          // закрытую дату не для кого.
+          if (lineError.tourId !== null && (reason === 'dateUnavailable' || reason === 'datePast')) {
             const key = String(lineError.tourId)
             const bucket = nextClosed[key] ?? []
             if (!bucket.includes(lineError.tourDate)) bucket.push(lineError.tourDate)

@@ -16,13 +16,14 @@ namespace ATTours.BusinessServices.Services.InfoServices
     // восьмистрочную таблицу-рубильник заводить незачем.
     public class NotificationSettingsInfo : EntityInfoBase<NotificationRecipient>
     {
-        // Платформы, у которых реализована фактическая отправка. Telegram настраивается,
-        // но не шлётся — фронт помечает вкладку по этому признаку, бэкенд молча пропускает.
+        // Платформы, у которых реализована фактическая отправка. Telegram добавлен вместе
+        // с реальным транспортом (ADR 031): отправка есть, баннер «не реализовано» во фронте
+        // гаснет по этому флагу.
         private static readonly HashSet<NotificationPlatform> ImplementedPlatforms =
-            [NotificationPlatform.Email];
+            [NotificationPlatform.Email, NotificationPlatform.Telegram];
 
         // Порядок вкладок платформ в админке — фиксированный, не по значению enum'а
-        // (Email первый как единственный реально работающий).
+        // (Email первый как основной канал, Telegram — дублирующий).
         private static readonly NotificationPlatform[] PlatformOrder =
             [NotificationPlatform.Email, NotificationPlatform.Telegram];
 

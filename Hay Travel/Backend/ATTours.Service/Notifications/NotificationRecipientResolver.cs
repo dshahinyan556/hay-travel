@@ -11,10 +11,16 @@ namespace ATTours.BusinessServices.Notifications
     // рассылку оно не сливается.
     public sealed class ResolvedRecipient
     {
+        // Email-адрес. У Telegram-получателя пустой: chat id не строка и перегружать им
+        // Address означало бы потерять тип (ADR 031 §6).
         public string Address { get; init; } = string.Empty;
         public string Name { get; init; } = string.Empty;
         public NotificationRecipientType Type { get; init; } = NotificationRecipientType.To;
         public LanguageCode Language { get; init; } = LanguageCode.Russian;
+
+        // Заполняется только на платформе Telegram. null означает «получатель настроен,
+        // но аккаунт не привязан» — отсекается на отправке, с логом.
+        public long? TelegramChatId { get; init; }
 
         public OrderEmployeeRecipient? Employee { get; init; }
     }
@@ -53,30 +59,47 @@ namespace ATTours.BusinessServices.Notifications
             var resolved = new List<ResolvedRecipient>();
 
             foreach (var row in rows)
-                resolved.AddRange(Expand(row, context));
+                resolved.AddRange(Expand(row, platform, context));
 
             return Deduplicate(resolved);
         }
 
-        private IEnumerable<ResolvedRecipient> Expand(NotificationRecipient row, OrderNotificationContext context)
+        private IEnumerable<ResolvedRecipient> Expand(NotificationRecipient row, NotificationPlatform platform,
+            OrderNotificationContext context)
         {
             // Type осмыслен только у Email; у Telegram он null (валидация это гарантирует),
-            // и подстановка To ни на что не влияет — отправки всё равно нет.
+            // и подстановка To ни на что не влияет — копий у сообщения бота не бывает.
             var type = row.Type ?? NotificationRecipientType.To;
 
             switch (row.SourceType)
             {
                 case NotificationRecipientSource.User:
-                    return ExpandUser(row, type);
+                    return ExpandUser(row, type, platform);
 
                 case NotificationRecipientSource.AdminMailbox:
+                    // Общий почтовый ящик — понятие Email-платформы; чата у него нет.
+                    // Валидация такую строку на Telegram и не даёт завести.
+                    if (platform == NotificationPlatform.Telegram)
+                    {
+                        logger.LogInformation("Notification recipient {RecipientId} (admin mailbox) has no Telegram " +
+                            "counterpart; skipped.", row.Id);
+                        return [];
+                    }
+
                     return ExpandAdminMailbox(row, type);
 
                 case NotificationRecipientSource.CustomEmail:
+                    if (platform == NotificationPlatform.Telegram)
+                    {
+                        logger.LogInformation("Notification recipient {RecipientId} (custom email) has no Telegram " +
+                            "counterpart; skipped.", row.Id);
+                        return [];
+                    }
+
                     return ExpandCustomEmail(row, type);
 
                 case NotificationRecipientSource.OrderLinked:
-                    return ExpandOrderLinked(row, type, context);
+                    return ExpandOrderLinked(row, type, platform, context);
 
                 default:
                     logger.LogWarning("Notification recipient {RecipientId} has unknown source type {SourceType}; skipped.",
@@ -87,12 +110,38 @@ namespace ATTours.BusinessServices.Notifications
 
         // Удалённый (soft-delete) пользователь строку не уносит — она просто перестаёт
         // резолвиться, как и договорено в конфигурации FK (SetNull).
-        private IEnumerable<ResolvedRecipient> ExpandUser(NotificationRecipient row, NotificationRecipientType type)
+        private IEnumerable<ResolvedRecipient> ExpandUser(NotificationRecipient row, NotificationRecipientType type,
+            NotificationPlatform platform)
         {
-            if (row.UserId is null || row.User is null || row.User.IsDeleted
-                || string.IsNullOrWhiteSpace(row.User.Email))
+            if (row.UserId is null || row.User is null || row.User.IsDeleted)
             {
                 logger.LogWarning("Notification recipient {RecipientId} points to a missing/deleted user; skipped.", row.Id);
+                return [];
+            }
+
+            var name = $"{row.User.FirstName} {row.User.LastName}".Trim();
+
+            // Telegram: адресом служит chat id. Пользователь без привязки здесь НЕ
+            // отфильтровывается — пустой chat id отсекает отправка, с логом «настроен,
+            // но аккаунт не привязан»; тихо терять его на резолве было бы неотличимо
+            // от «строка не настроена».
+            if (platform == NotificationPlatform.Telegram)
+            {
+                return
+                [
+                    new ResolvedRecipient
+                    {
+                        Name = name,
+                        Type = type,
+                        Language = row.User.PreferredLanguage,
+                        TelegramChatId = row.User.TelegramChatId
+                    }
+                ];
+            }
+
+            if (string.IsNullOrWhiteSpace(row.User.Email))
+            {
+                logger.LogWarning("Notification recipient {RecipientId} points to a user without an email; skipped.", row.Id);
                 return [];
             }
 
@@ -101,7 +150,7 @@ namespace ATTours.BusinessServices.Notifications
                 new ResolvedRecipient
                 {
                     Address = row.User.Email,
-                    Name = $"{row.User.FirstName} {row.User.LastName}".Trim(),
+                    Name = name,
                     Type = type,
                     Language = row.User.PreferredLanguage
                 }
@@ -160,7 +209,7 @@ namespace ATTours.BusinessServices.Notifications
         }
 
         private IEnumerable<ResolvedRecipient> ExpandOrderLinked(NotificationRecipient row,
-            NotificationRecipientType type, OrderNotificationContext context)
+            NotificationRecipientType type, NotificationPlatform platform, OrderNotificationContext context)
         {
             if (row.OrderLinkedRole is null)
             {
@@ -170,6 +219,16 @@ namespace ATTours.BusinessServices.Notifications
 
             if (row.OrderLinkedRole == OrderLinkedRecipient.Client)
             {
+                // Telegram клиенту — осознанно вне скоупа (ADR 031 §5): chat id клиента не
+                // спроецирован в OrderInfoModel. Настроить такую строку валидация по-прежнему
+                // разрешает, доставка просто no-op с логом — в духе «тихо не шлём».
+                if (platform == NotificationPlatform.Telegram)
+                {
+                    logger.LogInformation("Notification recipient {RecipientId} targets the order client over Telegram, " +
+                        "which is not supported yet; skipped.", row.Id);
+                    return [];
+                }
+
                 var order = context?.Order;
 
                 if (order is null || string.IsNullOrWhiteSpace(order.UserEmail))
@@ -190,6 +249,22 @@ namespace ATTours.BusinessServices.Notifications
             // Исполнитель: по одному адресату на каждого исполнителя ЭТОГО вызова. Пустой
             // список — ноль адресатов, а не ошибка (например, у OrderCreated исполнителей нет).
             var employees = context?.Employees ?? [];
+
+            if (platform == NotificationPlatform.Telegram)
+            {
+                // Исполнитель без привязки не отсеивается здесь по той же причине, что и
+                // в ExpandUser: «настроен, но не привязал» — состояние, о котором нужен лог.
+                return employees
+                    .Select(employee => new ResolvedRecipient
+                    {
+                        Name = employee.FullName,
+                        Type = NotificationRecipientType.To,
+                        Language = employee.PreferredLanguage,
+                        TelegramChatId = employee.TelegramChatId,
+                        Employee = employee
+                    })
+                    .ToList();
+            }
 
             return employees
                 .Where(employee => !string.IsNullOrWhiteSpace(employee.Email))
@@ -223,13 +298,27 @@ namespace ATTours.BusinessServices.Notifications
                     continue;
                 }
 
-                if (!seen.Add(recipient.Address))
+                if (!seen.Add(DeduplicationKey(recipient)))
                     continue;
 
                 result.Add(recipient);
             }
 
             return result;
+        }
+
+        // У Telegram-получателя Address пустой, и дедупликация по нему схлопнула бы всех
+        // в одного. Ключ — chat id, когда адреса нет. Непривязанные (ни адреса, ни chat id)
+        // получают уникальный ключ: их всё равно отсеет отправка, но по одному логу на
+        // строку, а не один на всех.
+        private static string DeduplicationKey(ResolvedRecipient recipient)
+        {
+            if (!string.IsNullOrWhiteSpace(recipient.Address))
+                return recipient.Address;
+
+            return recipient.TelegramChatId is not null
+                ? $"tg:{recipient.TelegramChatId.Value}"
+                : $"unresolved:{Guid.NewGuid()}";
         }
     }
 }

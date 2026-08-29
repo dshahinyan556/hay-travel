@@ -28,7 +28,9 @@ export interface UserPermissionsCardProps {
   rolePermissions: ScreenPermissionModel[] | null
   overrides: ScreenOverrideModel[] | null
   screens: ScreenDefinitionModel[] | null
-  /** `users.Update` — without it the block is readable but not editable. */
+  /** `users.Update`, already narrowed by the page's SuperAdmin lock (`canEditUser`, 2026-08-27) —
+   * without it the block is readable but not editable, which is exactly what the backend's
+   * `PermissionOverrides` PUT enforces for a SuperAdmin target. */
   canEdit: boolean
   /** Re-run the page's loader after a successful save. */
   onSaved: () => void

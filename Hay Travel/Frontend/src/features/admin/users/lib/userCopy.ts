@@ -29,7 +29,11 @@ const ADMIN_ROLE_IMMUTABLE = 2214 // ChangeRole (B6) — target's current role i
 const CANNOT_DELETE_SELF = 2212 // Delete (B4).
 const ACCOUNT_DELETED = 2213 // Delete (B4) — target was already soft-deleted (stale page).
 const ADMIN_ACCOUNT_IMMUTABLE = 2215 // Delete — target's role is Admin (mirrors ADMIN_ROLE_IMMUTABLE).
-const SUPER_ADMIN_REQUIRED = 2216 // ChangeRole/Delete (D3) — the ACTOR is not the SuperAdmin.
+/* One code, two situations since 2026-08-27 — the message below has to answer for both:
+ * D3's original one (the ACTOR is not the SuperAdmin, on a role/account of admin tier) and
+ * `SuperAdminGuard`'s new one (the TARGET is the SuperAdmin, whoever the actor is). The response
+ * carries nothing that tells them apart, so no call site can pick a wording per case. */
+const SUPER_ADMIN_REQUIRED = 2216
 /* Impersonation (spec 014 §5). The UI hides the button on your own profile and on an elevated
  * target, so both of these in practice mean the page was stale (the target's role changed under
  * it) — they are surfaced as sentences anyway, never as a raw code. */
@@ -93,6 +97,12 @@ export const userCopy = defineCopy(
      * wrong. */
     adminRoleImmutableHint: 'Снять роль администратора может только главный администратор',
 
+    /** Under a `RoleSelect` disabled because the TARGET is the главный администратор
+     * (`SuperAdminGuard`, 2026-08-27). Отдельно от `adminRoleImmutableHint`: там речь о ТИРЕ роли и
+     * запрет снимается, если действует главный администратор, — здесь он безусловный, и никакие
+     * права действующего пользователя его не открывают. */
+    superAdminImmutableHint: 'Учётную запись главного администратора может изменять только он сам',
+
     /** Confirm dialog for promoting somebody to Admin (D5). Promotion had no confirmation at all
      * before — it was a plain select — which is too quiet for the one change that hands over full
      * control of the panel. */
@@ -124,6 +134,20 @@ export const userCopy = defineCopy(
       /** Кнопка видна, но заблокирована: сервер откажет (2218), потому что у цели повышенные
        * права, а действующий администратор — не главный. */
       elevatedHint: 'Войти в аккаунт с повышенными правами может только главный администратор',
+    },
+
+    /** Письмо со ссылкой на смену пароля (2026-08-27) — действие в управляющей зоне, рядом с
+     * «Войти как пользователь». Намеренно НЕ в «опасной зоне»: письмо ничего не ломает и не
+     * блокирует вход, в отличие от принудительного сброса, который стоит там. */
+    passwordResetEmail: {
+      button: 'Отправить ссылку на смену пароля',
+      pending: 'Отправляем…',
+      /** Адрес в тексте — чтобы было видно, КУДА ушло письмо: у клиента в карточке может быть не
+       * тот email, который админ держал в голове. */
+      sent: (email: string) => `Ссылка на смену пароля отправлена на ${email}.`,
+      /** `title` заблокированной кнопки для цели-главного администратора: письмо со ссылкой —
+       * такой же путь к захвату учётки, как и сброс пароля, поэтому закрыто тем же guard'ом. */
+      superAdminHint: 'Отправить эту ссылку главному администратору может только он сам',
     },
 
     /** Read-only data grid of the user-detail screen (F4). */
@@ -199,8 +223,12 @@ export const userCopy = defineCopy(
         'восстановить его из панели нельзя.',
       deleteSelfHint: 'Свою же учётную запись удалить нельзя',
       deleteAdminHint: 'Удалить аккаунт администратора может только главный администратор',
+      /** Не вариант `deleteAdminHint`, а другой запрет (`SuperAdminGuard`, 2026-08-27): тот
+       * снимается для главного администратора, этот — ни для кого. */
+      deleteSuperAdminHint: 'Учётную запись главного администратора не может удалить никто другой',
       deleteNoPermissionHint: 'У вашей роли нет права удалять пользователей',
       resetNoPermissionHint: 'У вашей роли нет права изменять пользователей',
+      resetSuperAdminHint: 'Сбросить пароль главного администратора может только он сам',
       resetTitle: (userLabel: string) => `Сбросить пароль «${userLabel}»?`,
       resetBody: 'Пользователь будет обязан задать новый пароль при следующем входе.',
     },
@@ -213,6 +241,7 @@ export const userCopy = defineCopy(
       changePreferredLanguage: 'изменить язык писем пользователя',
       deleteUser: 'удалить пользователя',
       resetPassword: 'сбросить пароль',
+      sendPasswordResetEmail: 'отправить ссылку на смену пароля',
       impersonate: 'войти как пользователь',
     },
 
@@ -224,7 +253,9 @@ export const userCopy = defineCopy(
       adminRoleImmutable: 'Роль администратора можно снять только напрямую в базе данных.',
       cannotDeleteSelf: 'Нельзя удалить свою же учётную запись.',
       adminAccountImmutable: 'Аккаунт администратора можно удалить только напрямую в базе данных.',
-      superAdminRequired: 'Действия с ролью администратора доступны только главному администратору.',
+      superAdminRequired:
+        'Это действие доступно только главному администратору — а его собственную учётную запись ' +
+        'не может изменить никто, кроме него самого.',
       accountDeleted: 'Этот пользователь уже удалён — обновите страницу.',
       forbidden: (action: string) => `Не удалось ${action}: недостаточно прав.`,
       server: (action: string, status: number) => `Не удалось ${action}: сервер вернул ошибку (${status}).`,
@@ -283,6 +314,8 @@ export const userCopy = defineCopy(
 
     adminRoleImmutableHint: 'Only the super administrator can revoke the Administrator role',
 
+    superAdminImmutableHint: 'Only the super administrator can change their own account',
+
     promote: {
       title: (userLabel: string) => `Make “${userLabel}” an administrator?`,
       body:
@@ -306,6 +339,13 @@ export const userCopy = defineCopy(
         'there is no “return” button.',
       confirm: 'Sign in as user',
       elevatedHint: 'Only the super administrator can sign in as an account with elevated rights',
+    },
+
+    passwordResetEmail: {
+      button: 'Send a password reset link',
+      pending: 'Sending…',
+      sent: (email: string) => `A password reset link has been sent to ${email}.`,
+      superAdminHint: 'Only the super administrator can have this link sent to themselves',
     },
 
     info: {
@@ -374,8 +414,10 @@ export const userCopy = defineCopy(
         'the list; it cannot be restored from the panel.',
       deleteSelfHint: 'You cannot delete your own account',
       deleteAdminHint: 'Only the super administrator can delete an administrator account',
+      deleteSuperAdminHint: 'Nobody else can delete the super administrator account',
       deleteNoPermissionHint: 'Your role cannot delete users',
       resetNoPermissionHint: 'Your role cannot modify users',
+      resetSuperAdminHint: 'Only the super administrator can reset their own password',
       resetTitle: (userLabel: string) => `Reset the password of “${userLabel}”?`,
       resetBody: 'The user will have to set a new password at their next sign-in.',
     },
@@ -386,6 +428,7 @@ export const userCopy = defineCopy(
       changePreferredLanguage: 'change the user’s email language',
       deleteUser: 'delete the user',
       resetPassword: 'reset the password',
+      sendPasswordResetEmail: 'send a password reset link',
       impersonate: 'sign in as this user',
     },
 
@@ -397,7 +440,9 @@ export const userCopy = defineCopy(
       adminRoleImmutable: 'The Administrator role can only be revoked directly in the database.',
       cannotDeleteSelf: 'You cannot delete your own account.',
       adminAccountImmutable: 'An administrator account can only be deleted directly in the database.',
-      superAdminRequired: 'Only the super administrator can act on the Administrator role.',
+      superAdminRequired:
+        'Only the super administrator can do this — and their own account cannot be modified by ' +
+        'anyone else.',
       accountDeleted: 'This user has already been deleted — refresh the page.',
       forbidden: (action: string) => `Could not ${action}: you do not have permission.`,
       server: (action: string, status: number) =>

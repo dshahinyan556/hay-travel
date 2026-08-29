@@ -30,6 +30,19 @@ const TOUR_NOT_FOUND = 2004
 const TOUR_DATE_UNAVAILABLE = 2014
 const INVALID_GUEST_COUNT = 2015
 const ORDER_DATE_IN_PAST = 2016
+/* Батч «Трансферы + формат» (2026-08-29). Все три приходят тем же пер-строчным списком, что и
+   коды выше (`OrderValidationService`), и все три чинятся правкой ОДНОЙ позиции — поэтому они
+   строчные причины, а не общая ошибка формы. */
+const NO_SEATS_LEFT = 2044
+const INVALID_START_TIME = 2045
+const FORMAT_REQUIRED = 2046
+/* Предопределённый трансфер в корзине (решение 0.10): цена строки — это цена КЛАССА АВТО,
+   поэтому у неё есть свои три причины отказа. Все чинятся на странице трансфера, а не в
+   корзине: класс и обратный рейс там же и выбирались. */
+const VEHICLE_CLASS_NOT_AVAILABLE = 2047
+const PASSENGERS_EXCEED_CAPACITY = 2049
+const VEHICLE_CLASS_NOT_FOUND = 2057
+const INVALID_RETURN_TRIP = 2058
 
 /** Top-level codes of a whole-request rejection. */
 export const ORDER_MUST_HAVE_AT_LEAST_ONE_LINE = 2028
@@ -41,6 +54,12 @@ export type CheckoutLineFailureReason =
   | 'dateUnavailable' // 2014
   | 'guestCount' // 2015
   | 'datePast' // 2016
+  | 'noSeats' // 2044
+  | 'startTimeInvalid' // 2045
+  | 'formatRequired' // 2046
+  | 'vehicleUnavailable' // 2047 / 2057
+  | 'passengersOverCapacity' // 2049
+  | 'returnTripInvalid' // 2058
   | 'unknown' // код есть, но нам неизвестен
 
 /** `errorCode` as the backend spells it (`ErrorModelExceptionHandler` uses camelCase, some older
@@ -59,11 +78,18 @@ function lineErrorItemOf(row: unknown): OrderLineErrorItem | null {
   const tourId = record.tourId ?? record.TourId
   const tourDate = record.tourDate ?? record.TourDate
   const errorCode = record.errorCode ?? record.ErrorCode
-  if (typeof index !== 'number' || typeof tourId !== 'number') return null
+  if (typeof index !== 'number') return null
   if (typeof tourDate !== 'string' || typeof errorCode !== 'number') return null
+  // `TourId` стал nullable вместе со строкой заказа (батч 2026-08-29: строка-заявка кастомного
+  // трансфера продукта не имеет). Из КОРЗИНЫ такой пункт прийти не может — она шлёт только
+  // `tourId`, — но отбрасывать его здесь как «битый» значило бы молча потерять сообщение об
+  // ошибке, если контракт когда-нибудь начнёт им пользоваться. `index` и так первичный ключ
+  // сопоставления со строкой (см. `useCheckout`), `tourId` — лишь контрольная сумма поверх него.
+  const resolvedTourId = typeof tourId === 'number' ? tourId : null
+  if (tourId != null && resolvedTourId === null) return null
   // `DateOnly` serialises as `YYYY-MM-DD`, but a handler that ever sends a full timestamp would
   // otherwise silently stop matching cart ids — cut it to the day rather than fail the match.
-  return { index, tourId, tourDate: tourDate.slice(0, 10), errorCode }
+  return { index, tourId: resolvedTourId, tourDate: tourDate.slice(0, 10), errorCode }
 }
 
 /** Пер-строчные ошибки из тела 400. Пустой массив — тело не в формате `OrderLinesErrorModel`. */
@@ -88,6 +114,19 @@ export function lineFailureReason(errorCode: number): CheckoutLineFailureReason 
       return 'guestCount'
     case ORDER_DATE_IN_PAST:
       return 'datePast'
+    case NO_SEATS_LEFT:
+      return 'noSeats'
+    case INVALID_START_TIME:
+      return 'startTimeInvalid'
+    case FORMAT_REQUIRED:
+      return 'formatRequired'
+    case VEHICLE_CLASS_NOT_AVAILABLE:
+    case VEHICLE_CLASS_NOT_FOUND:
+      return 'vehicleUnavailable'
+    case PASSENGERS_EXCEED_CAPACITY:
+      return 'passengersOverCapacity'
+    case INVALID_RETURN_TRIP:
+      return 'returnTripInvalid'
     default:
       return 'unknown'
   }
@@ -105,6 +144,27 @@ export function lineFailureMessage(reason: CheckoutLineFailureReason, t: Transla
       return t('cart.line.guestCountInvalid')
     case 'datePast':
       return t('booking.datePast')
+    /* Мест не осталось — формулировка владельца (решение 0.20), та же строка, что показывает
+       блок брони. Позиция чинится сменой даты, и текст говорит ровно это. */
+    case 'noSeats':
+      return t('booking.noSeats')
+    /* Слот исчез из расписания продукта между добавлением в корзину и отправкой. Править время
+       в корзине нельзя (расписание живёт у продукта), поэтому текст отправляет выбрать другое —
+       на странице путешествия, по ссылке в названии строки. */
+    case 'startTimeInvalid':
+      return t('booking.startTimeInvalid')
+    /* Продукт стал продаваться в обоих форматах уже после того, как позиция легла в корзину:
+       выбора в ней нет, и сделать его можно только в блоке брони. */
+    case 'formatRequired':
+      return t('booking.formatRequired')
+    /* Класс авто перестал продаваться на этом трансфере (админ убрал строку цены) — выбрать
+       другой можно только на странице трансфера, по ссылке в названии позиции. */
+    case 'vehicleUnavailable':
+      return t('transfers.error.vehicle')
+    case 'passengersOverCapacity':
+      return t('transfers.error.passengers')
+    case 'returnTripInvalid':
+      return t('transfers.error.returnTrip')
     default:
       return t('booking.submitFailed')
   }

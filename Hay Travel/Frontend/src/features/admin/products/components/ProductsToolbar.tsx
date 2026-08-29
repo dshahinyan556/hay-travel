@@ -16,6 +16,7 @@ import type { ProductsView } from './ProductsTable'
 function parseTypeFilter(value: string): TypeFilter {
   if (value === String(TourType.Tour)) return TourType.Tour
   if (value === String(TourType.Excursion)) return TourType.Excursion
+  if (value === String(TourType.Transfer)) return TourType.Transfer
   return 'all'
 }
 
@@ -90,6 +91,7 @@ export function ProductsToolbar({
     { value: 'all', label: copy.typeAll },
     { value: String(TourType.Tour), label: copy.typeToursOnly },
     { value: String(TourType.Excursion), label: copy.typeExcursionsOnly },
+    { value: String(TourType.Transfer), label: copy.typeTransfersOnly },
   ]
 
   const statusOptions: SelectOption[] = [

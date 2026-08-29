@@ -55,8 +55,15 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                 throw new ErrorModelException(GlobalErrorCode.InvalidEntityRelation, HttpStatusCode.BadRequest, "Tour type cannot be changed after creation!");
 
             // Скалярные поля тура (IsActive/IsArchived/TotalPrice здесь не трогаем).
+            // Список ведётся ВРУЧНУЮ и поимённо: новое поле продукта, не добавленное сюда,
+            // молча не сохраняется при редактировании (единственный симптом — «поле не
+            // сохранилось», без ошибки). Format/GroupPricePerPerson/GroupCapacity — батч
+            // 2026-08-29.
             existing.MainImageUrl = incoming.MainImageUrl;
             existing.RequiresPrepayment = incoming.RequiresPrepayment;
+            existing.Format = incoming.Format;
+            existing.GroupPricePerPerson = incoming.GroupPricePerPerson;
+            existing.GroupCapacity = incoming.GroupCapacity;
             existing.DiscountPercent = incoming.DiscountPercent;
             existing.DiscountStartDate = incoming.DiscountStartDate;
             existing.DiscountValidUntil = incoming.DiscountValidUntil;
@@ -104,9 +111,34 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                     (target, src) => { target.TagId = src.TagId; });
             }
 
+            // Времена начала (батч 2026-08-29). Тот же Id-диff, что у остальных коллекций
+            // графа; null/[]-исключение (как у Regions/Tags) здесь НЕ действует — список
+            // времён форма продукта присылает всегда, а «пусто» у тура/экскурсии не пройдёт
+            // валидацию, так что стереть слоты молчащим payload'ом нельзя.
+            ReconcileCollection(existing.StartTimes, incoming.StartTimes,
+                (target, src) => { target.Time = src.Time; target.SortOrder = src.SortOrder; });
+
+            // Маршрут и цены трансфера: у тура/экскурсии обе коллекции пустые с обеих сторон,
+            // поэтому диff вырождается в no-op и отдельной ветки по типу продукта не нужно.
+            ReconcileCollection(existing.TransferRoutePoints, incoming.TransferRoutePoints, (target, src) =>
+            {
+                target.Kind = src.Kind;
+                target.SortOrder = src.SortOrder;
+                ReconcileCollection(target.Translations, src.Translations,
+                    (t, s) => { t.LanguageCode = s.LanguageCode; t.Value = s.Value; });
+            });
+
+            ReconcileCollection(existing.TransferPrices, incoming.TransferPrices, (target, src) =>
+            {
+                target.VehicleClassId = src.VehicleClassId;
+                target.OneWayPrice = src.OneWayPrice;
+                target.RoundTripPrice = src.RoundTripPrice;
+            });
+
             await ReconcileTourDays(existing, incoming);
 
-            // Compute-on-write: пересчёт после всех day-диффов.
+            // Compute-on-write: пересчёт после всех day-диффов. У трансфера дней нет, поэтому
+            // сумма даёт 0 — цена трансфера живёт не здесь, а в TransferPrice (решение 0.6).
             existing.TotalPrice = existing.TourDetails.Sum(td => td.TourDay.Price);
 
             updatedTour = existing;

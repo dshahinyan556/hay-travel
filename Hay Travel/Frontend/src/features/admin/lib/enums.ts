@@ -20,9 +20,48 @@ import { LanguageCode } from '@/shared/types/language'
 export const TourType = {
   Tour: 1,
   Excursion: 2,
+  /** Трансфер (2026-08-29): А → Б, опционально со стопами и обратным рейсом. Живёт в той же
+   * таблице, что тур и экскурсия, но из «богатства» тура использует только главную картинку
+   * и участие в «Избранном» — ни дней, ни галереи, ни регионов, ни тегов, ни скидки. */
+  Transfer: 3,
 } as const
 
 export type TourType = (typeof TourType)[keyof typeof TourType]
+
+/* -------------------------------------------------------------------------- */
+/*  Tour format                                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Формат тура/экскурсии. Значение живёт в `shared/types/tourFormat.ts` и ре-экспортируется
+ * отсюда: оно нужно и админке, и публичному сайту, а `shared` не может импортировать `features`.
+ * Два независимых объявления одних и тех же чисел рано или поздно разъезжаются, поэтому здесь
+ * именно ре-экспорт, а не копия.
+ */
+export { TourFormat } from '@/shared/types/tourFormat'
+
+/* -------------------------------------------------------------------------- */
+/*  Transfer                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/** Роль точки в маршруте трансфера — и у предопределённого продукта, и в кастомной заявке. */
+export const TransferRoutePointKind = {
+  From: 1,
+  Stop: 2,
+  To: 3,
+} as const
+
+export type TransferRoutePointKind =
+  (typeof TransferRoutePointKind)[keyof typeof TransferRoutePointKind]
+
+/** Строка заказа — либо бронь продукта из каталога, либо кастомная заявка на трансфер
+ * (без продукта и без цены, статус заказа `Request`). */
+export const OrderLineKind = {
+  Product: 1,
+  CustomTransfer: 2,
+} as const
+
+export type OrderLineKind = (typeof OrderLineKind)[keyof typeof OrderLineKind]
 
 /* -------------------------------------------------------------------------- */
 /*  Tags                                                                       */
@@ -152,6 +191,11 @@ export const SettingValueType = {
   ImageUrl: 4,
   /** Значение — один id из фиксированного набора `options`. Хранится строкой. */
   Select: 5,
+  /** Целое число (часы/дни/лимиты) — добавлен вместе с параметрами фоновых задач (`features/
+   * admin/jobs`); экран «Настройки сайта» его пока не рендерит отдельным контролом (сегодня
+   * ни один НЕ-джобовский ключ каталога этот тип не использует), но значение уже существует
+   * на бэке (`ATTours.Common.Enums.SettingValueType.Number = 6`) и должно быть в этом зеркале. */
+  Number: 6,
 } as const
 
 export type SettingValueType = (typeof SettingValueType)[keyof typeof SettingValueType]

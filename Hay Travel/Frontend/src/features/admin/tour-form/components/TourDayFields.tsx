@@ -24,6 +24,13 @@ interface TourDayFieldsProps {
   /** Overrides the day-price caption. Defaults to the accordion's "Цена дня, ֏"/"Day price, ֏";
    * a flat single day passes the plain "Цена, ֏"/"Price, ֏" instead. */
   priceLabel?: string
+  /** `false` при формате «Групповой» (решение 0.26): цена дня существует ТОЛЬКО чтобы сложиться
+   * в «Цену за группу», а она при этом формате спрятана — просить заполнить слагаемые скрытой
+   * суммы было бы хуже, чем не показывать их. Значение остаётся в состоянии формы и уходит на
+   * сервер как есть: `Tour.TotalPrice` не меняется, сохранение не ломается, а возврат формата
+   * в «Индивидуальный»/«Оба» показывает прежние цифры нетронутыми.
+   * @default true */
+  showPrice?: boolean
   /** Existing route-point catalog entries offered as autocomplete. */
   routePointSuggestions: Localized[]
   /** Place catalog entries a route point can be hard-linked to (F13 gap closure). */
@@ -45,6 +52,7 @@ export function TourDayFields({
   routePointError,
   actions,
   priceLabel,
+  showPrice = true,
   routePointSuggestions,
   placeOptions,
   daySources,
@@ -69,19 +77,21 @@ export function TourDayFields({
         />
       </div>
 
-      <div className="max-w-56">
-        <Field label={priceLabel ?? copy.days.price} htmlFor={`day-price-${day.key}`} error={priceError}>
-          <Input
-            id={`day-price-${day.key}`}
-            type="text"
-            inputMode="decimal"
-            value={day.price}
-            onChange={(e) => actions.setDayPrice(day.key, e.target.value)}
-            placeholder="0"
-            error={Boolean(priceError)}
-          />
-        </Field>
-      </div>
+      {showPrice && (
+        <div className="max-w-56">
+          <Field label={priceLabel ?? copy.days.price} htmlFor={`day-price-${day.key}`} error={priceError}>
+            <Input
+              id={`day-price-${day.key}`}
+              type="text"
+              inputMode="decimal"
+              value={day.price}
+              onChange={(e) => actions.setDayPrice(day.key, e.target.value)}
+              placeholder="0"
+              error={Boolean(priceError)}
+            />
+          </Field>
+        </div>
+      )}
 
       <TranslationGroup
         label={copy.header.title}

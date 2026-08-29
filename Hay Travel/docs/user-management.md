@@ -4,6 +4,71 @@
 Сделано в этой сессии: **только схема БД (Entity + EF-конфигурация + миграция), без единой
 строчки бизнес-логики/контроллеров.** Ссылка сюда — из `CHANGELOG.md`.
 
+## 2026-08-27 — Resend verification, неприкосновенность SuperAdmin, admin-triggered reset email
+
+Три связанных запроса Давида: (1) при регистрации письмо может не дойти — нужна повторная
+отправка с cooldown; (2) другие админы, даже с правом управлять админами, не должны мочь
+что-либо сделать с аккаунтом SuperAdmin — ни на фронте, ни в обход UI; (3) админ должен уметь
+отправить клиенту настоящее письмо смены пароля (не просто выставить флаг).
+
+**Resend verification email.** `POST api/Auth/ResendVerification` `{email}` → тот же generic-ответ,
+что у `Register`/`ForgotPassword` (не палит, существует ли аккаунт/уже ли верифицирован). Логика
+переиспользована буквально — раньше «resend» был только побочным эффектом повторного `Register`
+(перевыпуск `UserToken` типа `EmailVerification`), теперь это тот же код, вынесенный в
+`AuthService.ResendEmailVerificationAsync`, и вызывается из обоих мест. Cooldown 60с — серверный,
+по времени выпуска текущего `UserToken` (не по IP/сессии), внутри окна отвечает тем же generic
+200 без реальной отправки — снаружи неотличимо от «уже отправлено». Фронт: кнопка на
+`CheckEmailPage.tsx` (`/auth/check-email`), обратный отсчёт как deadline (`cooldownUntil`), не
+tick-counter — фоновая вкладка не должна давать досрочный повтор из-за throttled `setInterval`.
+
+**SuperAdmin — теперь неприкосновенен, а не просто «роль Admin требует SuperAdmin для смены».**
+Новый общий guard `ATTours.Service/Services/Authorization/SuperAdminGuard.GuardSuperAdminTarget
+(target, actingUserId)`: `target.IsSuperAdmin && target.Id != actingUserId` → 403
+`SuperAdminPrivilegeRequired`, **безусловно** — не читает привилегии вызывающего вообще (ни его
+`IsSuperAdmin`, ни `CanManageAdmins`). Раньше защита SuperAdmin-аккаунта была побочным
+эффектом тира `CanManageAdmins` на его роли (см. запись ниже, 08-09/10) — с этой сессии это
+отдельная, более строгая проверка по флагу самого аккаунта, идёт ПЕРЕД тем тиром (SuperAdmin
+теоретически может сидеть на роли без `CanManageAdmins`, старая проверка тогда бы не сработала).
+Подключена во **все** write-пути над `User`: `UserDeletionService`, `UserForcePasswordResetService`
+(туда впервые добавлен `actingUserId` — раньше force-reset не был защищён вообще НИКАК),
+`UserRoleUpdateService.GuardRoleChange`, `UserJobRoleUpdateService`, `UserPreferredLanguageUpdateService`,
+`UserPermissionOverrideUpdateService`, `UserPhoneUpdateService` (сегодня self-service-only,
+`actingUserId` добавлен как задел, чтобы будущий admin-эндпоинт не унаследовал дыру молча),
+`UserAdminPasswordResetService` (новый, см. ниже). `Impersonate` не трогали — там свой отдельный
+guard (`ImpersonationTargetNotAllowed`, 2218), уже блокировал не-SuperAdmin актора на elevated
+цели.
+
+Побочный эффект этой задачи: `UserForcePasswordResetService` вместе с SuperAdmin-гардом получил
+и обычный `CanManageAdmins`-тир (которого не было вовсе) — сброс пароля на любом admin-tier
+аккаунте теперь тоже требует SuperAdmin, не только `users.Update`.
+
+**Исправление устаревшего факта из записи 08-09/10 ниже:** там написано «`UserInfoModel`/
+`UserDetailInfoModel` этого поля [`IsSuperAdmin`] не несут никогда». Это больше не так — фронту
+нужно было заранее знать, что цель SuperAdmin, чтобы задизейблить действия в UI, а не только
+ловить 403 после клика. `IsSuperAdmin` добавлен в оба DTO (мапится по конвенции AutoMapper, без
+правки `MappingProfile.cs`) — теперь через список/карточку пользователя МОЖНО узнать, кто
+SuperAdmin. Собственный статус актора по-прежнему приходит и из JWT-claim `is_super_admin`
+(сессия), это не заменено, а дополнено.
+
+Фронт (`UserDetailPage.tsx`, `UsersTable.tsx`): `isTargetSuperAdmin = user.isSuperAdmin && !isSelf`
+— один источник истины на экран, без исключения `&& !canManageAdmins(actor)` (в отличие от
+старого тира) — блокирует Delete, ForcePasswordReset, ChangeRole, SetJobRole,
+SetPreferredLanguage, PermissionOverrides, новую SendPasswordResetEmail. `isSelf` не даёт условию
+сработать на собственном профиле — SuperAdmin продолжает редактировать себя как обычно, ровно
+как это пропускает бэкендовый `target.Id == actingUserId`.
+
+**Admin-triggered password reset email.** `POST api/Users/SendPasswordResetEmail?id=` (`users.Update`),
+новый `UserAdminPasswordResetService` — переиспользует ту же выдачу токена/письма, что
+self-service `ForgotPassword` (`AuthService.IssuePasswordResetTokenAsync`, общий метод), но
+адресат берётся из БД по `id`, а не из введённого адреса — анти-энумерация не нужна, ответ
+обычный. Отличается от существующего `ForcePasswordReset` (B5): тот только выставляет
+`ForceToChangePass=true` и ничего не отправляет, этот реально шлёт письмо со ссылкой. Кнопка на
+`UserDetailPage.tsx` в control zone (`AdminActionButton variant="secondary"`, не в rose-тинтованной
+danger zone — действие не деструктивное).
+
+Всё собрано (`dotnet build` Release / `npm run build`), 0 ошибок. Живой ручной прогон в браузере
+— на стороне Давида (в этой сессии тестировщик-агент не запускался).
+
 ## 2026-08-09/10 — Личный кабинет (/account), email-change UI, SuperAdmin, LoginHistory, гео-IP
 
 Полный чек-лист со всеми согласованными с Давидом решениями — `Hay Travel/profile-account-checklist-2026-08-09.txt` (не пересказывается здесь). Архитектурные решения фронта — `docs/adr/010-account-route-inside-auth-feature.md`, `docs/adr/011-superadmin-flag-from-jwt-claim.md`.

@@ -1,6 +1,11 @@
 import { useCopy } from '@/shared/i18n/defineCopy'
 import { calendarCopy } from '../lib/calendarCopy'
-import { closureLevelOf, type CalendarGridDay } from '../lib/calendarModel'
+import {
+  closedScopesOf,
+  closureLevelOf,
+  tourTypePluralLabel,
+  type CalendarGridDay,
+} from '../lib/calendarModel'
 
 export interface CalendarDayCellProps {
   day: CalendarGridDay
@@ -27,20 +32,30 @@ export function CalendarDayCell({ day, selected, tourTitle, onSelect }: Calendar
   const level = closureLevelOf(day.day)
   const orders = day.day?.totalOrders ?? 0
   const guests = day.day?.ordersByTour.reduce((sum, row) => sum + row.guestCount, 0) ?? 0
-  const closedTourIds = day.day?.closedTourIds ?? []
+  const { tourIds: closedTourIds, tourTypes: closedTourTypes } = closedScopesOf(day.day)
 
   const parts = [`${day.date.getDate()} ${copy.monthsGenitive[day.date.getMonth()]}`]
   if (orders > 0) parts.push(copy.ordersUnit(orders), copy.guestsUnit(guests))
   if (level === 'closed') {
     parts.push(copy.closedLabel)
   } else if (level === 'partial') {
-    // Naming the tours matters here: the amber dot alone says "something is closed" without
-    // saying what. Capped so the label stays a sentence, not a list.
-    parts.push(
-      closedTourIds.length <= 2
-        ? `${copy.partialLabel}: ${closedTourIds.map(tourTitle).join(', ')}`
-        : `${copy.partialLabel}: ${closedTourIds.length}`,
-    )
+    // Naming what is closed matters here: an indicator alone says "something is closed" without
+    // saying what. Типы называются всегда (их максимум три), продукты — списком до двух,
+    // дальше числом, чтобы подпись оставалась фразой, а не перечнем.
+    if (closedTourTypes.length > 0) {
+      parts.push(
+        copy.closedTypesLabel(
+          closedTourTypes.map((tourType) => tourTypePluralLabel(tourType, copy)).join(', '),
+        ),
+      )
+    }
+    if (closedTourIds.length > 0) {
+      parts.push(
+        closedTourIds.length <= 2
+          ? `${copy.partialLabel}: ${closedTourIds.map(tourTitle).join(', ')}`
+          : `${copy.partialLabel}: ${closedTourIds.length}`,
+      )
+    }
   }
   const description = parts.join(', ')
 
@@ -76,11 +91,18 @@ export function CalendarDayCell({ day, selected, tourTitle, onSelect }: Calendar
       </span>
 
       {/* "Closed" is already carried by the hatched background on the button itself — no glyph
-          needed here too. "Partial" has no background of its own, so the dot is its only signal. */}
+          needed here too. "Partial" has no background of its own, so the dot is its only signal.
+          Закрытие целого типа продукта (решение 0.27) рисуется тем же углом, но КОЛЬЦОМ: две
+          разные вещи не должны выглядеть одинаково, а на слово в 55px-клетке места нет (бюджет
+          содержимого клетки — B12). Что именно закрыто, читается из `aria-label`/`title`. */}
       {level === 'partial' && (
         <span
           aria-hidden="true"
-          className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-neutral-900"
+          className={`absolute right-1 top-1 rounded-full ${
+            closedTourTypes.length > 0
+              ? 'h-2 w-2 border-[1.5px] border-neutral-900 bg-white'
+              : 'h-1.5 w-1.5 bg-neutral-900'
+          }`}
         />
       )}
 

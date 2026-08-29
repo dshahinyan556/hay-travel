@@ -69,6 +69,15 @@ namespace ATTours.Common.Entities
         // которым уже размечен весь переводимый контент сайта.
         public LanguageCode PreferredLanguage { get; set; } = LanguageCode.Russian;
 
+        // Привязанный чат HayTravelNotificationsBot (ADR 031 §5). null = не привязан.
+        // Заполняется webhook'ом при /start <код>. Один чат ↔ один пользователь
+        // (filtered-unique-индекс в UserConfiguration).
+        public long? TelegramChatId { get; set; }
+
+        // Только для отображения админам/в профиле, в логике доставки не участвует —
+        // отправка всегда по TelegramChatId. null до привязки (и у чатов без @username).
+        public string TelegramUsername { get; set; }
+
         public int RoleId { get; set; }
         public UserRole Role { get; set; }
 

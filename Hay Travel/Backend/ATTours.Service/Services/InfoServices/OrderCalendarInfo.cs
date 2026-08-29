@@ -39,8 +39,10 @@ namespace ATTours.BusinessServices.Services.InfoServices
             var rules = await LoadApplicableRulesAsync(firstDay, lastDay);
 
             // Глобальные правила отдельно: ими считается IsClosedGlobally, и на них же
-            // резолвер отвечает для запроса без тура.
-            var globalRules = rules.Where(rule => rule.TourId is null).ToList();
+            // резолвер отвечает для запроса без тура. Правила области «тип продукта»
+            // (решение 0.27) сюда НЕ входят — иначе закрытие одних трансферов выглядело бы
+            // как закрытие всего дня.
+            var globalRules = rules.Where(rule => rule.TourId is null && rule.TourType is null).ToList();
             // Перечисляем только туры, реально фигурирующие в tour-scope правилах месяца,
             // чтобы не итерировать по всем турам БД на каждый день.
             var scopedTourIds = rules.Where(rule => rule.TourId is not null)
@@ -48,6 +50,13 @@ namespace ATTours.BusinessServices.Services.InfoServices
                                      .Distinct()
                                      .OrderBy(tourId => tourId)
                                      .ToList();
+            // То же самое для типов продукта: спрашиваем резолвер только про те типы, по
+            // которым в месяце вообще есть правила.
+            var scopedTourTypes = rules.Where(rule => rule.TourType is not null)
+                                       .Select(rule => rule.TourType!.Value)
+                                       .Distinct()
+                                       .OrderBy(tourType => (int)tourType)
+                                       .ToList();
 
             var calendar = new CalendarMonthModel
             {
@@ -66,7 +75,18 @@ namespace ATTours.BusinessServices.Services.InfoServices
                     // Глобально закрытый день закрыт и для всех туров — дублировать их
                     // списком незачем: клиент читает IsClosedGlobally.
                     ? new List<int>()
+                    // tourType намеренно не передаётся: здесь считаются закрытия ИМЕННО
+                    // tour-scope правилами, а закрытие по типу продукта едет отдельным
+                    // списком ниже — иначе одно правило «закрыть трансферы» размножилось бы
+                    // в перечисление всех трансферов, которые случайно попали в правила месяца.
                     : scopedTourIds.Where(tourId => ClosureRuleResolver.IsClosed(rules, day, tourId)).ToList();
+
+                var closedTourTypes = isClosedGlobally
+                    ? new List<TourType>()
+                    // tourId == null: спрашиваем «закрыт ли этот тип сам по себе», без
+                    // привязки к конкретному продукту.
+                    : scopedTourTypes.Where(tourType => ClosureRuleResolver.IsClosed(rules, day, tourId: null, tourType))
+                                     .ToList();
 
                 var ordersOfDay = ordersByDay.TryGetValue(day, out var dayOrders)
                     ? dayOrders
@@ -78,6 +98,7 @@ namespace ATTours.BusinessServices.Services.InfoServices
                     IsClosedGlobally = isClosedGlobally,
                     ClosureReason = isClosedGlobally ? globalWinner!.Reason : null,
                     ClosedTourIds = closedTourIds,
+                    ClosedTourTypes = closedTourTypes,
                     TotalOrders = ordersOfDay.Sum(order => order.OrderCount),
                     OrdersByTour = ordersOfDay
                 });
@@ -94,7 +115,10 @@ namespace ATTours.BusinessServices.Services.InfoServices
         private async Task<Dictionary<DateOnly, List<CalendarDayTourOrdersModel>>> LoadOrderAggregatesAsync(DateOnly firstDay, DateOnly lastDay)
         {
             var aggregates = await Context.Set<OrderLine>()
+                // TourId != null: строки-заявки кастомного трансфера (LineKind == CustomTransfer,
+                // 2026-08-29) продукта не имеют и календарь тура не занимают.
                 .Where(line => line.Order.Status != OrderStatus.Rejected
+                                && line.TourId != null
                                 && line.TourDate >= firstDay
                                 && line.TourDate <= lastDay)
                 .GroupBy(line => new { line.TourDate, line.TourId })
@@ -114,7 +138,8 @@ namespace ATTours.BusinessServices.Services.InfoServices
                     group => group.OrderBy(aggregate => aggregate.TourId)
                                   .Select(aggregate => new CalendarDayTourOrdersModel
                                   {
-                                      TourId = aggregate.TourId,
+                                      // "!" безопасен: строки без продукта отфильтрованы в запросе выше.
+                                      TourId = aggregate.TourId!.Value,
                                       OrderCount = aggregate.OrderCount,
                                       GuestCount = aggregate.GuestCount
                                   })

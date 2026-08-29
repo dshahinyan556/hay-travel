@@ -86,6 +86,7 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                     // назначается одной ролью (попап назначения выбирает её один раз).
                     EmployeeRole = group.First().EmployeeRole,
                     PreferredLanguage = group.First().Employee.PreferredLanguage,
+                    TelegramChatId = group.First().Employee.TelegramChatId,
                     LineIds = [.. group.Select(assignment => assignment.OrderLineId)]
                 })];
         }

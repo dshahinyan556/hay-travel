@@ -20,8 +20,15 @@ export interface CartSummaryProps {
   originalTotal: string | null
   /** true — хотя бы одна позиция с 7+ гостями, итог неполный. */
   hasQuoteOnlyLines: boolean
-  /** Причина блокировки CTA, или null — можно отправлять. */
-  blockedBy: 'unavailableTour' | 'lineErrors' | 'sessionUnknown' | null
+  /**
+   * Причина блокировки CTA, или null — можно отправлять.
+   *
+   * `lineErrors` — сервер отклонил позиции на ПОСЛЕДНЕЙ попытке; `lineIssues` — позиция не
+   * отправляема прямо сейчас (мест не хватает, формат не выбран — батч 2026-08-29), но ничего
+   * ещё не отправлялось. Разные значения, потому что разная копия: во втором случае сказать
+   * «заявка не создана» было бы неправдой.
+   */
+  blockedBy: 'unavailableTour' | 'lineErrors' | 'lineIssues' | 'sessionUnknown' | null
   running: boolean
   /** Не привязанная к строке ошибка последней попытки. */
   formError: string | null
@@ -46,7 +53,7 @@ export function CartSummary({
   const blockedHint =
     blockedBy === 'unavailableTour'
       ? t('cart.summary.blockedUnavailable')
-      : blockedBy === 'lineErrors'
+      : blockedBy === 'lineErrors' || blockedBy === 'lineIssues'
         ? t('cart.summary.blockedLines')
         : null
 

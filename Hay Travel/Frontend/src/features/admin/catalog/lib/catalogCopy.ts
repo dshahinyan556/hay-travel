@@ -23,7 +23,8 @@ import { TourNoteType } from '@/features/admin/lib/enums'
 const ru = {
   common: {
     title: 'Справочники',
-    subtitle: 'Общие точки маршрута, доп. расходы, заметки и теги, которые можно подставлять в туры.',
+    subtitle:
+      'Общие точки маршрута, доп. расходы, заметки и теги для туров, а также классы авто для трансферов.',
     tabsLabel: 'Разделы справочников',
     tabs: {
       places: 'Точки маршрута',
@@ -31,6 +32,7 @@ const ru = {
       notes: 'Заметки',
       regions: 'Регионы',
       tags: 'Теги',
+      vehicleClasses: 'Классы авто',
     },
     searchByName: 'Поиск по названию…',
     colOrder: 'Порядок',
@@ -172,12 +174,48 @@ const ru = {
     saveServerError: (status: number) => `Не удалось сохранить: сервер вернул ошибку (${status}).`,
     saveNetworkError: 'Не удалось сохранить: проверьте соединение и попробуйте ещё раз.',
   },
+
+  vehicleClasses: {
+    addButton: 'Добавить класс',
+    empty: 'Классов авто пока нет.',
+    sortableItem: 'Класс авто',
+    panelEdit: 'Класс авто',
+    panelCreate: 'Новый класс авто',
+    deleteTitle: 'Удалить класс?',
+    deleteBefore: 'Класс «',
+    deleteAfter: '» будет удалён безвозвратно. Если он используется в трансферах или заказах, сначала уберите его оттуда.',
+    /** Тексту API-ошибки 2010 нужна своя формулировка — общий `common.errors.inUse` говорит
+     * «используется в турах», что для класса авто звучит неточно (он привязан к трансферу/заказу,
+     * не к турам вообще). */
+    deleteInUseError:
+      'Этот класс авто используется в трансферах или заказах — сначала уберите его оттуда, затем удалите.',
+    rowFallback: (id: number) => `класс №${id}`,
+    capacityLabel: 'Вместимость, пассажиров',
+    capacityHint: 'Без учёта водителя.',
+    capacityError: 'Укажите вместимость — минимум 1 пассажир.',
+    luggageCapacityLabel: 'Лимит багажа, единиц',
+    luggageCapacityHint: 'Средний чемодан = 3 единицы, большой чемодан = 5 единиц.',
+    luggageCapacityError: 'Укажите лимит багажа — 0 или больше.',
+    isActiveLabel: 'Активен (доступен для выбора в трансферах)',
+    colCapacity: 'Вместимость',
+    colLuggage: 'Багаж',
+    colStatus: 'Статус',
+    statusActive: 'Активен',
+    statusHidden: 'Скрыт',
+    actions: {
+      reorder: 'изменить порядок классов авто',
+      save: 'сохранить класс авто',
+      add: 'добавить класс авто',
+      delete: 'удалить класс авто',
+    },
+  },
 }
 
 export const catalogCopy = defineCopy(ru, {
   common: {
     title: 'Reference data',
-    subtitle: 'Shared route points, extra expenses, notes and tags you can drop into any tour.',
+    subtitle:
+      'Shared route points, extra expenses, notes and tags for tours, plus vehicle classes for transfers.',
     tabsLabel: 'Reference data sections',
     tabs: {
       places: 'Route points',
@@ -185,6 +223,7 @@ export const catalogCopy = defineCopy(ru, {
       notes: 'Notes',
       regions: 'Regions',
       tags: 'Tags',
+      vehicleClasses: 'Vehicle classes',
     },
     searchByName: 'Search by name…',
     colOrder: 'Order',
@@ -322,6 +361,38 @@ export const catalogCopy = defineCopy(ru, {
     teaserEn: 'Teaser (EN)',
     saveServerError: (status: number) => `Could not save: the server returned an error (${status}).`,
     saveNetworkError: 'Could not save: check your connection and try again.',
+  },
+
+  vehicleClasses: {
+    addButton: 'Add vehicle class',
+    empty: 'No vehicle classes yet.',
+    sortableItem: 'Vehicle class',
+    panelEdit: 'Vehicle class',
+    panelCreate: 'New vehicle class',
+    deleteTitle: 'Delete vehicle class?',
+    deleteBefore: 'The vehicle class “',
+    deleteAfter: '” will be deleted permanently. If it is used in transfers or orders, remove it from them first.',
+    deleteInUseError:
+      'This vehicle class is used in transfers or orders — remove it from them first, then delete it.',
+    rowFallback: (id: number) => `vehicle class #${id}`,
+    capacityLabel: 'Capacity, passengers',
+    capacityHint: 'Not counting the driver.',
+    capacityError: 'Enter the capacity — at least 1 passenger.',
+    luggageCapacityLabel: 'Luggage limit, units',
+    luggageCapacityHint: 'A medium suitcase = 3 units, a large suitcase = 5 units.',
+    luggageCapacityError: 'Enter the luggage limit — 0 or more.',
+    isActiveLabel: 'Active (selectable for transfers)',
+    colCapacity: 'Capacity',
+    colLuggage: 'Luggage',
+    colStatus: 'Status',
+    statusActive: 'Active',
+    statusHidden: 'Hidden',
+    actions: {
+      reorder: 'reorder vehicle classes',
+      save: 'save the vehicle class',
+      add: 'add the vehicle class',
+      delete: 'delete the vehicle class',
+    },
   },
 })
 

@@ -36,7 +36,16 @@ namespace ATTours.BusinessServices.Services.InfoServices
                     .ThenInclude(tr => tr.Region)
                 // Плоско, как TourRegions — Tag не грузится (TourTagInfoModel не несёт его полей,
                 // каталог тегов фронт резолвит через TagController).
-                .Include((Expression<Func<Tour, ICollection<TourTag>>>)(x => x.TourTags));
+                .Include((Expression<Func<Tour, ICollection<TourTag>>>)(x => x.TourTags))
+                // Батч 2026-08-29. Эти три коллекции обязаны быть в графе и на ЧТЕНИИ, и на
+                // tracked-загрузке перед реконсилем: без Include TourUpdateService увидел бы
+                // пустой existing и на каждом сохранении добавлял бы дубли вместо правки.
+                .Include((Expression<Func<Tour, ICollection<TourStartTime>>>)(x => x.StartTimes))
+                .Include((Expression<Func<Tour, ICollection<TransferRoutePoint>>>)(x => x.TransferRoutePoints))
+                    .ThenInclude(point => point.Translations)
+                // Плоско, как TourTags: класс авто (название/вместимость) админка резолвит
+                // через VehicleClassController, публичное чтение — своим графом.
+                .Include((Expression<Func<Tour, ICollection<TransferPrice>>>)(x => x.TransferPrices));
         }
 
         // Админский СПИСОК туров (2026-08-16, GetAllAsync — дашборд/страница продуктов): всё, что
@@ -60,7 +69,14 @@ namespace ATTours.BusinessServices.Services.InfoServices
                     .ThenInclude(n => n.Translations)
                 .Include((Expression<Func<Tour, ICollection<TourRegion>>>)(x => x.TourRegions))
                     .ThenInclude(tr => tr.Region)
-                .Include((Expression<Func<Tour, ICollection<TourTag>>>)(x => x.TourTags));
+                .Include((Expression<Func<Tour, ICollection<TourTag>>>)(x => x.TourTags))
+                // Батч 2026-08-29: в отличие от по-дневного контента это узкие коллекции
+                // (единицы строк на продукт) — в списке они дешёвые, зато без них строка
+                // трансфера в админском списке выглядела бы как продукт без маршрута и цен.
+                .Include((Expression<Func<Tour, ICollection<TourStartTime>>>)(x => x.StartTimes))
+                .Include((Expression<Func<Tour, ICollection<TransferRoutePoint>>>)(x => x.TransferRoutePoints))
+                    .ThenInclude(point => point.Translations)
+                .Include((Expression<Func<Tour, ICollection<TransferPrice>>>)(x => x.TransferPrices));
         }
 
         // Публичный путь чтения ОДНОГО тура (пункт 3.5): весь общий граф + переводы шаблонов
@@ -98,6 +114,35 @@ namespace ATTours.BusinessServices.Services.InfoServices
                     .ThenInclude(tr => tr.Region)
                 .Include((Expression<Func<Tour, ICollection<TourDetail>>>)(x => x.TourDetails))
                 .Include((Expression<Func<Tour, ICollection<TourTag>>>)(x => x.TourTags));
+        }
+
+        // Публичный СПИСОК трансферов (/transfers, батч 2026-08-29): название + картинка +
+        // маршрут + цены (нужна цена «от»). Ни дней, ни регионов, ни тегов у трансфера не
+        // бывает — грузить турный card-граф здесь нечего. Сам VehicleClass нужен даже в
+        // списке (без переводов): цена «от» считается только по АКТИВНЫМ классам, иначе
+        // карточка обещала бы цену класса, который уже не продаётся.
+        public static IEntityQueryableRepository<Tour> IncludeTransferCardGraph(this IEntityQueryableRepository<Tour> query)
+        {
+            return query
+                .Include(x => x.Translations)
+                .Include((Expression<Func<Tour, ICollection<TransferRoutePoint>>>)(x => x.TransferRoutePoints))
+                    .ThenInclude(point => point.Translations)
+                .Include((Expression<Func<Tour, ICollection<TransferPrice>>>)(x => x.TransferPrices))
+                    .ThenInclude(price => price.VehicleClass);
+        }
+
+        // Публичная ДЕТАЛЬНАЯ трансфера (/transfers/:id): то же плюс сам класс авто с
+        // переводами — таблица «класс -> две цены + вместимость/багаж» строится прямо из
+        // ответа, без второго запроса к справочнику.
+        public static IEntityQueryableRepository<Tour> IncludeTransferDetailGraph(this IEntityQueryableRepository<Tour> query)
+        {
+            return query
+                .Include(x => x.Translations)
+                .Include((Expression<Func<Tour, ICollection<TransferRoutePoint>>>)(x => x.TransferRoutePoints))
+                    .ThenInclude(point => point.Translations)
+                .Include((Expression<Func<Tour, ICollection<TransferPrice>>>)(x => x.TransferPrices))
+                    .ThenInclude(price => price.VehicleClass)
+                        .ThenInclude(vehicleClass => vehicleClass.Translations);
         }
     }
 }

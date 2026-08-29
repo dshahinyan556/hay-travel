@@ -11,11 +11,13 @@ import {
 import { AuthShell } from '../components/AuthShell'
 import { withReturnTo } from '@/shared/lib/returnTo'
 import { getMe } from './api/account'
+import { getTelegramStatus, type TelegramLinkStatusModel } from './api/telegram'
 import { AccountSection } from './components/AccountSection'
 import { EmailChangeForm } from './components/EmailChangeForm'
 import { PasswordChangeForm } from './components/PasswordChangeForm'
 import { PhoneChangeForm } from './components/PhoneChangeForm'
 import { ProfileSummary } from './components/ProfileSummary'
+import { TelegramLinkForm } from './components/TelegramLinkForm'
 
 /**
  * Guard + profile fetch for `/account` (ADR 010, decisions 2 and 4).
@@ -26,22 +28,29 @@ import { ProfileSummary } from './components/ProfileSummary'
  *
  * `GET api/Account/Me` failing does NOT fail the route: everything except the name is available
  * from the token-derived `AuthUser`, so a dead profile request degrades two rows to «—» instead of
- * replacing the whole screen with an error.
+ * replacing the whole screen with an error. `GET api/Account/Telegram` is treated exactly the same
+ * way, and for the same reason — one optional row must never cost the visitor the screen.
+ *
+ * The two requests run in parallel: they are independent, and sequencing them would put a second
+ * round trip in front of the first paint for no benefit.
  */
 export async function accountLoader() {
   const state = await ensureAuthReady()
   if (!state.user) throw redirect(withReturnTo('/auth', '/account'))
 
-  const profile = await getMe().catch(() => null)
-  return { profile }
+  const [profile, telegram] = await Promise.all([
+    getMe().catch(() => null),
+    getTelegramStatus().catch(() => null),
+  ])
+  return { profile, telegram }
 }
 
-/** Which editor is open. At most one: the three are mutually exclusive operations, and an
+/** Which editor is open. At most one: the four are mutually exclusive operations, and an
  * abandoned half-finished email flow sitting open under another form is noise. */
-type OpenSection = 'email' | 'phone' | 'password' | null
+type OpenSection = 'email' | 'phone' | 'password' | 'telegram' | null
 
 export function AccountPage() {
-  const { profile } = useLoaderData<typeof accountLoader>()
+  const { profile, telegram } = useLoaderData<typeof accountLoader>()
   const { t } = useLocale()
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -50,6 +59,10 @@ export function AccountPage() {
   /** Locally applied result of a successful phone save, so the collapsed section shows the new
    * number without re-running the loader (which would also refetch the profile for one field). */
   const [savedProfile, setSavedProfile] = useState<UserInfoModel | null>(null)
+  /** Same idea for the Telegram binding: unlinking updates this instead of revalidating the route.
+   * Linking itself finishes in the messenger, so that direction only shows up on the next visit —
+   * a deliberate limitation, see `TelegramLinkForm`. */
+  const [telegramStatus, setTelegramStatus] = useState<TelegramLinkStatusModel | null>(telegram)
   const [isLeaving, setIsLeaving] = useState(false)
 
   // `useAuth` can momentarily report `null` during a sign-out initiated from this very screen; the
@@ -59,6 +72,22 @@ export function AccountPage() {
   const effectiveProfile = savedProfile ?? profile
   const currentEmail = effectiveProfile?.email ?? user.email
   const currentPhone = effectiveProfile?.phoneNumber ?? user.phoneNumber ?? null
+
+  /** Three-state on purpose. `null` is NOT "not linked": the status request failed, and claiming
+   * the account has no Telegram would be a guess presented as a fact. A linked chat with no public
+   * `@username` still has to read as connected, so the username can never stand in for the flag. */
+  const telegramValue =
+    telegramStatus === null ? (
+      <span className="text-ink-muted">{t('account.telegramStatusUnknown')}</span>
+    ) : telegramStatus.isLinked ? (
+      <span className="break-all">
+        {telegramStatus.telegramUsername
+          ? `@${telegramStatus.telegramUsername}`
+          : t('account.telegramLinked')}
+      </span>
+    ) : (
+      <span className="text-ink-muted">{t('account.telegramNotLinked')}</span>
+    )
 
   const toggle = (section: Exclude<OpenSection, null>) =>
     setOpenSection((current) => (current === section ? null : section))
@@ -113,6 +142,16 @@ export function AccountPage() {
             toggleLabel={t('account.changePasswordAria')}
           >
             <PasswordChangeForm />
+          </AccountSection>
+
+          <AccountSection
+            title={t('account.telegram')}
+            currentValue={telegramValue}
+            open={openSection === 'telegram'}
+            onToggle={() => toggle('telegram')}
+            toggleLabel={t('account.telegramAria')}
+          >
+            <TelegramLinkForm status={telegramStatus} onChanged={setTelegramStatus} />
           </AccountSection>
         </div>
 

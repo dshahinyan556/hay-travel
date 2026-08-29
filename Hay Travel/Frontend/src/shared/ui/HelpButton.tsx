@@ -1,7 +1,8 @@
-import { useCallback, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useIsCompactViewport } from '@/shared/hooks'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
+import { useHelpReveal } from './HelpReveal'
 import { Popover } from './Popover'
 import { Sheet, SHEET_SINGLE_DETENT } from './Sheet'
 import { CloseIcon } from './icons'
@@ -39,15 +40,35 @@ export interface HelpPanelProps {
  * the first two; the close button is added here to mirror the mockup's `.hp-close`, since a
  * passive help panel has no natural "select and close" action the way `Select`'s options do).
  *
+ * VISIBILITY: по умолчанию триггер виден всегда. Если вокруг стоит `HelpRevealZone` (вся
+ * админка), на ПК он скрыт и проявляется по наведению на зону — см. доккоммент `HelpReveal.tsx`.
+ * Скрыт он через `opacity`, а НЕ через размонтирование: место 32x32 остаётся занятым, поэтому
+ * появление кнопки не двигает соседнюю вёрстку. Собственный фокус и открытая панель докладываются
+ * зоне через `setTriggerEngaged` — иначе она погасила бы триггер под открытым поповером или
+ * оставила клавиатурного пользователя на невидимой кнопке.
+ *
  * Styled with the public site's role tokens by default (`bg-panel-raised`/`ring-edge-strong`/
  * `text-gold-ink`) — `surface="admin"` switches to admin's own light/teal literals instead,
  * exactly as `Select` does for the same reason (`data-theme` cannot disambiguate the two panels).
  */
 export function HelpButton({ title, children, triggerLabel, surface = 'public' }: HelpPanelProps) {
   const [open, setOpen] = useState(false)
+  const [focused, setFocused] = useState(false)
   const anchorRef = useRef<HTMLButtonElement>(null)
   const isCompact = useIsCompactViewport()
   const titleId = useId()
+
+  const reveal = useHelpReveal()
+  const revealed = reveal?.revealed ?? true
+  const setTriggerEngaged = reveal?.setTriggerEngaged
+
+  const engaged = open || focused
+  useEffect(() => {
+    setTriggerEngaged?.(engaged)
+    // Размонтирование условного триггера (`{dirty && <HelpButton/>}`) не должно оставить зону
+    // навсегда «занятой».
+    return () => setTriggerEngaged?.(false)
+  }, [engaged, setTriggerEngaged])
 
   const { t } = useLocale()
 
@@ -69,6 +90,24 @@ export function HelpButton({ title, children, triggerLabel, surface = 'public' }
       : 'icon-press -m-1 flex shrink-0 items-center justify-center rounded-full p-1 text-ink-muted hover:text-gold-ink focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none'
   const bodyClasses = surface === 'admin' ? 'text-neutral-600' : 'text-ink-dim'
 
+  /**
+   * Появление и исчезновение НЕ симметричны, и это намеренно. Появление быстрое, на `--ease-out-soft`
+   * (тот же токен, которым в этом проекте открываются все reveal-ы): почти всё движение проходит в
+   * первые миллисекунды, поэтому кнопка читается как «уже была здесь», а не как выехавший элемент.
+   * Исчезновение длиннее и мягче — она тихо уходит, не перетягивая взгляд с поля, которое админ в
+   * этот момент заполняет.
+   *
+   * Масштаб (90% → 100% из центра) берёт на себя ощущение «проявилась», чтобы не пришлось двигать
+   * кнопку с места: сдвиг потребовал бы `translate`, а он на мишени 32px читается как дребезг.
+   *
+   * Длительности — токены `--dur-*` из `index.css`, а не литералы: под
+   * `prefers-reduced-motion: reduce` они там схлопываются в 1ms, поэтому отдельная
+   * `motion-reduce`-ветка здесь не нужна.
+   */
+  const revealAnimation = revealed
+    ? 'scale-100 opacity-100 duration-[var(--dur-fast)] ease-[var(--ease-out-soft)]'
+    : 'pointer-events-none scale-90 opacity-0 duration-[var(--dur-base)] ease-[var(--ease-in-out-soft)]'
+
   const panelBody = (
     <div className="p-3.5 text-sm">
       <div className="mb-1.5 flex items-center justify-between gap-3">
@@ -85,17 +124,23 @@ export function HelpButton({ title, children, triggerLabel, surface = 'public' }
 
   return (
     <>
-      <button
-        ref={anchorRef}
-        type="button"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-label={label}
-        onClick={() => setOpen((value) => !value)}
-        className={`icon-press inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-xs font-bold ${triggerClasses}`}
+      <span
+        className={`inline-flex shrink-0 transition-[opacity,scale] will-change-[opacity,scale] ${revealAnimation}`}
       >
-        <span aria-hidden="true">?</span>
-      </button>
+        <button
+          ref={anchorRef}
+          type="button"
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-label={label}
+          onClick={() => setOpen((value) => !value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          className={`icon-press inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-xs font-bold ${triggerClasses}`}
+        >
+          <span aria-hidden="true">?</span>
+        </button>
+      </span>
 
       {isCompact ? (
         <Sheet open={open} onClose={close} ariaLabel={title} detents={SHEET_SINGLE_DETENT}>

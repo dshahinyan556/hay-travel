@@ -74,6 +74,20 @@ export interface TourCreateModel {
   notes: TourNoteCreateModel[]
   regions: TourRegionCreateModel[]
   tags: TourTagCreateModel[]
+  /** `TourFormat`; `null` только у трансфера — у тура/экскурсии бэк требует значение
+   * (`InvalidTourFormat`/2050). */
+  format: number | null
+  /** Обязательна при `format` = Group/Both, иначе `null` (`InvalidGroupPricing`/2051). */
+  groupPricePerPerson: number | null
+  /** Мест на выезд; та же пара обязательности, что у `groupPricePerPerson`. */
+  groupCapacity: number | null
+  /** Минимум один элемент у тура/экскурсии, пусто у трансфера
+   * (`InvalidTourStartTimes`/2052). */
+  startTimes: TourStartTimeCreateModel[]
+  /** Ровно одна точка From и одна To у трансфера, пусто у тура/экскурсии. */
+  transferRoutePoints: TransferRoutePointCreateModel[]
+  /** Минимум одна строка у трансфера, пусто у тура/экскурсии. */
+  transferPrices: TransferPriceCreateModel[]
 }
 
 /** Response of `CreateTour` — the id of the freshly created tour. */
@@ -171,6 +185,23 @@ export interface TourInfoModel {
   regions?: TourRegionInfoModel[]
   /** Same null/[] contract as `regions`. Up to 3 (`TourValidationService`, backend). */
   tags?: TourTagInfoModel[]
+  /** `TourFormat` — только у тура/экскурсии; у трансфера всегда `null` (батч 2026-08-29).
+   * `Individual` = текущее поведение цены (фикс за группу + тир 1-4/5-6/7+),
+   * `Group` = цена за человека × гости без тиров, `Both` = клиент выбирает при брони. */
+  format?: number | null
+  /** Цена за одного человека — обязательна при `format` = Group/Both, иначе `null`. */
+  groupPricePerPerson?: number | null
+  /** Мест на выезд — одно число на весь продукт; остаток считается по паре
+   * (дата + время старта). Обязательно при `format` = Group/Both. */
+  groupCapacity?: number | null
+  /** Предопределённые времена старта. Минимум одно у тура/экскурсии, пусто у трансфера
+   * (`TourValidationService`). Клиент на сайте выбирает одно из них, свободного ввода нет. */
+  startTimes?: TourStartTimeInfoModel[]
+  /** Маршрут трансфера: ровно одна точка From, 0..N Stop, ровно одна To. Пусто у
+   * тура/экскурсии. */
+  transferRoutePoints?: TransferRoutePointInfoModel[]
+  /** Цены трансфера по классам авто. Пусто у тура/экскурсии. */
+  transferPrices?: TransferPriceInfoModel[]
 }
 
 /** Public catalog card (`GET api/Tour/GetToursClient`) — a lightweight projection of
@@ -195,6 +226,10 @@ export interface TourCardModel {
   translations: TranslatableInfoModel[]
   regions: TourRegionInfoModel[]
   tags: TourTagInfoModel[]
+  /** `TourFormat` — бейдж формата на карточке (батч 2026-08-29); `null` у трансфера. */
+  format: number | null
+  /** Нужна карточке, чтобы показать «за человека» вместо «за группу» у группового формата. */
+  groupPricePerPerson: number | null
 }
 
 /* -------------------------------------------------------------------------- */
@@ -387,4 +422,109 @@ export interface TourTagInfoModel {
 
 export interface TourTagCreateModel {
   tagId: number
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Времена старта, трансферы, классы авто (батч 2026-08-29)                   */
+/* -------------------------------------------------------------------------- */
+
+/** Одно из предопределённых времён начала продукта. `time` приходит как `"HH:mm:ss"`
+ * (System.Text.Json сериализует `TimeOnly` именно так) — форма показывает `HH:mm`. */
+export interface TourStartTimeInfoModel {
+  id: number
+  time: string
+  sortOrder: number
+}
+
+export interface TourStartTimeCreateModel {
+  time: string
+  sortOrder: number
+}
+
+/** Точка маршрута трансфера. Ссылки на каталог `Place` тут НЕТ намеренно (решение 0.8):
+ * значение — свободный текст, каталог только подсказывает при вводе. */
+export interface TransferRoutePointInfoModel {
+  id: number
+  /** `TransferRoutePointKind`: 1 = From, 2 = Stop, 3 = To. */
+  kind: number
+  sortOrder: number
+  translations: TranslatableInfoModel[]
+}
+
+export interface TransferRoutePointCreateModel {
+  kind: number
+  sortOrder: number
+  translations: TranslatableCreateModel[]
+}
+
+/** Цена трансфера для одного класса авто. `roundTripPrice` — отдельное поле, а НЕ удвоенная
+ * цена в одну сторону (решение 0.6): «туда-обратно» может стоить дешевле двух концов. */
+export interface TransferPriceInfoModel {
+  id: number
+  vehicleClassId: number
+  oneWayPrice: number
+  roundTripPrice: number
+}
+
+export interface TransferPriceCreateModel {
+  vehicleClassId: number
+  oneWayPrice: number
+  roundTripPrice: number
+}
+
+/** Справочник классов авто (вкладка в Справочниках). Цена здесь не живёт — она на связке
+ * «трансфер × класс» (`TransferPriceInfoModel`). */
+export interface VehicleClassInfoModel {
+  id: number
+  /** Мест для пассажиров, без водителя. */
+  capacity: number
+  /** Лимит багажа в «единицах»: средний чемодан = 3, большой = 5 (решение 0.13). */
+  luggageCapacity: number
+  sortOrder: number
+  isActive: boolean
+  translations: TranslatableInfoModel[]
+}
+
+export interface VehicleClassCreateModel {
+  capacity: number
+  luggageCapacity: number
+  sortOrder: number
+  isActive: boolean
+  translations: TranslatableCreateModel[]
+}
+
+/** Карточка трансфера для публичного `/transfers` (`GET api/Transfer/GetTransfersClient`).
+ * Отдельно от `TourCardModel`: рисует маршрут и цену «от», а не длительность/регионы/теги. */
+export interface TransferCardModel {
+  id: number
+  mainImageUrl: string | null
+  translations: TranslatableInfoModel[]
+  routePoints: TransferRoutePointInfoModel[]
+  /** Минимальная цена в одну сторону среди классов. `null` только на битых данных — валидация
+   * не пропускает трансфер без цен. */
+  minOneWayPrice: number | null
+}
+
+/** Детальная трансфера (`GET api/Transfer/GetTransferInfo`). Не `TourInfoModel`: у трансфера
+ * нет дней, галереи, регионов, тегов и скидки — модель с всегда пустыми коллекциями врала бы
+ * о контракте. */
+export interface TransferInfoModel {
+  id: number
+  mainImageUrl: string | null
+  requiresPrepayment: boolean
+  translations: TranslatableInfoModel[]
+  routePoints: TransferRoutePointInfoModel[]
+  prices: TransferPriceClientModel[]
+}
+
+/** Публичная строка «класс авто → две цены»: класс развёрнут прямо здесь, второй запрос к
+ * справочнику ради названий на странице трансфера не нужен. */
+export interface TransferPriceClientModel {
+  vehicleClassId: number
+  vehicleClassName: string
+  capacity: number
+  luggageCapacity: number
+  sortOrder: number
+  oneWayPrice: number
+  roundTripPrice: number
 }

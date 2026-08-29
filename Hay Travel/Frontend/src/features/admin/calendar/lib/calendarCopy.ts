@@ -22,6 +22,7 @@ import {
 } from '@/shared/lib/date'
 import { pluralizeEn, pluralizeRu } from '@/shared/lib/format'
 import type { Locale } from '@/shared/lib/locale'
+import { TourType } from '@/features/admin/lib/enums'
 import { DayOfWeekCode, OrderStatus } from '@/shared/types/booking'
 
 /** `GlobalErrorCode` values this screen's mutations can report (spec 001 §7) — local numeric
@@ -131,30 +132,55 @@ export const calendarCopy = defineCopy(
     retry: 'Повторить',
     legendTitle: 'Обозначения',
     legendClosed: 'день закрыт целиком',
-    legendPartial: 'закрыты отдельные туры',
+    legendPartial: 'закрыты отдельные продукты',
+    legendPartialTypes: 'закрыт целый тип продукта',
     legendOrders: 'число заказов на день',
     closedLabel: 'закрыто',
     partialLabel: 'частично закрыто',
+
+    /* ── Тип продукта как область правила (решение 0.27) ─────────────────────────────────────── */
+    /** Множественное число — область адресует КАТЕГОРИЮ, а не один продукт, поэтому подписи свои,
+     * а не `adminEnumsCopy.tourType` (там единственное число: «Трансфер»). */
+    productTypePlural: {
+      [TourType.Tour]: 'Туры',
+      [TourType.Excursion]: 'Экскурсии',
+      [TourType.Transfer]: 'Трансферы',
+    } as Record<TourType, string>,
+    /** Область правила в таблице и в подписи клетки: «Все трансферы». */
+    productTypeScope: {
+      [TourType.Tour]: 'Все туры',
+      [TourType.Excursion]: 'Все экскурсии',
+      [TourType.Transfer]: 'Все трансферы',
+    } as Record<TourType, string>,
+    /** Тип, которого нет в словаре (бэк добавил четвёртый раньше фронта) — лучше номер, чем пусто. */
+    productTypeFallback: (tourType: number) => `Тип #${tourType}`,
+    /** Подпись клетки дня: «закрыты трансферы», «закрыты трансферы, экскурсии». */
+    closedTypesLabel: (types: string) => `закрыты ${types.toLowerCase()}`,
     /** An archived tour whose orders live on — a blank name would look like a broken calendar. */
     tourFallback: (tourId: number) => `Тур #${tourId}`,
 
     /* ── Day panel ──────────────────────────────────────────────────────────────────────────── */
     availabilityTitle: 'Доступность',
     availabilityHelpBody:
-      'Если не выбрать ни одного тура — действие применится сразу к целому дню. Если выбрать конкретные туры — оно затронет только их.',
+      'Если ничего не выбрать — действие применится сразу к целому дню. Можно выбрать целый тип продукта (например, только трансферы) — тогда блокировка будет действовать и на продукты, которые вы заведёте позже. Можно выбрать конкретные продукты — тогда она затронет только их. Блокировка на отдельный продукт сильнее блокировки по типу: чтобы оставить один трансфер открытым при закрытых трансферах, сделайте на него исключение в «Массовых операциях» — действие «Открыть даты».',
     ordersTitle: 'Заказы',
-    closeWholeDay: 'Закрыть весь день (все туры)',
+    closeWholeDay: 'Закрыть весь день (все продукты)',
     openWholeDay: 'Открыть весь день',
     wholeDayClosedNote: 'День закрыт целиком.',
+    /* Тип продукта как область (решение 0.27) — своя пара секций рядом с продуктовыми. */
+    closedTypesTitle: 'Закрытые типы продуктов',
+    closeTypeTitle: 'Закрыть тип продукта',
+    closeTypeAction: 'Закрыть выбранные типы',
     closedByWeeklyHint:
       'День закрыт блокировкой по дню недели — кнопка «Открыть» не удалит эту блокировку, а создаст исключение на эту дату.',
-    closedToursTitle: 'Закрытые туры этого дня',
+    closedToursTitle: 'Закрытые продукты этого дня',
     openTour: 'Открыть',
-    closeTourTitle: 'Закрыть отдельный тур',
+    closeTourTitle: 'Закрыть отдельный продукт',
     closeTourSearch: 'Поиск по названию',
-    closeTourNoResults: 'Туры не найдены',
+    closeTourNoResults: 'Продукты не найдены',
     closeTourAction: 'Закрыть',
-    dayAlreadyClosedHint: 'День уже закрыт целиком — отдельная блокировка на тур ничего не изменит.',
+    dayAlreadyClosedHint:
+      'День уже закрыт целиком — отдельная блокировка на продукт или тип ничего не изменит.',
     pastDayLockedHint: 'Прошедший день — задним числом закрывать или открывать нельзя.',
     /** Shown instead of the editable controls when the role may read the calendar but not change
      * closures. Closing needs `calendar.Create`, re-opening needs `calendar.Delete`. */
@@ -171,6 +197,7 @@ export const calendarCopy = defineCopy(
       [OrderStatus.ReadyForAssignment]: 'Готов к назначению',
       [OrderStatus.PendingPayment]: 'Ждёт оплаты',
       [OrderStatus.Completed]: 'Завершён',
+      [OrderStatus.Request]: 'Заявка',
     } as Record<OrderStatus, string>,
 
     /* ── Bulk panel ─────────────────────────────────────────────────────────────────────────── */
@@ -187,15 +214,16 @@ export const calendarCopy = defineCopy(
     bulkWeekdaysTitle: 'Дни недели',
     bulkPeriodTitle: 'Действует (необязательно)',
     bulkScopeTitle: 'Область',
-    bulkScopeAll: 'Все туры',
-    bulkScopeSelected: 'Выбранные туры',
-    bulkPresetAll: 'Все',
-    bulkPresetTours: 'Туры',
-    bulkPresetExcursions: 'Экскурсии',
+    bulkScopeAll: 'Все продукты',
+    bulkScopeTypes: 'Тип продукта',
+    bulkScopeSelected: 'Выбранные продукты',
+    bulkScopeHelp:
+      'Область определяет, на что подействует блокировка. «Все продукты» — одна блокировка на дату для всего каталога. «Тип продукта» — на все продукты этого типа, включая те, которые вы заведёте позже. «Выбранные продукты» — только на перечисленные; продукт, созданный завтра, под такую блокировку не попадёт.',
+    bulkTypesTitle: 'Типы продуктов',
     bulkPresetByRegion: 'По региону:',
     bulkResetFilters: 'Сбросить',
     bulkTourSearch: 'Поиск по названию',
-    bulkNoTours: 'Туры не найдены.',
+    bulkNoTours: 'Продукты не найдены.',
     bulkReasonTitle: 'Причина (необязательно)',
     bulkPreview: (count: number) => `Будет создано ${blockingsUnitRu(count)}`,
     bulkApply: 'Применить',
@@ -211,6 +239,8 @@ export const calendarCopy = defineCopy(
     bulkErrorRangeOrder: 'Дата «С» не может быть позже даты «По».',
     bulkErrorPastDate: 'Дата «С» не может быть в прошлом — задним числом закрывать нельзя.',
     bulkErrorWeekdaysRequired: 'Выберите хотя бы один день недели.',
+    bulkErrorTypesRequired: 'Выберите хотя бы один тип продукта.',
+    bulkErrorProductsRequired: 'Выберите хотя бы один продукт.',
     bulkErrorReasonTooLong: 'Причина не может быть длиннее 500 символов.',
     bulkErrorTooMany: (count: number, max: number) =>
       `Слишком много блокировок: ${count} при максимуме ${max}. Сузьте диапазон или выберите повтор по дням недели.`,
@@ -224,8 +254,11 @@ export const calendarCopy = defineCopy(
     rulesPeriod: 'Период',
     rulesAction: 'Действие',
     rulesReason: 'Причина',
-    rulesAllTours: 'Все туры',
-    rulesManyTours: (count: number) => `${count} туров`,
+    rulesAllTours: 'Все продукты',
+    rulesManyTours: (count: number) => `${count} продуктов`,
+    /** Батч смешал разные области (например, тип + отдельные продукты) — точнее назвать число,
+     * чем выбирать одну из них и врать про остальные. */
+    rulesManyScopes: (count: number) => `${count} областей`,
     rulesTypeDate: 'Дата',
     rulesTypeWeekly: 'По дню недели',
     rulesActionClose: 'Закрыто',
@@ -310,29 +343,46 @@ export const calendarCopy = defineCopy(
     retry: 'Retry',
     legendTitle: 'Legend',
     legendClosed: 'the whole day is closed',
-    legendPartial: 'individual tours are closed',
+    legendPartial: 'individual products are closed',
+    legendPartialTypes: 'a whole product type is closed',
     legendOrders: 'number of orders on the day',
     closedLabel: 'closed',
     partialLabel: 'partly closed',
+
+    productTypePlural: {
+      [TourType.Tour]: 'Tours',
+      [TourType.Excursion]: 'Excursions',
+      [TourType.Transfer]: 'Transfers',
+    } as Record<TourType, string>,
+    productTypeScope: {
+      [TourType.Tour]: 'All tours',
+      [TourType.Excursion]: 'All excursions',
+      [TourType.Transfer]: 'All transfers',
+    } as Record<TourType, string>,
+    productTypeFallback: (tourType: number) => `Type #${tourType}`,
+    closedTypesLabel: (types: string) => `${types.toLowerCase()} are closed`,
     tourFallback: (tourId: number) => `Tour #${tourId}`,
 
     availabilityTitle: 'Availability',
     availabilityHelpBody:
-      'Pick no tours and the action applies to the whole day at once. Pick specific tours and it affects only those.',
+      'Pick nothing and the action applies to the whole day at once. Pick a whole product type (transfers only, say) and the closure also covers products you create later. Pick specific products and it affects only those. A closure on a single product beats one on its type: to keep one transfer open while transfers are closed, add an exception for it in “Bulk operations” — the “Open dates” action.',
     ordersTitle: 'Orders',
-    closeWholeDay: 'Close the whole day (all tours)',
+    closeWholeDay: 'Close the whole day (all products)',
     openWholeDay: 'Open the whole day',
     wholeDayClosedNote: 'The whole day is closed.',
+    closedTypesTitle: 'Closed product types of this day',
+    closeTypeTitle: 'Close a product type',
+    closeTypeAction: 'Close the selected types',
     closedByWeeklyHint:
       'The day is closed by a weekday closure — “Open” does not delete that closure, it creates an exception for this date.',
-    closedToursTitle: 'Closed tours of this day',
+    closedToursTitle: 'Closed products of this day',
     openTour: 'Open',
-    closeTourTitle: 'Close a single tour',
+    closeTourTitle: 'Close a single product',
     closeTourSearch: 'Search by name',
-    closeTourNoResults: 'No tours found',
+    closeTourNoResults: 'No products found',
     closeTourAction: 'Close',
     dayAlreadyClosedHint:
-      'The whole day is already closed — a closure on a single tour would change nothing.',
+      'The whole day is already closed — a closure on a single product or type would change nothing.',
     pastDayLockedHint: 'A past day — it cannot be closed or opened retroactively.',
     closureReadOnlyHint: 'Your role cannot close or re-open dates — view only.',
     closureReasonLabel: 'Reason',
@@ -347,6 +397,7 @@ export const calendarCopy = defineCopy(
       [OrderStatus.ReadyForAssignment]: 'Ready for assignment',
       [OrderStatus.PendingPayment]: 'Awaiting payment',
       [OrderStatus.Completed]: 'Completed',
+      [OrderStatus.Request]: 'Request',
     } as Record<OrderStatus, string>,
 
     bulkTitle: 'Bulk operations',
@@ -362,15 +413,16 @@ export const calendarCopy = defineCopy(
     bulkWeekdaysTitle: 'Weekdays',
     bulkPeriodTitle: 'Effective (optional)',
     bulkScopeTitle: 'Scope',
-    bulkScopeAll: 'All tours',
-    bulkScopeSelected: 'Selected tours',
-    bulkPresetAll: 'All',
-    bulkPresetTours: 'Tours',
-    bulkPresetExcursions: 'Excursions',
+    bulkScopeAll: 'All products',
+    bulkScopeTypes: 'Product type',
+    bulkScopeSelected: 'Selected products',
+    bulkScopeHelp:
+      'The scope decides what the closure affects. “All products” — one closure per date for the whole catalogue. “Product type” — every product of that type, including the ones you create later. “Selected products” — only the listed ones; a product created tomorrow is not covered.',
+    bulkTypesTitle: 'Product types',
     bulkPresetByRegion: 'By region:',
     bulkResetFilters: 'Reset',
     bulkTourSearch: 'Search by name',
-    bulkNoTours: 'No tours found.',
+    bulkNoTours: 'No products found.',
     bulkReasonTitle: 'Reason (optional)',
     bulkPreview: (count: number) => `${blockingsUnitEn(count)} will be created`,
     bulkApply: 'Apply',
@@ -385,6 +437,8 @@ export const calendarCopy = defineCopy(
     bulkErrorRangeOrder: '“From” cannot be later than “To”.',
     bulkErrorPastDate: '“From” cannot be in the past — closing dates retroactively is not allowed.',
     bulkErrorWeekdaysRequired: 'Pick at least one weekday.',
+    bulkErrorTypesRequired: 'Pick at least one product type.',
+    bulkErrorProductsRequired: 'Pick at least one product.',
     bulkErrorReasonTooLong: 'The reason cannot be longer than 500 characters.',
     bulkErrorTooMany: (count: number, max: number) =>
       `Too many closures: ${count} against a maximum of ${max}. Narrow the range or repeat by weekday instead.`,
@@ -397,8 +451,9 @@ export const calendarCopy = defineCopy(
     rulesPeriod: 'Period',
     rulesAction: 'Action',
     rulesReason: 'Reason',
-    rulesAllTours: 'All tours',
-    rulesManyTours: (count: number) => `${count} tours`,
+    rulesAllTours: 'All products',
+    rulesManyTours: (count: number) => `${count} products`,
+    rulesManyScopes: (count: number) => `${count} scopes`,
     rulesTypeDate: 'Date',
     rulesTypeWeekly: 'By weekday',
     rulesActionClose: 'Closed',

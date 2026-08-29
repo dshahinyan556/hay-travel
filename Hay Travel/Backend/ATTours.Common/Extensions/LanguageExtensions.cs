@@ -90,6 +90,47 @@ namespace ATTours.Common.Extensions
             return returnList;
         }
 
+        // Трансфер (батч 2026-08-29): у него СВОЙ граф — маршрут и цены по классам авто
+        // вместо дней/расходов/заметок, поэтому отдельный метод, а не ветка внутри
+        // ExtractWithNeededLanguage(Tour): та обходит TourDetails, которых в трансферном
+        // графе нет, и всё равно не знает про TransferRoutePoints.
+        // VehicleClass может быть не загружен (card-граф его не тянет) — тогда его переводы
+        // фильтровать нечего.
+        public static Tour ExtractTransferWithNeededLanguage(this Tour transfer, int languageCode)
+        {
+            transfer.Translations.RemoveWhere(t => (int)t.LanguageCode != languageCode);
+
+            foreach (var routePoint in transfer.TransferRoutePoints)
+                routePoint.Translations.RemoveWhere(t => (int)t.LanguageCode != languageCode);
+
+            foreach (var price in transfer.TransferPrices)
+                price.VehicleClass?.Translations.RemoveWhere(t => (int)t.LanguageCode != languageCode);
+
+            return transfer;
+        }
+
+        public static List<Tour> ExtractTransfersWithNeededLanguageFromCollection(this IEnumerable<Tour> transfers, int languageCode)
+        {
+            var returnList = new List<Tour>();
+            foreach (var transfer in transfers)
+                returnList.Add(transfer.ExtractTransferWithNeededLanguage(languageCode));
+            return returnList;
+        }
+
+        public static VehicleClass ExtractWithNeededLanguage(this VehicleClass vehicleClass, int languageCode)
+        {
+            vehicleClass.Translations.RemoveWhere(t => (int)t.LanguageCode != languageCode);
+            return vehicleClass;
+        }
+
+        public static List<VehicleClass> ExtractWithNeededLanguageFromCollection(this IEnumerable<VehicleClass> vehicleClasses, int languageCode)
+        {
+            var returnList = new List<VehicleClass>();
+            foreach (var vehicleClass in vehicleClasses)
+                returnList.Add(vehicleClass.ExtractWithNeededLanguage(languageCode));
+            return returnList;
+        }
+
         public static Tag ExtractWithNeededLanguage(this Tag tag, int languageCode)
         {
             tag.Translations.RemoveWhere(t => (int)t.LanguageCode != languageCode);

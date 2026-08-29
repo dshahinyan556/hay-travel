@@ -6,8 +6,13 @@
  * changes and password resets need `users.Update`, deletion needs `users.Delete`. Mirrored
  * client-side by `canView/canUpdate/canDelete(AdminScreen.Users)`.
  *
- * The SuperAdmin guard inside `ChangeRole` sits ON TOP of that and is not part of the matrix
- * (ADR 011).
+ * The SuperAdmin guard sits ON TOP of that and is not part of the matrix (ADR 011). As of
+ * 2026-08-27 it is no longer only `ChangeRole`'s business: `SuperAdminGuard.GuardSuperAdminTarget`
+ * runs on EVERY write path of this controller (delete, both password resets, role, job role,
+ * preferred language, permission overrides) and answers 403 `SuperAdminPrivilegeRequired` (2216)
+ * whenever the TARGET is the SuperAdmin and the caller is anybody else — unconditionally, however
+ * privileged that caller is (решение Давида: «нельзя, чтобы другие даже самые лютые админы не
+ * смогли ничего поделать с этим акком»).
  */
 
 import {
@@ -15,6 +20,7 @@ import {
   type ChangeRoleRequest,
   type LoginHistoryEntryModel,
   type LoginResultModel,
+  type MessageResultModel,
   type SetUserJobRoleModel,
   type SetUserPreferredLanguageModel,
   type UserDetailInfoModel,
@@ -63,6 +69,28 @@ export function deleteUser(id: number): Promise<void> {
 /** Sets `ForceToChangePass = true` and returns the updated account (B5) — no second GET needed. */
 export function forcePasswordReset(id: number): Promise<UserInfoModel> {
   return authFetch<UserInfoModel>(`api/Users/ForcePasswordReset?id=${id}`, { method: 'POST' })
+}
+
+/**
+ * Emails the account a password-reset LINK (2026-08-27) — the self-service forgot-password flow,
+ * triggered by an admin. `users.Update`, the same gate as `forcePasswordReset`.
+ *
+ * NOT a variant of it: B5 only raises `ForceToChangePass`, nothing is sent anywhere, so an account
+ * whose owner cannot get in at all stays stuck. The two are complementary, which is why both
+ * actions exist on the profile screen.
+ *
+ * The answer is an ordinary `MessageResultModel` rather than the public `ForgotPassword`'s
+ * deliberately vague ack: the address came from the database by id, not from a form, so there is no
+ * account-enumeration to defend against here (`UserAdminPasswordResetService`). `message` is
+ * server-side English and `devToken` only exists without a mail provider configured — neither is
+ * meant for the panel's UI, which renders its own localised confirmation.
+ *
+ * 404 `RelationalEntityNotFound` (2003) for a missing/soft-deleted id; 403
+ * `SuperAdminPrivilegeRequired` (2216) when the target is the SuperAdmin and the caller is somebody
+ * else — a reset link mailed by anyone else is a takeover path for the most privileged account.
+ */
+export function sendPasswordResetEmail(id: number): Promise<MessageResultModel> {
+  return authFetch<MessageResultModel>(`api/Users/SendPasswordResetEmail?id=${id}`, { method: 'POST' })
 }
 
 /**

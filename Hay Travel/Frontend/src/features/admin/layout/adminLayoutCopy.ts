@@ -25,6 +25,7 @@ export const adminLayoutCopy = defineCopy(
       users: 'Пользователи',
       roles: 'Роли и права',
       notifications: 'Уведомления',
+      jobs: 'Фоновые задачи',
       settings: 'Настройки',
     },
     accessDenied: {
@@ -73,6 +74,7 @@ export const adminLayoutCopy = defineCopy(
       users: 'Users',
       roles: 'Roles & permissions',
       notifications: 'Notifications',
+      jobs: 'Background jobs',
       settings: 'Settings',
     },
     accessDenied: {

@@ -29,8 +29,8 @@ interface SettingsActionsProps {
  * and the frame so both screens of that archetype cannot drift apart. This component returns a
  * fragment and stays purely about what the bar SAYS.
  *
- * `FormActions` from the tour form is not reused (hard-codes a "Отмена → /admin/products" link
- * and draft-of-a-tour copy), but the submit/validation contract mirrors it: "Сохранить" stays
+ * The tour form's own action bar is not reused (it has since moved into `AdminToolbar` inside
+ * `TourFormScreen`), but the submit/validation contract mirrors it: "Сохранить" stays
  * clickable even on an invalid form — `onSubmit` itself no-ops and reveals the field errors
  * instead, so a disabled button never hides *why* saving didn't happen.
  */

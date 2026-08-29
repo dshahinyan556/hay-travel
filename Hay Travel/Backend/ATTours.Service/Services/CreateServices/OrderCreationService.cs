@@ -27,13 +27,10 @@ namespace ATTours.BusinessServices.Services.CreateServices
         // Валюта базовой цены на бэке всегда AMD (мультивалютность — отображение на фронте).
         private const string BaseCurrency = "AMD";
 
-        // Групповой тариф (B12, 2026-08-13) — дублирует правило из `shared/currency/pricing.ts`
-        // (`resolveTier`/`applyGroupTier`), которое живёт на фронте. TS и C# не делят код в
-        // этом репозитории, а правило должно действовать и здесь. Меняешь тариф — меняй в
-        // обоих местах.
-        private const int TierBaseMaxGuests = 4;
-        private const int TierSurchargeMaxGuests = 6;
-        private const decimal TierSurchargeMultiplier = 1.2m;
+        // Тарифные ступени переехали в OrderLinePricing (батч «Трансферы + формат»,
+        // 2026-08-29): с групповым форматом и трансфером правило расчёта строки стало общим
+        // для создания брони, правки её клиентом и добавления строки админом — три копии
+        // формулы разъехались бы гарантированно.
 
         private readonly int userId;
         private readonly List<OrderCreateLineModel> lines;
@@ -77,11 +74,12 @@ namespace ATTours.BusinessServices.Services.CreateServices
             order.Number = await OrderNumberGenerator.GenerateAsync(Context, order.CreatedAtUtc, CancellationToken);
 
             var tourPricing = await LoadTourPricingAsync();
+            var transferPricing = await LoadTransferPricingAsync();
 
             // Порядок строк сохраняется как в запросе: индекс строки = позиция корзины на
             // клиенте, и по нему же собирается пер-строчный отчёт об ошибке.
             foreach (var requestedLine in lines)
-                order.Lines.Add(BuildLine(requestedLine, tourPricing));
+                order.Lines.Add(BuildLine(requestedLine, tourPricing, transferPricing));
 
             // Флоу заказов (B12, дополнено B14): Open, если ни одна строка не требует
             // предоплаты; иначе PendingPayment. Бронь с сайта сейчас никогда сама не просит
@@ -103,54 +101,130 @@ namespace ATTours.BusinessServices.Services.CreateServices
 
             return await Context.Set<Tour>()
                                 .Where(tour => tourIds.Contains(tour.Id))
-                                .Select(tour => new TourPricing(tour.Id, tour.TotalPrice, tour.DiscountPercent,
+                                .Select(tour => new TourPricing(tour.Id, tour.Type, tour.Format, tour.TotalPrice,
+                                    tour.GroupPricePerPerson, tour.DiscountPercent,
                                     tour.DiscountStartDate, tour.DiscountValidUntil))
                                 .ToDictionaryAsync(pricing => pricing.TourId, CancellationToken);
         }
 
-        private static OrderLine BuildLine(OrderCreateLineModel requestedLine, IReadOnlyDictionary<int, TourPricing> tourPricing)
+        // Цены трансферов по классам авто — тем же одним запросом и по той же причине
+        // (батч 2026-08-29). Название класса берётся здесь же: на строке оно живёт снапшотом,
+        // и добирать его потом отдельным запросом было бы вторым походом в БД за уже
+        // прочитанной таблицей. RU, иначе любой оставшийся — то же правило, что у названия
+        // тура в журнале заказа.
+        private async Task<Dictionary<(int TourId, int VehicleClassId), TransferPricing>> LoadTransferPricingAsync()
+        {
+            // Только позиции с выбранным классом авто: корзина без трансферов (подавляющее
+            // большинство чекаутов) не платит за этот запрос вовсе.
+            var tourIds = lines.Where(line => line.VehicleClassId is not null)
+                               .Select(line => line.TourId)
+                               .Distinct()
+                               .ToList();
+            if (tourIds.Count == 0)
+                return [];
+
+            var prices = await Context.Set<TransferPrice>()
+                                      .Where(price => tourIds.Contains(price.TourId))
+                                      .Select(price => new TransferPricing(price.TourId, price.VehicleClassId,
+                                          price.OneWayPrice, price.RoundTripPrice,
+                                          price.VehicleClass.Translations
+                                               .OrderBy(translation => translation.LanguageCode == LanguageCode.Russian ? 0 : 1)
+                                               .Select(translation => translation.Value)
+                                               .FirstOrDefault()))
+                                      .ToListAsync(CancellationToken);
+
+            return prices.ToDictionary(price => (price.TourId, price.VehicleClassId));
+        }
+
+        private static OrderLine BuildLine(OrderCreateLineModel requestedLine, IReadOnlyDictionary<int, TourPricing> tourPricing,
+            IReadOnlyDictionary<(int TourId, int VehicleClassId), TransferPricing> transferPricing)
         {
             // Снапшот цены и скидки тура на момент заказа: последующая правка цены/скидки
             // тура не должна менять уже оформленную бронь. Тур может не существовать — это
             // отобьёт валидация (TourNotFound), здесь просто берём 0/null и не падаем NRE.
             tourPricing.TryGetValue(requestedLine.TourId, out var pricing);
 
-            var snapshot = pricing?.TotalPrice ?? 0m;
-            // Скидка резолвится НА ДАТУ ПОЕЗДКИ, а не на дату оформления (checklist-discount-fix.txt,
-            // баг 2): бронь, оформленная в последний день акции на поездку через месяц, скидку
-            // получать не должна — и наоборот, заказ внутри диапазона её получает.
-            var discountPercent = TourDiscountExtensions.ResolveActiveDiscountPercent(
-                pricing?.DiscountPercent, pricing?.DiscountStartDate, pricing?.DiscountValidUntil, requestedLine.TourDate);
-            var discountedPrice = TourDiscountExtensions.ApplyDiscount(snapshot, discountPercent) ?? snapshot;
-
-            return new OrderLine
+            var line = new OrderLine
             {
+                LineKind = OrderLineKind.Product,
                 TourId = requestedLine.TourId,
                 TourDate = requestedLine.TourDate,
+                StartTime = requestedLine.StartTime,
                 GuestCount = requestedLine.GuestCount,
+                IsRoundTrip = requestedLine.IsRoundTrip,
+                ReturnDate = requestedLine.IsRoundTrip ? requestedLine.ReturnDate : null,
+                ReturnTime = requestedLine.IsRoundTrip ? requestedLine.ReturnTime : null,
                 RequiresPrepayment = false,
-                PrepaymentAmount = 0m,
-                PriceSnapshot = snapshot,
-                DiscountPercent = discountPercent,
-                LineTotal = ResolveTotalAmount(discountedPrice, requestedLine.GuestCount)
+                PrepaymentAmount = 0m
             };
+
+            if (pricing?.Type == TourType.Transfer)
+                ApplyTransferPricing(line, requestedLine, transferPricing);
+            else
+                ApplyProductPricing(line, requestedLine, pricing);
+
+            return line;
         }
 
-        // 1–4 гостей: цена (уже со скидкой, если она есть) фиксирована за бронь целиком
-        // (НЕ умножается на число гостей). 5–6: та же цена ×1.2. 7+: «цена по запросу» — сайт
-        // не показывает сумму и не берёт с посетителя обязательство по конкретной цифре.
-        private static decimal ResolveTotalAmount(decimal price, int guestCount)
+        // Трансфер: цена — это цена выбранного класса авто, «в одну сторону» или
+        // «туда-обратно» (решение 0.6). Тиры и скидка не применяются: скидка у трансфера
+        // запрещена валидацией продукта, а число гостей на цену не влияет — платят за машину.
+        // Класса может не быть — отобьёт валидация (VehicleClassNotAvailable), здесь 0.
+        private static void ApplyTransferPricing(OrderLine line, OrderCreateLineModel requestedLine,
+            IReadOnlyDictionary<(int TourId, int VehicleClassId), TransferPricing> transferPricing)
         {
-            if (guestCount <= TierBaseMaxGuests)
-                return price;
-            if (guestCount <= TierSurchargeMaxGuests)
-                return price * TierSurchargeMultiplier;
-            return 0m;
+            TransferPricing? price = null;
+            if (requestedLine.VehicleClassId is not null)
+                transferPricing.TryGetValue((requestedLine.TourId, requestedLine.VehicleClassId.Value), out price);
+
+            var amount = price is null
+                ? 0m
+                : OrderLinePricing.ResolveTransferLineTotal(price.OneWayPrice, price.RoundTripPrice, requestedLine.IsRoundTrip);
+
+            line.Format = null;
+            line.VehicleClassId = requestedLine.VehicleClassId;
+            line.VehicleClassNameSnapshot = price?.VehicleClassName;
+            line.PriceSnapshot = amount;
+            line.DiscountPercent = null;
+            line.LineTotal = amount;
+        }
+
+        // Тур/экскурсия. Порядок операций прежний и обязательный: СКИДКА на дату поездки,
+        // потом формат/тир (checklist-discount-fix.txt, баг 2) — бронь, оформленная в
+        // последний день акции на поездку через месяц, скидку получать не должна.
+        //
+        // Формат уезжает на строку снапшотом ВСЕГДА, а не только когда продукт продаётся в
+        // обоих: по нему потом считает правку брони OrderUpdateService и агрегат скидки в
+        // маппере, и «какой тариф применили» не должно зависеть от того, что сейчас стоит
+        // у продукта. null здесь означает «клиент не выбрал, хотя был обязан» — строку
+        // отобьёт валидация (OrderLineFormatRequired), считать по индивидуальному молча нельзя.
+        private static void ApplyProductPricing(OrderLine line, OrderCreateLineModel requestedLine, TourPricing? pricing)
+        {
+            var format = OrderLinePricing.ResolveEffectiveFormat(pricing?.Format, requestedLine.Format);
+
+            var discountPercent = TourDiscountExtensions.ResolveActiveDiscountPercent(
+                pricing?.DiscountPercent, pricing?.DiscountStartDate, pricing?.DiscountValidUntil, requestedLine.TourDate);
+
+            var basePrice = OrderLinePricing.ResolveBasePrice(format ?? TourFormat.Individual,
+                pricing?.TotalPrice, pricing?.GroupPricePerPerson);
+            var discountedPrice = TourDiscountExtensions.ApplyDiscount(basePrice, discountPercent) ?? basePrice;
+
+            line.Format = format;
+            line.PriceSnapshot = basePrice;
+            line.DiscountPercent = discountPercent;
+            line.LineTotal = format is null
+                ? 0m
+                : OrderLinePricing.ResolveLineTotal(format.Value, discountedPrice, requestedLine.GuestCount);
         }
 
         // Проекция ценовых полей тура — ровно то, что нужно снапшоту строки, без вытаскивания
         // всего графа тура с переводами.
-        private sealed record TourPricing(int TourId, decimal? TotalPrice, decimal? DiscountPercent,
+        private sealed record TourPricing(int TourId, TourType Type, TourFormat? Format, decimal? TotalPrice,
+            decimal? GroupPricePerPerson, decimal? DiscountPercent,
             DateOnly? DiscountStartDate, DateOnly? DiscountValidUntil);
+
+        // Цена одного класса авто на одном трансфере + название класса для снапшота строки.
+        private sealed record TransferPricing(int TourId, int VehicleClassId, decimal OneWayPrice,
+            decimal RoundTripPrice, string? VehicleClassName);
     }
 }

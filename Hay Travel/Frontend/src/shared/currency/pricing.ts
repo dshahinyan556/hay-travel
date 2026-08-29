@@ -48,6 +48,26 @@ export function applyGroupTier(amountAmd: number, guestCount: number): TieredPri
 }
 
 /**
+ * Групповой формат (решение 0.18 чек-листа 2026-08-29): цена ЗА ЧЕЛОВЕКА × количество гостей.
+ *
+ * Ни тиров, ни «7+ цена скрыта» здесь нет — у группового выезда ограничитель один, свободные
+ * места, и он не ценовой. Правило дословно повторяет `OrderLinePricing.ResolveLineTotal` на
+ * бэке (ветка `TourFormat.Group`), и цифра на экране обязана совпадать с суммой заказа до
+ * копейки — меняешь здесь, меняй и там.
+ *
+ * Живёт рядом с `applyGroupTier`, а не в `shared/booking`, по той же причине, по которой там
+ * живёт сам тир: «сколько денег» — правило ровно одного модуля (sync-doc §6.4). Выбор ветки
+ * по формату — уже не деньги, он в `shared/booking/format.ts`.
+ *
+ * `Math.max(guestCount, 0)` — та же защита, что у C#-версии: отрицательное число гостей
+ * невозможно провести через `clampGuests`, но и отрицательной суммы породить не должно.
+ */
+export function applyPerPersonPrice(pricePerPersonAmd: number, guestCount: number): number {
+  if (!Number.isFinite(pricePerPersonAmd)) return 0
+  return pricePerPersonAmd * Math.max(guestCount, 0)
+}
+
+/**
  * AMD → target currency, UNROUNDED (sync-doc §6). Returns 0 rather than `Infinity`/`NaN` when the
  * rate is missing or non-positive — a single bad row must not poison every price on the page.
  */

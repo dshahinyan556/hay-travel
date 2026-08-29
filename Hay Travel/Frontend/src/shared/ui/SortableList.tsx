@@ -215,6 +215,17 @@ export interface DragHandleProps extends ButtonHTMLAttributes<HTMLButtonElement>
   /** Overrides the default aria-label (`t('ui.sortable.dragHandle')`), e.g. to name the item
    * being moved. Already localised by the caller. */
   label?: string
+  /**
+   * Which palette to render in — same contract as `Input`/`Select`/`DatePicker`'s own `surface`
+   * prop. Defaults to `'admin'`, the skin this handle shipped with (catalog tables and tour-form
+   * repeaters); `surface="public"` switches to the site's role tokens for the transfer request
+   * builder, the first PUBLIC screen that reorders anything (2026-08-29). Copying the component
+   * was the alternative and was rejected: a duplicated drag handle is the copy that goes stale.
+   */
+  surface?: 'public' | 'admin'
+  /** Enlarges the handle from 28px to a 36px square. The public builder's stop row sits in a
+   * 44px control line, where a 28px grip reads as a stray dot next to real buttons. */
+  size?: 'sm' | 'md'
   ref?: Ref<HTMLButtonElement>
 }
 
@@ -226,9 +237,22 @@ export interface DragHandleProps extends ButtonHTMLAttributes<HTMLButtonElement>
  * `touch-none` (`touch-action: none`) is required, not decorative — without it, touch browsers
  * intercept the pointer for native scrolling before `PointerSensor` ever sees the drag start.
  */
-export function DragHandle({ label, className = '', ref, ...props }: DragHandleProps) {
+export function DragHandle({
+  label,
+  surface = 'admin',
+  size = 'sm',
+  className = '',
+  ref,
+  ...props
+}: DragHandleProps) {
   const { t } = useLocale()
   const resolvedLabel = label ?? t('ui.sortable.dragHandle')
+
+  const box = size === 'md' ? 'h-9 w-9' : 'h-7 w-7'
+  const palette =
+    surface === 'admin'
+      ? 'border-neutral-200 bg-white text-neutral-400 hover:border-neutral-400 hover:bg-neutral-100 hover:text-neutral-900 focus-visible:ring-neutral-900/20'
+      : 'border-edge bg-panel-raised text-ink-muted hover:border-gold-line hover:bg-accent-soft hover:text-gold-ink focus-visible:ring-focus'
 
   return (
     <button
@@ -236,7 +260,7 @@ export function DragHandle({ label, className = '', ref, ...props }: DragHandleP
       type="button"
       aria-label={resolvedLabel}
       title={resolvedLabel}
-      className={`flex h-7 w-7 shrink-0 touch-none cursor-grab items-center justify-center rounded-lg border border-neutral-200 bg-white text-neutral-400 transition-colors hover:border-neutral-400 hover:bg-neutral-100 hover:text-neutral-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/20 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
+      className={`flex ${box} shrink-0 touch-none cursor-grab items-center justify-center rounded-lg border transition-colors focus:outline-none focus-visible:ring-2 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40 ${palette} ${className}`}
       {...props}
     >
       <svg viewBox="0 0 24 24" width={16} height={16} fill="currentColor" aria-hidden="true" focusable="false">

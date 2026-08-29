@@ -81,8 +81,15 @@ export interface AuthUser {
   phoneNumber?: string
   isEmailVerified?: boolean
   /**
-   * The one SuperAdmin flag (ADR 011). Written ONLY from the access token's `is_super_admin`
-   * claim — no DTO carries it, by design (D6: the panel must not reveal who else is a SuperAdmin).
+   * The one SuperAdmin flag OF THE SIGNED-IN ACCOUNT (ADR 011). Written ONLY from the access
+   * token's `is_super_admin` claim.
+   *
+   * `UserInfoModel`/`UserDetailInfoModel` grew an `isSuperAdmin` of their own on 2026-08-27, which
+   * relaxed D6 — but that one describes the account being LOOKED AT on an admin screen and is not
+   * a second source for this one: a claim inside a signed token and a field in a response body are
+   * not interchangeable evidence about who you are. The module invariant in `authStore` still
+   * stands, `toAuthUser` still refuses to copy it.
+   *
    * Absent and `false` mean the same thing; never test it truthily, always `=== true`, and prefer
    * asking `canManageAdmins(user)` in `permissions.ts` over reading the field at a call site.
    */
@@ -167,6 +174,17 @@ export interface UserInfoModel {
   roleName: string
   isEmailVerified: boolean
   isLocked: boolean
+  /**
+   * Is THIS account the SuperAdmin (2026-08-27)? Sent since `SuperAdminGuard` made that account
+   * untouchable by everyone else on every write path of `api/Users`: without the flag on the row,
+   * the panel could only guess at the rule through `roleHoldsCanManageAdmins`, which is a different
+   * question (the guard is keyed on the ACCOUNT, and a SuperAdmin may sit on a role that does not
+   * carry `CanManageAdmins`) and would leave controls live that the server always refuses.
+   *
+   * This is the TARGET's flag, for disabling admin actions on it. It says nothing about the signed-
+   * in user — that one is `AuthUser.isSuperAdmin`/`canManageAdmins(actor)` and comes from the token.
+   */
+  isSuperAdmin: boolean
   /** Default job role for the assignment popup (Задача D) — `null` when never set, valid for any
    * account (not only `RoleType.Employee`), the profile field carries no such restriction. */
   defaultJobRole: EmployeeJobRole | null
@@ -258,6 +276,8 @@ export interface UserDetailInfoModel {
   roleName: string
   isEmailVerified: boolean
   isLocked: boolean
+  /** See `UserInfoModel.isSuperAdmin` — same flag, same reason (2026-08-27). */
+  isSuperAdmin: boolean
   /** Default job role for the assignment popup (Задача D) — `null` when never set. */
   defaultJobRole: EmployeeJobRole | null
   /** Язык писем этого получателя (редизайн 2026-08-23). Решает, какая языковая версия шаблона

@@ -28,7 +28,7 @@ interface Stat {
 }
 
 /**
- * Four summary counters derived purely from the loaded tour list — no extra request.
+ * Five summary counters derived purely from the loaded tour list — no extra request.
  * Presentational: it receives `tours` and computes the aggregates for render only.
  */
 export function StatCards({ tours }: StatCardsProps) {
@@ -38,17 +38,19 @@ export function StatCards({ tours }: StatCardsProps) {
   const total = tours.length
   const tourCount = tours.filter((t) => t.type === TourType.Tour).length
   const excursionCount = tours.filter((t) => t.type === TourType.Excursion).length
+  const transferCount = tours.filter((t) => t.type === TourType.Transfer).length
   const missingEn = tours.filter((t) => !hasEnglishTitle(t)).length
 
   const stats: Stat[] = [
     { label: copy.total, value: total },
     { label: copy.tours, value: tourCount, dotClassName: 'bg-neutral-900' },
     { label: copy.excursions, value: excursionCount, dotClassName: 'border border-neutral-400' },
+    { label: copy.transfers, value: transferCount, dotClassName: 'bg-neutral-400' },
     { label: copy.missingEn, value: missingEn, warn: true },
   ]
 
   return (
-    <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3.5 md:grid-cols-3 lg:grid-cols-5">
       {stats.map((stat) => (
         <Card
           key={stat.label}

@@ -194,9 +194,12 @@ function NotificationEventView({ event, users }: NotificationEventViewProps) {
 
       {activePlatform && (
         <div className="flex flex-col gap-6">
-          {activePlatform.platform === NotificationPlatform.Telegram && !activePlatform.isImplemented && (
+          {/* Только по флагу с бэкенда (`ImplementedPlatforms` в `NotificationSettingsInfo`) —
+              никакого списка платформ на фронте: Telegram уехал в «реализовано» изменением ОДНОЙ
+              строки на сервере (spec 015 §8), и следующий канал должен уезжать так же. */}
+          {!activePlatform.isImplemented && (
             <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
-              {copy.telegramNotImplementedBanner}
+              {copy.platformNotImplementedBanner(enums.notificationPlatform[activePlatform.platform])}
             </p>
           )}
 

@@ -1,6 +1,7 @@
 import { useId } from 'react'
 import { Input, Textarea } from '@/shared/ui'
 import { HelpButton } from '@/shared/ui/HelpButton'
+import { HelpRevealZone } from '@/shared/ui/HelpReveal'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import type { LangKey, Localized } from '@/features/admin/types/localized'
 import { adminUiCopy } from './adminUiCopy'
@@ -45,12 +46,12 @@ export function TranslationGroup({
   hint,
 }: TranslationGroupProps) {
   return (
-    <fieldset className="flex flex-col gap-1.5">
+    <HelpRevealZone as="fieldset" enabled={Boolean(hint)} className="flex flex-col gap-1.5">
       {/* The help trigger lives INSIDE `legend` (legend accepts phrasing content, including a
           `<button>`) rather than beside it in a wrapping `<div>` — a `<legend>` is only picked up
           as the fieldset's accessible name while it is the fieldset's own first child; wrapping it
           would silently break that association. */}
-      <legend className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-neutral-700">
+      <legend className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-neutral-700">
         {label}
         {required && (
           <span aria-hidden="true" className="ml-0.5 text-rose-700">
@@ -81,7 +82,7 @@ export function TranslationGroup({
           error={errorEn}
         />
       </div>
-    </fieldset>
+    </HelpRevealZone>
   )
 }
 

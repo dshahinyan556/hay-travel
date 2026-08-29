@@ -10,10 +10,13 @@ namespace ATTours.Helper.ErrorModels
 
     // Index — 0-based позиция строки в запросе (= позиция в корзине); фронт сопоставляет
     // ошибку с позицией по нему либо по паре TourId+TourDate.
+    //
+    // TourId nullable с 2026-08-29: строка без продукта (кастомный трансфер) сопоставляется
+    // только по Index. В чекауте корзины таких строк не бывает — она шлёт только продукты.
     public class OrderLineErrorItem
     {
         public int Index { get; set; }
-        public int TourId { get; set; }
+        public int? TourId { get; set; }
         public DateOnly TourDate { get; set; }
         public int ErrorCode { get; set; }
     }

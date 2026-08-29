@@ -5,6 +5,11 @@ namespace ATTours.Common.Enums
     public enum UserTokenType
     {
         EmailVerification = 1,
-        PasswordReset = 2
+        PasswordReset = 2,
+
+        // Одноразовый код привязки Telegram-аккаунта (ADR 031 §4): та же машина, что
+        // verify/reset, отличаются только TTL (Telegram:LinkCodeLifetimeMinutes) и алфавит
+        // кода (base64url из 18 байт — ограничение deep-link'а ?start=<payload>).
+        TelegramLink = 3
     }
 }

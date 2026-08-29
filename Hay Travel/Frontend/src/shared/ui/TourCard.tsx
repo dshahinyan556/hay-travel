@@ -5,9 +5,10 @@ import { formatDuration, formatShortDate } from '@/shared/lib/format'
 import { adaptiveImageUrl } from '@/shared/lib/adaptiveImage'
 import { useMoney } from '@/shared/currency'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
-import { KindChip } from './Chip'
+import { catalogBasePrice, isPerPersonPricing } from '@/shared/booking'
+import { FormatChip, KindChip } from './Chip'
 import { ProductTag } from './ProductTag'
-import { ClockIcon, MapPinIcon } from './icons'
+import { ArrowRightIcon, CarIcon, ClockIcon, MapPinIcon } from './icons'
 
 /**
  * Tour card for the showcase, catalog and region panel.
@@ -55,10 +56,38 @@ export function TourCard({ tour }: { tour: Tour }) {
   const discountedPrice = tour.discountedPrice
   const discountEndLabel = discountedPrice !== null ? formatShortDate(tour.discountValidUntil ?? '', locale) : ''
 
+  /*
+    Чисто групповой продукт продаётся ЗА ЧЕЛОВЕКА, и `priceFrom` (сумма цен дней) для него —
+    не та цифра, которую заплатит клиент: решение 0.26 прячет её даже в админке. Поэтому
+    карточка такого продукта показывает `groupPricePerPerson` с подписью «за человека».
+
+    `Both` в эту ветку НЕ попадает намеренно: у него обе цены настоящие, и «от» по цене за
+    группу остаётся честным — какая из них применится, решает посетитель уже в блоке брони.
+
+    Скидка при этом остаётся серверной (`discountedPrice` — от `TotalPrice`), поэтому в
+    групповой ветке зачёркнутой цены не рисуем: смешивать скидку с одного тарифа и цену с
+    другого нельзя. Отдельного «дисконтированного за человека» бэк на карточке не отдаёт.
+  */
+  const perPersonPrice = isPerPersonPricing(tour) ? catalogBasePrice(tour) : null
+
+  /*
+    Трансфер в «Избранном» (решение 0.4 / пункт 6.8). Карточка та же самая — иначе ряд на
+    главной развалился бы на два разных ритма, — но три вещи у него другие по сути домена:
+      * адрес: у трансфера своя детальная `/transfers/:id`, а `GetTourInfo` отвечает на него
+        404, так что ссылка на `/tours/:id` вела бы в «страница не найдена»;
+      * верхняя строка: регионов у трансфера нет, вместо них маршрут «откуда → куда»;
+      * нижняя левая ячейка: длительности нет, вместо неё подпись «цена за авто» — у тура цена
+        читается как «за человека», и молчаливо оставить эту привычку на трансфере значит
+        готовить спор при оплате.
+    Скидок и тегов у трансфера не бывает (решение 0.4), поэтому те ветки просто не срабатывают.
+  */
+  const isTransfer = tour.kind === 'transfer'
+  const route = tour.transferRoute ?? []
+
   return (
     <article className="card-lift group h-full">
       <Link
-        to={`/tours/${tour.id}`}
+        to={isTransfer ? `/transfers/${tour.id}` : `/tours/${tour.id}`}
         className="relative flex h-full flex-col overflow-hidden rounded-2xl bg-gradient-to-b from-panel-raised to-panel ring-1 ring-edge transition-shadow duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] hover:ring-gold-line focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
       >
         {/*
@@ -95,17 +124,36 @@ export function TourCard({ tour }: { tour: Tour }) {
             </div>
           )}
 
-          <div className="absolute bottom-3 left-3">
+          {/* Формат встаёт в ОДИН ряд с типом продукта, а не отдельным углом: оба отвечают на
+              вопрос «что это за поездка», и разносить их по разным краям фотографии значило бы
+              заставить взгляд собирать ответ из двух мест. `flex-wrap` — ради 375px, где
+              «Индивидуальный / групповой» рядом с «Экскурсией» в строку не помещается. */}
+          <div className="absolute inset-x-3 bottom-3 flex flex-wrap items-center gap-1.5">
             <KindChip kind={tour.kind} />
+            <FormatChip format={tour.format} />
           </div>
         </div>
 
         {/* Body */}
         <div className="flex flex-1 flex-col p-4">
-          <p className="flex items-center gap-1.5 text-[11px] tracking-[0.14em] text-gold-ink uppercase">
-            <MapPinIcon size={13} />
-            <span className="truncate">{regions.join(' · ')}</span>
-          </p>
+          {isTransfer ? (
+            route.length > 0 && (
+              <p className="flex min-w-0 items-center gap-1.5 text-[11px] tracking-[0.14em] text-gold-ink uppercase">
+                <span className="truncate">{route[0]}</span>
+                {route.length > 1 && (
+                  <>
+                    <ArrowRightIcon size={13} className="shrink-0" />
+                    <span className="truncate">{route[route.length - 1]}</span>
+                  </>
+                )}
+              </p>
+            )
+          ) : (
+            <p className="flex items-center gap-1.5 text-[11px] tracking-[0.14em] text-gold-ink uppercase">
+              <MapPinIcon size={13} />
+              <span className="truncate">{regions.join(' · ')}</span>
+            </p>
+          )}
 
           <h3 className="card-title mt-2 line-clamp-2 text-ink">{tour.title}</h3>
 
@@ -114,28 +162,52 @@ export function TourCard({ tour }: { tour: Tour }) {
           {/* `mt-auto` is what puts every card's price on the same line. */}
           <div className="mt-auto flex items-end justify-between gap-3 border-t border-edge pt-3.5">
             <span className="flex items-center gap-1.5 text-xs text-ink-dim">
-              <ClockIcon size={14} />
-              {formatDuration(tour.durationDays, tour.durationNights, locale)}
-            </span>
-            <span className="text-right leading-tight">
-              {discountedPrice !== null ? (
-                // Active discount: the original price moves into the label's slot and gets
-                // struck through — same footprint as the non-discounted label line above.
-                <span className="block text-xs text-ink-muted line-through">
-                  {money.format(tour.priceFrom)}
-                </span>
+              {isTransfer ? (
+                <>
+                  <CarIcon size={14} />
+                  {t('transfers.pricePerCar')}
+                </>
               ) : (
-                // "цена от"/"from" — true in two senses: the smallest group tier, and per
-                // person. `tour.priceFrom` is the base (1–4 guests) price.
-                <span className="block text-[10px] tracking-wide text-ink-muted">{t('tourCard.priceFrom')}</span>
+                <>
+                  <ClockIcon size={14} />
+                  {formatDuration(tour.durationDays, tour.durationNights, locale)}
+                </>
               )}
-              <span className="font-display text-2xl text-gold-ink">
-                {money.format(discountedPrice ?? tour.priceFrom)}
-              </span>
-              {discountedPrice !== null && discountEndLabel && (
-                <span className="block text-[10px] text-ink-dim">
-                  {t('tourCard.discountUntil', { date: discountEndLabel })}
-                </span>
+            </span>
+            {/* Обе ветки держат одну и ту же трёхстрочную сетку (подпись → сумма → сноска),
+                поэтому цена в ряду карточек остаётся на одном уровне независимо от формата. */}
+            <span className="text-right leading-tight">
+              {perPersonPrice !== null ? (
+                <>
+                  <span className="block text-[10px] tracking-wide text-ink-muted">
+                    {t('tourCard.pricePerPerson')}
+                  </span>
+                  <span className="font-display text-2xl text-gold-ink">{money.format(perPersonPrice)}</span>
+                </>
+              ) : (
+                <>
+                  {discountedPrice !== null ? (
+                    // Active discount: the original price moves into the label's slot and gets
+                    // struck through — same footprint as the non-discounted label line above.
+                    <span className="block text-xs text-ink-muted line-through">
+                      {money.format(tour.priceFrom)}
+                    </span>
+                  ) : (
+                    // "цена от"/"from" — true in two senses: the smallest group tier, and per
+                    // person. `tour.priceFrom` is the base (1–4 guests) price.
+                    <span className="block text-[10px] tracking-wide text-ink-muted">
+                      {t('tourCard.priceFrom')}
+                    </span>
+                  )}
+                  <span className="font-display text-2xl text-gold-ink">
+                    {money.format(discountedPrice ?? tour.priceFrom)}
+                  </span>
+                  {discountedPrice !== null && discountEndLabel && (
+                    <span className="block text-[10px] text-ink-dim">
+                      {t('tourCard.discountUntil', { date: discountEndLabel })}
+                    </span>
+                  )}
+                </>
               )}
             </span>
           </div>

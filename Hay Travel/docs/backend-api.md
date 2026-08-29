@@ -3,7 +3,10 @@
 Слоистая архитектура: контроллер (`TourController`) → сервисы (`ATTours.Service/Services/*`) → репозитории → EF Core. Контроллер использует `new XxxService()` (не DI — текущий стиль проекта).
 
 ## Енумы (сериализуются ЧИСЛАМИ, не строками)
-- `TourType`: Tour=1, Excursion=2.
+- `TourType`: Tour=1, Excursion=2, **Transfer=3** (2026-08-29).
+- `TourFormat` (2026-08-29): Individual=1, Group=2, Both=3. Nullable — `null` у трансфера.
+- `TransferRoutePointKind` (2026-08-29): From=1, Stop=2, To=3.
+- `OrderLineKind` (2026-08-29): Product=1, CustomTransfer=2.
 - `LanguageCode`: Russian=1, English=2.
 - `TourTranslationType`: Title=1, ShortDescription=2, Description=3, Duration=4.
 - `TourDayTranslationType`: Title=1, ShortDescription=2, Description=3, Duration=4.
@@ -21,18 +24,18 @@
 | PUT | `UpdateTour` | `TourInfoModel` | `TourInfoModel` (перечитанный) |
 | PATCH | `SetActive` | `{Id, IsActive}` | — |
 | PATCH | `SetArchived` | `{Id, IsArchived}` | — |
-| PATCH | `SetFeatured` | `{Id, IsFeatured}` | — (400 `TooManyFeaturedTours`/2011, если уже 6) |
+| PATCH | `SetFeatured` | `{Id, IsFeatured}` | — (400 `TooManyFeaturedTours`/2011, если уже 9 — лимит расширен 6 → 9 2026-08-29) |
 | PATCH | `ReorderFeatured` | `{OrderedIds: int[]}` | — (весь набор избранных, иначе 400) |
 | DELETE | `DeleteTour?id=` | — | — (каскадное удаление графа) |
-| GET | `GetToursClient?languageCode=` | — | `TourInfoModel[]` (одна локаль) |
+| GET | `GetToursClient?languageCode=` | — | `TourInfoModel[]` (одна локаль; **трансферы исключены** фильтром `Type != Transfer`, 2026-08-29) |
 | GET | `GetFeaturedToursClient?languageCode=` | — | `TourCardModel[]` (`IsFeatured && IsActive && !IsArchived`, `OrderBy(FeaturedSortOrder)`) |
-| GET | `GetTourInfo?id=&languageCode=` | — | `TourInfoModel` (одна локаль) |
+| GET | `GetTourInfo?id=&languageCode=` | — | `TourInfoModel` (одна локаль; на трансфер — 404, у него своя read-модель `api/Transfer/GetTransferInfo`) |
 | GET | `api/ExchangeRate/GetCurrent` | — (анонимный) | `ExchangeRatesModel {baseCurrency, lastUpdatedUtc, rateDateUtc, isStale, rates[]}` |
 
 ## Ключевые правила
 - **Модели**: `*CreateModel` — без Id (id-less); `*InfoModel` — с Id. `TourInfoModel` отдаёт `IsActive`, `IsArchived`, `IsFeatured`, `FeaturedSortOrder`, `TotalPrice`.
 - **UpdateTour** реконсилит весь граф **по Id**: `Id==0` → добавить, совпадающий Id → обновить, отсутствующий в payload Id → удалить. Чужой Id → 400. `IsActive`/`IsArchived`/`IsFeatured`/`FeaturedSortOrder`/`TotalPrice` в UpdateTour игнорируются (управляются отдельно / считаются на бэке).
-- **Избранное (2026-08-02)**: `Tour.IsFeatured`(bool)/`FeaturedSortOrder`(int) — ровно 2 поля. Лимит 6 одновременно избранных проверяется в `TourFeaturedService.SetFeaturedAsync` перед добавлением (не в отдельном `ValidationService` — точечный тоггл, как `IsActive`/`IsArchived`). Новый избранный тур встаёт в конец текущего порядка (`max(FeaturedSortOrder)+1`); порядок дальше меняется только через `ReorderFeatured`, которое требует ПОЛНЫЙ набор Id уже избранных туров (частичная перестановка — 400 `InvalidEntityIds`).
+- **Избранное (2026-08-02)**: `Tour.IsFeatured`(bool)/`FeaturedSortOrder`(int) — ровно 2 поля. Лимит одновременно избранных (6 → **9** с 2026-08-29) проверяется в `TourFeaturedService.SetFeaturedAsync` перед добавлением (не в отдельном `ValidationService` — точечный тоггл, как `IsActive`/`IsArchived`). Новый избранный тур встаёт в конец текущего порядка (`max(FeaturedSortOrder)+1`); порядок дальше меняется только через `ReorderFeatured`, которое требует ПОЛНЫЙ набор Id уже избранных туров (частичная перестановка — 400 `InvalidEntityIds`).
 - **Дни** подключены к туру через join-таблицу `TourDetail` (без своего Id) — Delete/Update удаляют/реконсилят `TourDay` явно.
 - **TotalPrice** — compute-on-write: Σ(TourDay.Price) при create/update.
 - **Валидация** (`TourValidationService`, на create и update): экскурсия = ровно 1 день, тур ≥ 2; цена дня ≥ 0; ≥1 точка маршрута в каждом дне. Смена типа запрещена (`TourUpdateService`).
@@ -429,7 +432,176 @@ ADR 027-030. Продукт-решение Давида: 4 независимы�
   блокировка impersonation для юзеров с истёкшим email-verification токеном сверх уже описанной
   проверки.
 
+## Трансферы, формат продукта и время старта — 2026-08-29
+
+Батч «Трансферы + формат продукта + время старта» (`docs/checklists/checklist-transfers-format-2026-08-29.txt`).
+Доменная часть — `product-model.md`; здесь только контракт.
+
+### Новые поля на существующих контрактах
+- `TourCreateModel`/`TourInfoModel`: `Format` (`TourFormat?`), `GroupPricePerPerson` (decimal?),
+  `GroupCapacity` (int?), `StartTimes` (`{Time, SortOrder}`), `TransferRoutePoints`
+  (`{Kind, SortOrder, Translations}`), `TransferPrices` (`{VehicleClassId, OneWayPrice,
+  RoundTripPrice}`). `TourCardModel` отдаёт `Format` и `GroupPricePerPerson` — карточке нужен
+  бейдж формата и цена за человека.
+- Все три коллекции реконсилятся `UpdateTour` по тому же правилу «по Id», что и остальной граф;
+  скалярные `Format`/`GroupPricePerPerson`/`GroupCapacity` дописаны в `TourUpdateService`
+  **вручную** — там поля копируются перечислением, и не дописанное поле молча не сохраняется.
+
+### Справочник классов авто (`api/VehicleClass`)
+Право — `catalog.vehicle-classes` (новый ключ в `AdminScreens`, полный CRUD). Структура ровно как
+у `api/Tag`.
+
+| Метод | Route | Тело / параметры | Возврат |
+| --- | --- | --- | --- |
+| GET | `GetAll` | — | `VehicleClassInfoModel[]` (`OrderBy(SortOrder)`) |
+| POST | `Create` | `VehicleClassCreateModel` | `VehicleClassInfoModel` |
+| PUT | `Update` | `VehicleClassInfoModel` | `VehicleClassInfoModel` (перечитанный) |
+| DELETE | `Delete?id=` | — | — (400 `CatalogEntryInUse`/2010, если класс в `TransferPrice`/`OrderLine`) |
+| GET | `GetForClient?languageCode=` | — (анонимный) | `VehicleClassInfoModel[]` (только `IsActive`, одна локаль) |
+
+`VehicleClass`: `Capacity` (мест без водителя), `LuggageCapacity` (единиц багажа), `SortOrder`,
+`IsActive` + переводы названия RU/EN. Класс, который уже используется, скрывают флагом, а не
+удаляют (FK `Restrict` + гард в сервисе удаления).
+
+### Публичные трансферы (`api/Transfer`)
+Оба метода анонимные. Админский CRUD трансфера остаётся в `TourController` — трансфер это
+`TourType`, а не отдельная сущность; отдельный контроллер существует только потому, что публичная
+read-модель другая (маршрут и цены по классам вместо дней, регионов и тегов).
+
+| Метод | Route | Тело / параметры | Возврат |
+| --- | --- | --- | --- |
+| GET | `GetTransfersClient?languageCode=` | — | `TransferCardModel[]` (`{Id, MainImageUrl, Translations, RoutePoints, MinOneWayPrice}`) |
+| GET | `GetTransferInfo?id=&languageCode=` | — | `TransferInfoModel` (`{Id, MainImageUrl, RequiresPrepayment, Translations, RoutePoints, Prices}`) |
+
+`TransferPriceClientModel` — `{VehicleClassId, VehicleClassName, Capacity, LuggageCapacity,
+SortOrder, OneWayPrice, RoundTripPrice}`: две цены приходят отдельными числами, «туда-обратно»
+не выводится из «в одну сторону». Черновик/архив отвечают 404 так же, как несуществующий id —
+иначе по ответу можно было бы узнать о существовании неопубликованного продукта (то же правило,
+что в `GetTourInfo`).
+
+### Доступность: места группового формата и закрытые даты
+| Метод | Route | Тело / параметры | Возврат |
+| --- | --- | --- | --- |
+| GET | `api/Availability/GetGroupSeats?tourId=&from=&to=` | — (анонимный) | `TourGroupSeatsModel` |
+| GET | `api/Availability/GetClosedDates?tourId=&from=&to=&tourType=` | — (анонимный) | `DateOnly[]` |
+
+- `TourGroupSeatsModel` — `{TourId, Format, Capacity, Slots[]}`, слот `{Date, StartTime,
+  BookedSeats, SeatsLeft}`. **В `Slots` попадают только слоты с бронями**: отсутствие даты
+  означает «свободно всё», а не «выезда нет» (фронт разбирает это в `shared/booking/groupSeats.ts`).
+  Живёт рядом с закрытыми датами, а не в деталях продукта: ответка продукта кэшируется и не знает
+  диапазона дат.
+- `GetClosedDates`: `tourId` стал **nullable**, добавлен необязательный `tourType` (решение 0.27) —
+  у конструктора кастомной заявки продукта нет вовсе, и он спрашивает по типу
+  (`GetClosedDates?tourType=3`). Когда `tourId` задан, тип берётся из БД, а `tourType` из запроса
+  игнорируется.
+
+### Область правил закрытия «тип продукта» + 6 рангов приоритета
+`ClosureRule.TourType` (`TourType?`) — третья область действия рядом с «весь сайт» и «один
+продукт»: закрыть день **только для трансферов**, не трогая туры и экскурсии. Взаимоисключима с
+`TourId` (`ClosureRuleValidationService`); оба `null` = глобальное правило, как и раньше.
+
+Почему колонка, а не фронтовый пресет, раскладывающий выбор в N tour-scope правил: материализованный
+список id замораживает состав каталога на момент нажатия — трансфер, заведённый завтра, в такое
+закрытие уже не попал бы. Тип продукта — это правило, а не выборка.
+
+`ClosureRuleResolver` (см. ADR 012) получил сигнатуру `IsClosed/Resolve(rules, date, tourId,
+tourType)` и **6 рангов** специфичности вместо 4 — новая область вставлена между туром и глобальной,
+порядок ADR 012 внутри каждой области сохранён:
+
+| Ранг | Область | Тип правила |
+| --- | --- | --- |
+| 6 | Tour | SpecificDate |
+| 5 | Тип продукта | SpecificDate |
+| 4 | Global | SpecificDate |
+| 3 | Tour | Weekly |
+| 2 | Тип продукта | Weekly |
+| 1 | Global | Weekly |
+
+`tourType == null` в запросе означает «тип неизвестен/не важен» — правила типовой области тогда не
+применяются, глобальные и tour-scope работают как раньше. Тай-брейк по `Id` при равном ранге
+остался прежним. Проверка закрытых дат добавлена трансферу (обе даты — поездки и обратного рейса)
+и кастомной заявке. Фронтовая копия резолвера (ADR 015,
+`features/admin/calendar/lib/closureResolver.ts`) обновлена теми же шестью рангами.
+
+### Заказы: статус «Заявка» и расширение строки
+`OrderStatus += Request = 8` — заявка без цены: кастомный трансфер, собранный клиентом в
+конструкторе, `LineTotal == 0`, цену проставляет менеджер уже в админке, после чего заказ идёт по
+обычному флоу.
+
+`OrderLine`:
+- `TourId` стал **nullable** — `null` ровно тогда, когда `LineKind == CustomTransfer`;
+- `LineKind` (`OrderLineKind`) — явное поле, а не вывод из «`TourId == null`»;
+- `StartTime` (`TimeOnly?`) — выбранный слот у тура/экскурсии, время подачи у трансфера. Снапшот,
+  а не FK: правка расписания продукта не меняет уже оформленную бронь. Nullable только ради строк,
+  созданных до батча;
+- `Format` (`TourFormat?`) — снапшот выбора клиента, по нему считался `LineTotal`. Пишется всегда,
+  а не только при `Both`;
+- `IsRoundTrip` (bool) + `ReturnDate` (`DateOnly?`) + `ReturnTime` (`TimeOnly?`) — обратный рейс
+  трансфера; при `IsRoundTrip == false` обе величины `null`;
+- `VehicleClassId` (int?) + `VehicleClassNameSnapshot` (string) — класс авто и снапшот его названия
+  (RU) на момент брони, тот же принцип, что у `PriceSnapshot`;
+- `CustomTransferDetails` — 1:1, заполнено ровно при `LineKind == CustomTransfer`:
+  `{PassengerCount, LuggageMediumCount, LuggageLargeCount, LuggageOther, DesiredVehicleClassId,
+  Comment, Stops[]}`; `CustomTransferStop { Kind, SortOrder, Text }` — маршрут заявки
+  **одноязычный**, ровно в том виде, в каком его ввёл клиент.
+
+Расчёт `LineTotal` (`OrderCreationService` + общий `OrderLinePricing`):
+- Individual — как раньше (фикс + тир по числу гостей), скидка резолвится на дату поездки до тира;
+- Group — `GroupPricePerPerson` × гости, без тиров;
+- Transfer — цена класса авто, `OneWayPrice` либо `RoundTripPrice` по `IsRoundTrip`.
+
+### `POST api/Order/CreateTransferRequest`
+`[Authorize]` без ролей, владелец — из токена: заявка это не анонимная форма обратной связи, по ней
+будут звонить и её будут превращать в заказ. Тело — `CustomTransferRequestCreateModel`
+(`{PickupDate, PickupTime, IsRoundTrip, ReturnDate, ReturnTime, PassengerCount,
+LuggageMediumCount, LuggageLargeCount, LuggageOther, DesiredVehicleClassId, Comment, Stops[]}`),
+ответ — обычный `OrderInfoModel`. Отдельный маршрут, а не флаг в `Create`: у заявки нет ни корзины,
+ни цены, ни продукта — общего тела запроса с чекаутом у неё не существует. Уведомление уходит тем
+же каналом, что у обычной брони (`SendOrderCreatedAsync`), и пишется событие в журнал заказа.
+
+### Новые коды ошибок (`GlobalErrorCode`, 2044–2059)
+Заказная половина 2044–2049 приходит пер-строчно (`OrderLinesErrorModel.lines[].errorCode`) при
+чекауте корзины и плоско — при добавлении строки админом и при отправке заявки.
+
+| Код | Имя | Смысл |
+| --- | --- | --- |
+| 2044 | `NoSeatsLeft` | Свободных мест на слоте (тур + дата + время старта) меньше, чем просит строка. Занято = Σ `GuestCount` по строкам всех заказов на слоте, кроме `Rejected` |
+| 2045 | `InvalidStartTimeSelection` | Время старта не выбрано или не входит в расписание продукта — свободный ввод не принимается |
+| 2046 | `OrderLineFormatRequired` | У продукта `Format == Both`, а строка не сказала, какой формат выбрал клиент |
+| 2047 | `VehicleClassNotAvailable` | Бронь трансфера без класса авто либо с классом, у которого на этом трансфере нет цены (в отличие от 2057 — класс существует, но не продаётся) |
+| 2048 | `LuggageExceedsVehicleCapacity` | Багаж (средний ×3 + большой ×5) не влезает в `LuggageCapacity` выбранного класса. Проверяется, только если багаж заполнен и класс выбран |
+| 2049 | `PassengersExceedVehicleCapacity` | Пассажиров больше вместимости выбранного класса |
+| 2050 | `InvalidTourFormat` | Формат отсутствует у тура/экскурсии либо задан у трансфера |
+| 2051 | `InvalidGroupPricing` | `Group`/`Both` без цены за человека или без мест на выезд |
+| 2052 | `InvalidTourStartTimes` | У тура/экскурсии ни одного времени старта либо у трансфера они есть |
+| 2053 | `InvalidTransferRoute` | В маршруте трансфера не ровно одна точка `From` и не ровно одна `To` |
+| 2054 | `InvalidTransferPrices` | У трансфера нет ни одного класса с ценой либо какая-то из двух цен не положительна |
+| 2055 | `TransferFieldNotAllowed` | Прислано поле, которого у трансфера не бывает (дни, галерея, регионы, теги, скидка, заметки, доп.расходы) |
+| 2056 | `TransferMainImageRequired` | У трансфера нет главной картинки |
+| 2057 | `VehicleClassNotFound` | Такого класса нет в справочнике |
+| 2058 | `InvalidReturnTrip` | Обратный рейс заказан, но без своей даты/времени либо раньше самой поездки |
+| 2059 | `RequiredFieldMissing` | Обязательное поле пустое — русское название продукта, главная картинка, русское название дня, название класса авто. Один код на все: сообщение называет конкретное поле |
+
+2059 — результат аудита паритета валидации фронт↔бэк (общее правило проекта: всё, что валидируется
+на фронте, обязано валидироваться и на бэке; фронтовая валидация это UX, а не защита от прямых
+запросов к API). Лимит 16 гостей зеркалится для брони продукта, но не для кастомной заявки —
+у заявки «пассажиров больше, чем вмещает любая машина» это штатный путь в заявку без цены, а не
+ошибка.
+
 ## Миграции
 Актуальные (в `ATTours.DataLayer/Migrations`): `InitialCreate`, `AddRoutePoint`, `AddOrganizationalDetailAndRestriction`, `ChangeTourDayChildrenToCascade`, `AddTourIsArchived`, `AddSiteSettings`, `AddRegionAndTourRegion`, `SeedArmenianRegions`, `MergeRestrictionAndOrganizationalDetailIntoTourNote`, `AddReferenceCatalogs`, `AddTourFeatured`, `SeedRegionBlurbs`, `AddExchangeRate`, `AddOrdersAndClosureRules`, `AddTourRequiresPrepayment` (2026-08-13 — `Tour.RequiresPrepayment`, `bit NOT NULL DEFAULT 1`; см. `product-model.md`), `AddClosureRuleBatchId` (2026-08-14 — `ClosureRule.BatchId`, `uniqueidentifier NULL`; см. выше), `AddTagsAndOrderDiscount` (2026-08-15), `TourDiscountFields` (2026-08-16), `AddTourDiscountStartDate` (2026-08-18 — см. «Скидка тура» выше), `AddFlexibleRolesAndPermissions` (2026-08-22 — отредактирована на месте 2026-08-23, чтобы сразу эмитить `AccessLevel Level` вместо 4 bool-флагов; права никогда не были задеплоены, редактирование существующей миграции безопасно), `RemoveRoleSystemLockAddCanManageAdmins` (2026-08-22), `AddImpersonationAndRememberMe` (2026-08-22 — `UserRole.CanImpersonate`, `RefreshToken.RememberMe`/`ImpersonatedByUserId`, таблица `ImpersonationEvent`, ретроактивный флаш существующих refresh-токенов). Миграции применяются автоматически при старте backend (с retry, с 2026-08-10) — отдельного ручного шага `dotnet ef database update` в проде не требуется.
+
+Батч трансферов (2026-08-29), три миграции подряд:
+- `20260829092657_AddTransfersProductFormatAndStartTimes` — `Tour.Format`/`GroupPricePerPerson`/
+  `GroupCapacity`, таблицы `TourStartTime`, `VehicleClass`(+`Translation`), `TransferRoutePoint`
+  (+`Translation`), `TransferPrice`, `CustomTransferDetails`, `CustomTransferStop`, новые колонки
+  `OrderLine` (+ `TourId` → nullable). Данные: `UPDATE [Tour] SET [Format] = 1 WHERE [Type] IN (1, 2)`
+  и одно посеянное время `09:00` каждому существующему туру/экскурсии — чтобы старые продукты не
+  стали нередактируемыми на полпути.
+- `20260829110424_AddClosureRuleProductTypeScope` — `ClosureRule.TourType` (nullable).
+- `20260829110546_RemoveSeededDefaultStartTimes` — ровно один
+  `DELETE FROM [TourStartTime] WHERE [Time] = '09:00:00'` (решение 0.28: время старта строго
+  обязательно, посеянное значение убирается, реальное расписание админ заводит руками). Продукты и
+  заказы не тронуты, `Down` пустой.
 
 **Известный пробел в этом списке**: миграции переделки B14/multi-line заказов (`checklist-orders-redesign.txt`, между 08-16 и 08-16) в список не занесены — Фаза 12 (docs) той работы была осознанно пропущена по просьбе пользователя. Список неполный между `AddOrdersAndClosureRules` и `AddTagsAndOrderDiscount`.

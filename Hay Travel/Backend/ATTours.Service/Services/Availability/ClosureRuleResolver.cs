@@ -10,21 +10,31 @@ namespace ATTours.BusinessServices.Services.Availability
     public static class ClosureRuleResolver
     {
         // Специфичность правила: побеждает самое узкое применимое.
-        // Tour+SpecificDate > Global+SpecificDate > Tour+Weekly > Global+Weekly.
-        private const int TourSpecificDateRank = 4;
-        private const int GlobalSpecificDateRank = 3;
-        private const int TourWeeklyRank = 2;
+        // Tour > ТипПродукта > Глобально, и внутри каждой области SpecificDate > Weekly —
+        // порядок ADR 012 сохранён, область «тип продукта» (решение 0.27 батча
+        // checklist-transfers-format-2026-08-29) вставлена между туром и глобальной.
+        private const int TourSpecificDateRank = 6;
+        private const int TourTypeSpecificDateRank = 5;
+        private const int GlobalSpecificDateRank = 4;
+        private const int TourWeeklyRank = 3;
+        private const int TourTypeWeeklyRank = 2;
         private const int GlobalWeeklyRank = 1;
 
         // true = день закрыт для брони этого тура (или закрыт глобально, если tourId == null).
         // Нет применимых правил -> день открыт (дефолт).
-        public static bool IsClosed(IEnumerable<ClosureRule> rules, DateOnly date, int? tourId)
-            => Resolve(rules, date, tourId) is { Action: ClosureAction.Close };
+        //
+        // tourType — тип спрашиваемого продукта. Нужен, чтобы к нему применились правила
+        // области «все продукты этого типа»; null = «тип неизвестен/не важен», такие правила
+        // тогда не применяются (глобальные и tour-scope продолжают работать как раньше).
+        // У кастомной заявки на трансфер продукта нет вовсе: tourId == null,
+        // tourType == Transfer.
+        public static bool IsClosed(IEnumerable<ClosureRule> rules, DateOnly date, int? tourId, TourType? tourType = null)
+            => Resolve(rules, date, tourId, tourType) is { Action: ClosureAction.Close };
 
         // Тот же resolve, что использует IsClosed, но отдаёт наружу победившее правило
         // целиком — нужен вызывающим, которым помимо факта закрытия нужна причина
         // (ClosureRule.Reason), например админ-календарю (B12, 2026-08-13).
-        public static ClosureRule? Resolve(IEnumerable<ClosureRule> rules, DateOnly date, int? tourId)
+        public static ClosureRule? Resolve(IEnumerable<ClosureRule> rules, DateOnly date, int? tourId, TourType? tourType = null)
         {
             if (rules is null)
                 return null;
@@ -34,7 +44,7 @@ namespace ATTours.BusinessServices.Services.Availability
 
             foreach (var rule in rules)
             {
-                if (!IsApplicable(rule, date, tourId))
+                if (!IsApplicable(rule, date, tourId, tourType))
                     continue;
 
                 var rank = GetSpecificityRank(rule);
@@ -54,11 +64,15 @@ namespace ATTours.BusinessServices.Services.Availability
         }
 
         // Область действия: глобальное правило применимо всегда; правило тура — только
-        // когда спрашивают про этот же тур. Запрос с tourId == null (глобальный срез
+        // когда спрашивают про этот же тур; правило типа продукта — только когда спрашивают
+        // про продукт этого типа. Запрос с tourId == null и tourType == null (глобальный срез
         // календаря) видит только глобальные правила.
-        private static bool IsApplicable(ClosureRule rule, DateOnly date, int? tourId)
+        private static bool IsApplicable(ClosureRule rule, DateOnly date, int? tourId, TourType? tourType)
         {
             if (rule.TourId is not null && rule.TourId != tourId)
+                return false;
+
+            if (rule.TourType is not null && rule.TourType != tourType)
                 return false;
 
             return rule.Type switch
@@ -83,12 +97,19 @@ namespace ATTours.BusinessServices.Services.Availability
             return true;
         }
 
+        // TourId и TourType взаимоисключимы (ClosureRuleValidationService), поэтому проверка
+        // идёт от самого узкого к самому широкому и ветвиться дальше не нужно.
         private static int GetSpecificityRank(ClosureRule rule)
         {
-            if (rule.Type == ClosureRuleType.SpecificDate)
-                return rule.TourId is not null ? TourSpecificDateRank : GlobalSpecificDateRank;
+            var isSpecificDate = rule.Type == ClosureRuleType.SpecificDate;
 
-            return rule.TourId is not null ? TourWeeklyRank : GlobalWeeklyRank;
+            if (rule.TourId is not null)
+                return isSpecificDate ? TourSpecificDateRank : TourWeeklyRank;
+
+            if (rule.TourType is not null)
+                return isSpecificDate ? TourTypeSpecificDateRank : TourTypeWeeklyRank;
+
+            return isSpecificDate ? GlobalSpecificDateRank : GlobalWeeklyRank;
         }
     }
 }

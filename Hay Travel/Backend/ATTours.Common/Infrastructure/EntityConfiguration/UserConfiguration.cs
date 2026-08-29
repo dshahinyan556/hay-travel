@@ -86,6 +86,18 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
             builder.Property(x => x.LastLoginIp)
                 .HasMaxLength(64);
 
+            // Telegram-уведомления (ADR 031 §5). TelegramChatId — bigint по конвенции (long?),
+            // отдельно настраивать нечего.
+            builder.Property(x => x.TelegramUsername)
+                .HasMaxLength(32);
+
+            // Один Telegram-чат не может быть привязан к двум пользователям. Filtered —
+            // непривязанные (NULL) строки в индекс не входят (тот же приём, что у
+            // Email/Username, но по IS NOT NULL).
+            builder.HasIndex(x => x.TelegramChatId)
+                .IsUnique()
+                .HasFilter("[TelegramChatId] IS NOT NULL");
+
             builder.HasOne(x => x.Role)
                 .WithMany(x => x.Users)
                 .HasForeignKey(x => x.RoleId)

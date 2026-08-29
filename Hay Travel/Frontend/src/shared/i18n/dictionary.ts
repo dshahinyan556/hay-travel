@@ -31,6 +31,8 @@ const ru = {
   'nav.trips': 'Путешествия',
   'nav.regions': 'Карта регионов',
   'nav.regionsShort': 'Карта',
+  'nav.transfers': 'Трансферы',
+  'nav.transfersShort': 'Трансфер',
   'nav.login': 'Войти',
   'nav.account': 'Аккаунт',
   'nav.mainAriaLabel': 'Основная навигация',
@@ -144,6 +146,14 @@ const ru = {
   'tourCard.discountUntil': 'до {date}',
   'chip.tour': 'Тур',
   'chip.excursion': 'Экскурсия',
+  'chip.transfer': 'Трансфер',
+  /* Формат продажи (батч 2026-08-29). `Both` — одна подпись, а не два бейджа: см. FormatChip. */
+  'chip.formatIndividual': 'Индивидуальный',
+  'chip.formatGroup': 'Групповой',
+  'chip.formatBoth': 'Индивидуальный / групповой',
+  /* Карточка группового продукта показывает цену ЗА ЧЕЛОВЕКА — «цена от» там было бы про
+     другой тариф (решение 0.18). */
+  'tourCard.pricePerPerson': 'за человека',
 
   // ── Tour detail ───────────────────────────────────────────────────────────────────────────
   'tourDetail.breadcrumb': 'Каталог',
@@ -193,6 +203,26 @@ const ru = {
   'booking.submitFailed': 'Не удалось отправить заявку. Проверьте соединение и попробуйте ещё раз.',
   'booking.sessionExpired': 'Сессия истекла — войдите заново, чтобы завершить бронь.',
 
+  /* ── Формат, время старта и места (батч 2026-08-29) ──────────────────────────────────────
+     Подписи формата переиспользуют ключи бейджа (`chip.format*`): переключатель в блоке брони
+     и бейдж на карточке обязаны называть один и тот же формат одним и тем же словом. */
+  'booking.formatLabel': 'Формат',
+  'booking.formatIndividualHint': 'Только ваша компания, цена за всю бронь',
+  'booking.formatGroupHint': 'Сборная группа, цена за человека',
+  'booking.startTimeLabel': 'Время выезда',
+  'booking.startTimeMissing': 'Выберите время выезда',
+  // Расписания у продукта может не быть (запись, до которой не дошла миграция) — тогда блок
+  // брони говорит это словами, а не показывает пустой список кнопок.
+  'booking.startTimeUnavailable':
+    'Запись на это путешествие пока недоступна — время выезда ещё не назначено. Напишите нам, и мы подберём дату.',
+  'booking.perPerson': '{price} за человека',
+  'booking.seatsLeft': 'Осталось мест: {count}',
+  // Формулировка владельца (решение 0.20) — менять только по его слову.
+  'booking.noSeats': 'На этот день свободных мест нет, попробуйте выбрать другую дату',
+  'booking.notEnoughSeats': 'На этот выезд осталось мест: {count} — уменьшите число гостей',
+  'booking.startTimeInvalid': 'Это время выезда больше недоступно — выберите другое.',
+  'booking.formatRequired': 'Выберите формат — индивидуальный или групповой.',
+
   // ── Cart ──────────────────────────────────────────────────────────────────────────────────
   'cart.nav.aria': 'Корзина, позиций: {count}',
   'cart.title': 'Корзина',
@@ -211,6 +241,10 @@ const ru = {
   'cart.line.price': 'Стоимость',
   'cart.line.unavailable': 'Это путешествие больше недоступно — удалите его, чтобы отправить заявку',
   'cart.line.guestCountInvalid': 'Недопустимое число гостей — измените и попробуйте снова',
+  /* Строка корзины показывает выбранный выезд целиком: без времени две позиции одного тура на
+     один день выглядели бы одинаково (батч 2026-08-29). Править время в корзине нельзя —
+     другое время это другой выезд, он выбирается в блоке брони. */
+  'cart.line.startTime': 'Время выезда',
   'cart.summary.total': 'Итого',
   'cart.summary.itemCount': 'Позиций: {count}',
   'cart.summary.quoteNote': 'По части позиций стоимость рассчитаем индивидуально',
@@ -233,6 +267,196 @@ const ru = {
   'cart.result.lineCount': 'Позиций в заявке: {count}',
   'cart.result.lineCountTotal': 'Позиций в заявке: {count} · на сумму {total}',
   'cart.result.continue': 'Смотреть другие путешествия',
+  /* Строка-трансфер в корзине. Дата и число пассажиров правятся, всё остальное — нет: класс
+     авто и обратный рейс это выбор, сделанный на странице трансфера, и менять его надо там же,
+     где видно цену обоих вариантов. */
+  'cart.line.pickupTime': 'Время подачи',
+  'cart.line.vehicleClass': 'Класс авто',
+  'cart.line.return': 'Обратно',
+  'cart.line.oneWay': 'В одну сторону',
+  'cart.line.passengers': 'Пассажиров',
+  'cart.line.transferUnavailable':
+    'Этот трансфер больше недоступен — удалите его, чтобы отправить заявку',
+
+  // ── Трансферы (батч 2026-08-29) ───────────────────────────────────────────────────────────
+  'transfers.eyebrow': 'Трансферы по Армении',
+  'transfers.title': 'Готовые маршруты',
+  'transfers.subtitle':
+    'Встреча в аэропорту, переезды между городами и поездки к достопримечательностям. ' +
+    'Цена фиксированная и известна заранее.',
+  /* Подпись стоит вплотную к цифре на всех экранах: у тура цена читается как «за человека», и
+     у трансфера это неверно — молчание здесь рождает спор при оплате. */
+  'transfers.pricePerCar': 'цена за авто',
+  'transfers.priceFrom': 'от',
+  'transfers.found': 'Найдено: {count}',
+  'transfers.priceUnknown': 'по запросу',
+
+  // Фильтры «Откуда / Куда» — на странице ВСЕГДА, при любом числе трансферов (решение 0.25).
+  'transfers.filter.from': 'Откуда',
+  'transfers.filter.to': 'Куда',
+  'transfers.filter.all': 'Все',
+  'transfers.filter.reset': 'Сбросить',
+  'transfers.filter.fromAria': 'Фильтр: откуда',
+  'transfers.filter.toAria': 'Фильтр: куда',
+
+  'transfers.builder.eyebrow': 'Свой маршрут',
+  'transfers.builder.title': 'Не нашли нужное направление?',
+  'transfers.builder.body':
+    'Соберите маршрут сами — укажите точки, дату и время. Менеджер подберёт машину и подтвердит цену.',
+  'transfers.builder.action': 'Собрать свой трансфер',
+
+  'transfers.empty.title': 'Готовых маршрутов пока нет',
+  'transfers.empty.body':
+    'Но трансфер всё равно можно заказать — соберите маршрут сами, и мы подберём машину и цену.',
+  /* Пустой результат фильтров называет САМ маршрут, а не «ничего не найдено»: так сразу видно,
+     какой запрос не сработал. Главное действие — собрать этот маршрут, а не сбросить фильтры:
+     выбор посетителя не выкидывается, он переносится в конструктор. */
+  'transfers.emptyFiltered.title': '{route} мы ещё не собрали',
+  'transfers.emptyFiltered.body':
+    'Готового трансфера по этому направлению нет. Но именно его можно заказать в конструкторе — маршрут уже подставим.',
+  'transfers.emptyFiltered.action': 'Собрать {route}',
+  'transfers.emptyFiltered.showAll': 'Показать все маршруты',
+
+  'transfers.notFound.title': 'Трансфер не найден',
+  'transfers.notFound.body': 'Возможно, маршрут снят с продажи или ссылка неверна.',
+  'transfers.notFound.action': 'Все трансферы',
+
+  // ── Детальная /transfers/:id ───────────────────────────────────────────────────────────────
+  'transfers.detail.routeHeading': 'Маршрут',
+  'transfers.detail.pointFrom': 'Откуда',
+  'transfers.detail.pointStop': 'Остановка',
+  'transfers.detail.pointTo': 'Куда',
+  'transfers.detail.dateLabel': 'Дата поездки',
+  'transfers.detail.pickupTimeLabel': 'Время подачи',
+  'transfers.detail.pickupTimePlaceholder': 'Выберите время',
+  'transfers.detail.returnToggle': 'Нужен обратный трансфер',
+  'transfers.detail.returnDateLabel': 'Дата обратно',
+  'transfers.detail.returnTimeLabel': 'Время обратно',
+  'transfers.detail.passengers': 'Пассажиров',
+  'transfers.detail.passengersFewer': 'Меньше пассажиров',
+  'transfers.detail.passengersMore': 'Больше пассажиров',
+  'transfers.detail.vehicleLabel': 'Класс автомобиля',
+  'transfers.detail.vehicleHelpTitle': 'Класс автомобиля',
+  'transfers.detail.vehicleHelpBody':
+    'Цена указана за автомобиль целиком, а не за человека. Если ни один класс не подходит по числу ' +
+    'пассажиров или багажу — соберите заявку, и менеджер подберёт транспорт и согласует цену.',
+  'transfers.detail.capacity': 'до {count} пассажиров',
+  'transfers.detail.luggage': 'багаж {count} ед.',
+  'transfers.detail.oneWayPrice': 'в одну сторону {price}',
+  'transfers.detail.roundTripPrice': 'туда-обратно {price}',
+  'transfers.detail.totalOneWay': 'Итого · в одну сторону',
+  'transfers.detail.totalRoundTrip': 'Итого · туда-обратно',
+  'transfers.detail.perCarNote': 'за автомобиль, не за человека',
+  'transfers.detail.submitHint': 'Оплата после подтверждения менеджером',
+  'transfers.detail.noVehicles':
+    'Забронировать этот трансфер пока нельзя — цены по классам автомобилей ещё не заданы. Напишите нам, и мы посчитаем стоимость.',
+  'transfers.detail.dateMissing': 'Выберите дату поездки',
+  'transfers.detail.timeMissing': 'Укажите время подачи',
+  'transfers.detail.returnMissing': 'Укажите дату и время обратного рейса',
+  'transfers.detail.returnInvalid': 'Обратный рейс не может быть раньше самой поездки',
+  'transfers.detail.vehicleMissing': 'Выберите класс автомобиля',
+  'transfers.detail.dateClosed': 'На эту дату трансферы недоступны — выберите другую',
+  /* Пассажиров больше вместимости ЛЮБОГО класса (решение 0.14): человек ничего не сделал
+     неправильно, поэтому тон янтарный, а не красный, и путь назад открыт — уменьшил счётчик,
+     вернулась обычная бронь с ценой. */
+  'transfers.detail.overCapacityTitle': 'Нужен транспорт больше',
+  'transfers.detail.overCapacityBody':
+    'Самый вместительный класс рассчитан на {count} пассажиров. Для {passengers} мы подберём транспорт и согласуем цену индивидуально.',
+  'transfers.detail.priceOnRequest': 'Согласуем индивидуально',
+  'transfers.detail.priceLabel': 'Стоимость',
+  'transfers.detail.requestAction': 'Оформить заявку',
+  'transfers.detail.requestHint': 'Вместо оплаты — заявка. Менеджер свяжется и назовёт цену.',
+  'transfers.detail.vehicleTooSmall': 'мест меньше, чем пассажиров',
+
+  // ── Конструктор /transfers/custom ─────────────────────────────────────────────────────────
+  'transfers.request.eyebrow': 'Свой маршрут',
+  'transfers.request.title': 'Соберите трансфер',
+  'transfers.request.notice': 'Это заявка: точную цену подтвердит менеджер после того, как подберёт машину.',
+  'transfers.request.noticeHelpTitle': 'Почему здесь нет цены',
+  'transfers.request.noticeHelpBody':
+    'Стоимость своего маршрута зависит от расстояния, числа остановок и класса машины. Менеджер посчитает её ' +
+    'и свяжется с вами — платить до подтверждения не нужно.',
+
+  'transfers.request.step1': 'Маршрут',
+  'transfers.request.fromLabel': 'Откуда',
+  'transfers.request.fromPlaceholder': 'Например, Ереван, аэропорт Звартноц',
+  'transfers.request.toLabel': 'Куда',
+  'transfers.request.toPlaceholder': 'Например, Дилижан',
+  'transfers.request.stopsLabel': 'Промежуточные остановки',
+  'transfers.request.stopPlaceholder': 'Например, Гарни',
+  'transfers.request.stopNumber': 'Остановка {n}',
+  'transfers.request.stopAdd': 'Добавить остановку',
+  'transfers.request.stopRemove': 'Удалить остановку',
+  'transfers.request.stopUp': 'Переместить выше',
+  'transfers.request.stopDown': 'Переместить ниже',
+  'transfers.request.stopDrag': 'Перетащить остановку',
+  'transfers.request.stopItemLabel': 'Остановка',
+  'transfers.request.stopLimit': 'Больше {count} остановок в трансфере не бывает — это уже тур',
+  'transfers.request.suggestionsEmpty': 'В каталоге такой точки нет — оставьте свой текст',
+
+  'transfers.request.step2': 'Когда',
+  'transfers.request.dateLabel': 'Дата',
+  'transfers.request.step3': 'Пассажиры и багаж',
+  'transfers.request.luggageLabel': 'Багаж — не обязательно',
+  'transfers.request.luggageHelpTitle': 'Как считается багаж',
+  'transfers.request.luggageHelpBody':
+    'Один средний чемодан занимает 3 единицы места, большой — 5. У каждого класса автомобиля свой лимит; ' +
+    'если багаж не указан, мы просто ничего не проверяем.',
+  'transfers.request.luggageMedium': 'Средний чемодан',
+  'transfers.request.luggageMediumUnits': 'Средний чемодан · 3 ед. каждый',
+  'transfers.request.luggageLarge': 'Большой чемодан',
+  'transfers.request.luggageLargeUnits': 'Большой чемодан · 5 ед. каждый',
+  'transfers.request.luggageFewer': 'Меньше на одно место',
+  'transfers.request.luggageMore': 'Больше на одно место',
+  'transfers.request.luggageOtherLabel': 'Другое — коляска, лыжи, велосипед',
+  'transfers.request.luggageOtherPlaceholder': 'Свободным текстом',
+
+  'transfers.request.step4': 'Пожелания',
+  'transfers.request.vehicleLabel': 'Желаемый класс автомобиля',
+  'transfers.request.vehicleAny': 'Не важно — подберите сами',
+  'transfers.request.commentLabel': 'Комментарий менеджеру',
+  'transfers.request.commentPlaceholder': 'Детское кресло, встреча с табличкой, особые пожелания…',
+
+  'transfers.request.submit': 'Отправить заявку',
+  'transfers.request.submitting': 'Отправляем…',
+  'transfers.request.submitHint': 'Менеджер свяжется в течение рабочего дня и подтвердит стоимость.',
+  'transfers.request.submitLock': 'Не закрывайте страницу',
+
+  'transfers.request.fromMissing': 'Укажите, откуда забрать',
+  'transfers.request.toMissing': 'Укажите, куда ехать',
+  'transfers.request.stopEmpty': 'Заполните остановку или удалите её',
+  'transfers.request.luggageTooMuchTitle': 'Багаж не помещается в «{vehicle}»',
+  'transfers.request.luggageTooMuchBody':
+    'Указано {units} ед. ({medium} средних + {large} больших), а в этот класс входит {capacity}. Выберите класс просторнее или уменьшите багаж.',
+  'transfers.request.luggageShort': 'не хватает {count} ед. багажа',
+  'transfers.request.capacityTooSmall': 'мест меньше, чем пассажиров',
+
+  'transfers.auth.title': 'Войдите, чтобы отправить заявку',
+  'transfers.auth.body':
+    'Заявка привязывается к вашему аккаунту — так вы увидите её статус и ответ менеджера.',
+  'transfers.auth.action': 'Войти или зарегистрироваться',
+  'transfers.auth.saved': 'Всё, что вы заполнили, сохранится',
+
+  'transfers.result.title': 'Заявка принята',
+  'transfers.result.body': 'Менеджер свяжется с вами в течение рабочего дня и подтвердит стоимость.',
+  'transfers.result.numberLabel': 'Номер заявки',
+  'transfers.result.number': '№ {number}',
+  'transfers.result.routeLabel': 'Маршрут',
+  'transfers.result.summary': '{date}, {time} · пассажиров: {passengers}',
+  'transfers.result.orders': 'Мои заказы',
+  'transfers.result.home': 'На главную',
+
+  // Отказы сервера, которые фронт умеет назвать словами (правило 0.29 — те же проверки есть и на бэке).
+  'transfers.error.route': 'Проверьте маршрут: нужны и «откуда», и «куда».',
+  'transfers.error.returnTrip': 'Обратный рейс не может быть раньше самой поездки.',
+  'transfers.error.vehicle': 'Выбранный класс автомобиля больше недоступен — выберите другой.',
+  'transfers.error.passengers': 'Пассажиров больше, чем вмещает выбранный класс автомобиля.',
+  'transfers.error.luggage': 'Багаж не помещается в выбранный класс автомобиля.',
+  'transfers.error.dateClosed': 'На эту дату трансферы недоступны — выберите другую.',
+  'transfers.error.datePast': 'Эта дата уже прошла — выберите другую.',
+  'transfers.error.time': 'Укажите время подачи.',
+  'transfers.error.generic': 'Не удалось отправить заявку. Проверьте соединение и попробуйте ещё раз.',
+  'transfers.error.session': 'Сессия истекла — войдите заново, чтобы отправить заявку.',
 
   // ── Date picker ───────────────────────────────────────────────────────────────────────────
   'datePicker.placeholder': 'Выберите дату',
@@ -332,6 +556,14 @@ const ru = {
   'auth.yourEmail': 'вашу почту',
   'auth.devTokenHint': 'Режим разработки: письма не отправляются, подтвердите по ссылке ниже.',
   'auth.devTokenOpen': 'Подтвердить сейчас',
+  /** Кнопка переотправки письма (2026-08-27). Обратный отсчёт — часть подписи, а не отдельная
+   *  строка рядом: кнопка в это время выключена, и её собственное имя должно объяснять почему. */
+  'auth.resendAction': 'Отправить письмо ещё раз',
+  'auth.resendCooldown': 'Отправить ещё раз можно через {seconds} с',
+  /** Формулировка намеренно условная: эндпоинт отвечает одинаково и когда письмо ушло, и когда
+   *  адрес неизвестен/уже подтверждён/попал в кулдаун — экран не должен выдавать разницу. */
+  'auth.resendSent':
+    'Если аккаунт ещё ждёт подтверждения, письмо отправлено повторно. Проверьте почту и папку «Спам».',
 
   // Verify email
   'auth.verifyTitle': 'Подтверждение почты',
@@ -407,10 +639,39 @@ const ru = {
   'account.confirmPending': 'Проверяем ссылку…',
   'account.confirmSuccess': 'Email изменён. Войдите заново с новым адресом.',
 
+  // Привязка Telegram (ADR 031). Статус обновляется при следующем заходе на страницу —
+  // подтверждение происходит в мессенджере, а не здесь, поллинга нет намеренно.
+  'account.telegram': 'Telegram',
+  'account.telegramAria': 'Настроить Telegram',
+  'account.telegramNotLinked': 'Не подключён',
+  'account.telegramLinked': 'Подключён',
+  'account.telegramStatusUnknown': 'Статус недоступен',
+  'account.telegramIntro':
+    'Подключите Telegram, чтобы получать уведомления о заказах в мессенджере.',
+  'account.telegramGetCode': 'Получить код',
+  'account.telegramGetNewCode': 'Получить новый код',
+  'account.telegramCodeLabel': 'Код привязки',
+  'account.telegramCodeHint':
+    'Откройте бота по кнопке ниже и нажмите «Старт» — код подставится сам. Если открываете бота ' +
+    'вручную, отправьте ему команду /start и этот код.',
+  'account.telegramCodeExpires': 'Код действует {minutes} мин. Новый код отменяет предыдущий.',
+  'account.telegramOpenInApp': 'Открыть в Telegram',
+  'account.telegramCopy': 'Скопировать',
+  'account.telegramCopied': 'Скопировано',
+  'account.telegramCopyAria': 'Скопировать код привязки',
+  'account.telegramRefreshHint':
+    'После подтверждения в Telegram обновите страницу — статус изменится.',
+  'account.telegramLinkedAccount': 'Аккаунт Telegram',
+  'account.telegramLinkedHint': 'Уведомления о заказах приходят в этот чат.',
+  'account.telegramDisconnect': 'Отключить',
+  'account.telegramDisconnected': 'Telegram отключён.',
+
   'account.error.codeInvalid': 'Код неверный или уже истёк.',
   'account.error.linkInvalid': 'Ссылка недействительна или устарела.',
   'account.error.notConfirmed': 'Сначала подтвердите код со старого адреса.',
   'account.error.emailTaken': 'Этот email уже занят другим аккаунтом.',
+  'account.error.telegramNotConfigured':
+    'Telegram-бот пока не настроен на сервере — привязка временно недоступна.',
 
   // Errors
   'auth.error.invalidCredentials': 'Неверный логин или пароль.',
@@ -470,6 +731,8 @@ const en: Record<TranslationKey, string> = {
   'nav.trips': 'Trips',
   'nav.regions': 'Region map',
   'nav.regionsShort': 'Map',
+  'nav.transfers': 'Transfers',
+  'nav.transfersShort': 'Transfer',
   'nav.login': 'Log in',
   'nav.account': 'Account',
   'nav.mainAriaLabel': 'Main navigation',
@@ -562,6 +825,11 @@ const en: Record<TranslationKey, string> = {
   'tourCard.discountUntil': 'until {date}',
   'chip.tour': 'Tour',
   'chip.excursion': 'Excursion',
+  'chip.transfer': 'Transfer',
+  'chip.formatIndividual': 'Individual',
+  'chip.formatGroup': 'Group',
+  'chip.formatBoth': 'Individual / group',
+  'tourCard.pricePerPerson': 'per person',
 
   'tourDetail.breadcrumb': 'Catalog',
   'tourDetail.itineraryOneDay': 'Day plan',
@@ -600,6 +868,20 @@ const en: Record<TranslationKey, string> = {
   'booking.submitFailed': 'Could not send the request. Check your connection and try again.',
   'booking.sessionExpired': 'Your session expired — sign in again to finish booking.',
 
+  'booking.formatLabel': 'Format',
+  'booking.formatIndividualHint': 'Your group only, priced per booking',
+  'booking.formatGroupHint': 'Shared group, priced per person',
+  'booking.startTimeLabel': 'Departure time',
+  'booking.startTimeMissing': 'Pick a departure time',
+  'booking.startTimeUnavailable':
+    'This trip cannot be booked yet — no departure time has been scheduled. Message us and we will arrange a date.',
+  'booking.perPerson': '{price} per person',
+  'booking.seatsLeft': '{count} seat(s) left',
+  'booking.noSeats': 'No seats left for this day — please try another date',
+  'booking.notEnoughSeats': 'Only {count} seat(s) left for this departure — reduce the guest count',
+  'booking.startTimeInvalid': 'That departure time is no longer available — please pick another.',
+  'booking.formatRequired': 'Pick a format — individual or group.',
+
   'cart.nav.aria': 'Cart, {count} item(s)',
   'cart.title': 'Cart',
   'cart.subtitle': 'Check the dates and guest counts — one tap sends the whole request',
@@ -617,6 +899,7 @@ const en: Record<TranslationKey, string> = {
   'cart.line.price': 'Price',
   'cart.line.unavailable': 'This trip is no longer available — remove it to send the request',
   'cart.line.guestCountInvalid': 'Invalid guest count — change it and try again',
+  'cart.line.startTime': 'Departure time',
   'cart.summary.total': 'Total',
   'cart.summary.itemCount': '{count} item(s)',
   'cart.summary.quoteNote': 'Some of these trips are quoted individually',
@@ -637,6 +920,180 @@ const en: Record<TranslationKey, string> = {
   'cart.result.lineCount': 'Trips in this request: {count}',
   'cart.result.lineCountTotal': 'Trips in this request: {count} · {total} in total',
   'cart.result.continue': 'Browse other trips',
+  'cart.line.pickupTime': 'Pickup time',
+  'cart.line.vehicleClass': 'Vehicle class',
+  'cart.line.return': 'Return',
+  'cart.line.oneWay': 'One way',
+  'cart.line.passengers': 'Passengers',
+  'cart.line.transferUnavailable':
+    'This transfer is no longer available — remove it to send the request',
+
+  'transfers.eyebrow': 'Transfers across Armenia',
+  'transfers.title': 'Ready-made routes',
+  'transfers.subtitle':
+    'Airport pickups, city-to-city rides and trips to the landmarks. The price is fixed and known upfront.',
+  'transfers.pricePerCar': 'price per car',
+  'transfers.priceFrom': 'from',
+  'transfers.found': 'Found: {count}',
+  'transfers.priceUnknown': 'on request',
+
+  'transfers.filter.from': 'From',
+  'transfers.filter.to': 'To',
+  'transfers.filter.all': 'All',
+  'transfers.filter.reset': 'Reset',
+  'transfers.filter.fromAria': 'Filter: departure point',
+  'transfers.filter.toAria': 'Filter: destination',
+
+  'transfers.builder.eyebrow': 'Your own route',
+  'transfers.builder.title': 'Cannot find the route you need?',
+  'transfers.builder.body':
+    'Build it yourself — set the points, the date and the time. A manager will pick the car and confirm the price.',
+  'transfers.builder.action': 'Build your own transfer',
+
+  'transfers.empty.title': 'No ready-made routes yet',
+  'transfers.empty.body':
+    'You can still book a transfer — build the route yourself and we will pick the car and the price.',
+  'transfers.emptyFiltered.title': 'We have not built {route} yet',
+  'transfers.emptyFiltered.body':
+    'There is no ready-made transfer for this direction. But this is exactly what the builder is for — the route is already filled in.',
+  'transfers.emptyFiltered.action': 'Build {route}',
+  'transfers.emptyFiltered.showAll': 'Show all routes',
+
+  'transfers.notFound.title': 'Transfer not found',
+  'transfers.notFound.body': 'This route may have been taken down, or the link is wrong.',
+  'transfers.notFound.action': 'All transfers',
+
+  'transfers.detail.routeHeading': 'Route',
+  'transfers.detail.pointFrom': 'From',
+  'transfers.detail.pointStop': 'Stop',
+  'transfers.detail.pointTo': 'To',
+  'transfers.detail.dateLabel': 'Trip date',
+  'transfers.detail.pickupTimeLabel': 'Pickup time',
+  'transfers.detail.pickupTimePlaceholder': 'Pick a time',
+  'transfers.detail.returnToggle': 'I need a return transfer',
+  'transfers.detail.returnDateLabel': 'Return date',
+  'transfers.detail.returnTimeLabel': 'Return time',
+  'transfers.detail.passengers': 'Passengers',
+  'transfers.detail.passengersFewer': 'Fewer passengers',
+  'transfers.detail.passengersMore': 'More passengers',
+  'transfers.detail.vehicleLabel': 'Vehicle class',
+  'transfers.detail.vehicleHelpTitle': 'Vehicle class',
+  'transfers.detail.vehicleHelpBody':
+    'The price is for the whole car, not per person. If no class fits your passenger count or luggage, ' +
+    'send a request instead — a manager will find the vehicle and agree the price with you.',
+  'transfers.detail.capacity': 'up to {count} passengers',
+  'transfers.detail.luggage': '{count} luggage units',
+  'transfers.detail.oneWayPrice': 'one way {price}',
+  'transfers.detail.roundTripPrice': 'round trip {price}',
+  'transfers.detail.totalOneWay': 'Total · one way',
+  'transfers.detail.totalRoundTrip': 'Total · round trip',
+  'transfers.detail.perCarNote': 'per car, not per person',
+  'transfers.detail.submitHint': 'Payment after a manager confirms',
+  'transfers.detail.noVehicles':
+    'This transfer cannot be booked yet — prices per vehicle class are not set. Write to us and we will quote it.',
+  'transfers.detail.dateMissing': 'Pick the trip date',
+  'transfers.detail.timeMissing': 'Set the pickup time',
+  'transfers.detail.returnMissing': 'Set the return date and time',
+  'transfers.detail.returnInvalid': 'The return leg cannot start before the trip itself',
+  'transfers.detail.vehicleMissing': 'Pick a vehicle class',
+  'transfers.detail.dateClosed': 'Transfers are unavailable on this date — pick another one',
+  'transfers.detail.overCapacityTitle': 'A bigger vehicle is needed',
+  'transfers.detail.overCapacityBody':
+    'The largest class seats {count} passengers. For {passengers} we will find the vehicle and agree the price individually.',
+  'transfers.detail.priceOnRequest': 'Price agreed individually',
+  'transfers.detail.priceLabel': 'Price',
+  'transfers.detail.requestAction': 'Send a request',
+  'transfers.detail.requestHint': 'A request instead of a payment. A manager will call and quote it.',
+  'transfers.detail.vehicleTooSmall': 'fewer seats than passengers',
+
+  'transfers.request.eyebrow': 'Your own route',
+  'transfers.request.title': 'Build your transfer',
+  'transfers.request.notice':
+    'This is a request: a manager will confirm the exact price once the car is picked.',
+  'transfers.request.noticeHelpTitle': 'Why there is no price here',
+  'transfers.request.noticeHelpBody':
+    'The price of a custom route depends on the distance, the number of stops and the class of the car. ' +
+    'A manager will work it out and get back to you — nothing is due before you confirm.',
+
+  'transfers.request.step1': 'Route',
+  'transfers.request.fromLabel': 'From',
+  'transfers.request.fromPlaceholder': 'For example, Yerevan, Zvartnots Airport',
+  'transfers.request.toLabel': 'To',
+  'transfers.request.toPlaceholder': 'For example, Dilijan',
+  'transfers.request.stopsLabel': 'Intermediate stops',
+  'transfers.request.stopPlaceholder': 'For example, Garni',
+  'transfers.request.stopNumber': 'Stop {n}',
+  'transfers.request.stopAdd': 'Add a stop',
+  'transfers.request.stopRemove': 'Remove the stop',
+  'transfers.request.stopUp': 'Move up',
+  'transfers.request.stopDown': 'Move down',
+  'transfers.request.stopDrag': 'Drag the stop',
+  'transfers.request.stopItemLabel': 'Stop',
+  'transfers.request.stopLimit': 'More than {count} stops is no longer a transfer — that is a tour',
+  'transfers.request.suggestionsEmpty': 'Not in our catalogue — your own text works too',
+
+  'transfers.request.step2': 'When',
+  'transfers.request.dateLabel': 'Date',
+  'transfers.request.step3': 'Passengers and luggage',
+  'transfers.request.luggageLabel': 'Luggage — optional',
+  'transfers.request.luggageHelpTitle': 'How luggage is counted',
+  'transfers.request.luggageHelpBody':
+    'One medium suitcase takes 3 units of space, a large one takes 5. Every vehicle class has its own limit; ' +
+    'if you leave luggage empty, we simply check nothing.',
+  'transfers.request.luggageMedium': 'Medium suitcase',
+  'transfers.request.luggageMediumUnits': 'Medium suitcase · 3 units each',
+  'transfers.request.luggageLarge': 'Large suitcase',
+  'transfers.request.luggageLargeUnits': 'Large suitcase · 5 units each',
+  'transfers.request.luggageFewer': 'One item fewer',
+  'transfers.request.luggageMore': 'One item more',
+  'transfers.request.luggageOtherLabel': 'Anything else — pram, skis, bicycle',
+  'transfers.request.luggageOtherPlaceholder': 'In your own words',
+
+  'transfers.request.step4': 'Preferences',
+  'transfers.request.vehicleLabel': 'Preferred vehicle class',
+  'transfers.request.vehicleAny': 'No preference — pick for me',
+  'transfers.request.commentLabel': 'Note for the manager',
+  'transfers.request.commentPlaceholder': 'Child seat, meet-and-greet sign, anything special…',
+
+  'transfers.request.submit': 'Send request',
+  'transfers.request.submitting': 'Sending…',
+  'transfers.request.submitHint': 'A manager will call within the working day and confirm the price.',
+  'transfers.request.submitLock': 'Do not close the page',
+
+  'transfers.request.fromMissing': 'Say where to pick you up',
+  'transfers.request.toMissing': 'Say where to take you',
+  'transfers.request.stopEmpty': 'Fill the stop in or remove it',
+  'transfers.request.luggageTooMuchTitle': 'Luggage does not fit into "{vehicle}"',
+  'transfers.request.luggageTooMuchBody':
+    'You listed {units} units ({medium} medium + {large} large), and this class takes {capacity}. Pick a roomier class or reduce the luggage.',
+  'transfers.request.luggageShort': '{count} luggage units short',
+  'transfers.request.capacityTooSmall': 'fewer seats than passengers',
+
+  'transfers.auth.title': 'Sign in to send the request',
+  'transfers.auth.body':
+    'The request is tied to your account — that is how you see its status and the manager’s reply.',
+  'transfers.auth.action': 'Sign in or create an account',
+  'transfers.auth.saved': 'Everything you filled in is saved',
+
+  'transfers.result.title': 'Request received',
+  'transfers.result.body': 'A manager will call you within the working day and confirm the price.',
+  'transfers.result.numberLabel': 'Request number',
+  'transfers.result.number': '#{number}',
+  'transfers.result.routeLabel': 'Route',
+  'transfers.result.summary': '{date}, {time} · passengers: {passengers}',
+  'transfers.result.orders': 'My orders',
+  'transfers.result.home': 'Home',
+
+  'transfers.error.route': 'Check the route: both a start and a destination are required.',
+  'transfers.error.returnTrip': 'The return leg cannot start before the trip itself.',
+  'transfers.error.vehicle': 'The chosen vehicle class is no longer available — pick another one.',
+  'transfers.error.passengers': 'More passengers than the chosen vehicle class seats.',
+  'transfers.error.luggage': 'The luggage does not fit into the chosen vehicle class.',
+  'transfers.error.dateClosed': 'Transfers are unavailable on this date — pick another one.',
+  'transfers.error.datePast': 'This date is already in the past — pick another one.',
+  'transfers.error.time': 'Set the pickup time.',
+  'transfers.error.generic': 'Could not send the request. Check your connection and try again.',
+  'transfers.error.session': 'Your session expired — sign in again to send the request.',
 
   'datePicker.placeholder': 'Pick a date',
   'datePicker.unavailable': 'unavailable',
@@ -719,6 +1176,10 @@ const en: Record<TranslationKey, string> = {
   'auth.yourEmail': 'your email',
   'auth.devTokenHint': 'Development mode: no email is actually sent, use the link below.',
   'auth.devTokenOpen': 'Confirm now',
+  'auth.resendAction': 'Send the email again',
+  'auth.resendCooldown': 'You can resend in {seconds}s',
+  'auth.resendSent':
+    'If the account is still waiting for confirmation, the email has been sent again. Check your inbox and the spam folder.',
 
   'auth.verifyTitle': 'Email confirmation',
   'auth.verifyPending': 'Checking the link…',
@@ -784,10 +1245,37 @@ const en: Record<TranslationKey, string> = {
   'account.confirmPending': 'Checking the link…',
   'account.confirmSuccess': 'Email changed. Log in again with the new address.',
 
+  'account.telegram': 'Telegram',
+  'account.telegramAria': 'Set up Telegram',
+  'account.telegramNotLinked': 'Not connected',
+  'account.telegramLinked': 'Connected',
+  'account.telegramStatusUnknown': 'Status unavailable',
+  'account.telegramIntro': 'Connect Telegram to get order notifications in the messenger.',
+  'account.telegramGetCode': 'Get a code',
+  'account.telegramGetNewCode': 'Get a new code',
+  'account.telegramCodeLabel': 'Link code',
+  'account.telegramCodeHint':
+    'Open the bot with the button below and press “Start” — the code is filled in for you. If you ' +
+    'open the bot by hand, send it the /start command together with this code.',
+  'account.telegramCodeExpires':
+    'The code is valid for {minutes} min. A new code cancels the previous one.',
+  'account.telegramOpenInApp': 'Open in Telegram',
+  'account.telegramCopy': 'Copy',
+  'account.telegramCopied': 'Copied',
+  'account.telegramCopyAria': 'Copy the link code',
+  'account.telegramRefreshHint':
+    'Once you have confirmed it in Telegram, reload this page — the status will change.',
+  'account.telegramLinkedAccount': 'Telegram account',
+  'account.telegramLinkedHint': 'Order notifications arrive in this chat.',
+  'account.telegramDisconnect': 'Disconnect',
+  'account.telegramDisconnected': 'Telegram disconnected.',
+
   'account.error.codeInvalid': 'That code is wrong or has expired.',
   'account.error.linkInvalid': 'This link is invalid or has expired.',
   'account.error.notConfirmed': 'Confirm the code from your old address first.',
   'account.error.emailTaken': 'That email already belongs to another account.',
+  'account.error.telegramNotConfigured':
+    'The Telegram bot is not configured on the server yet — linking is temporarily unavailable.',
 
   'auth.error.invalidCredentials': 'Wrong username or password.',
   'auth.error.accountLocked':

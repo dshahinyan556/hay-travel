@@ -1,4 +1,4 @@
-import { clampGuests, MAX_GUESTS, MIN_GUESTS } from '@/shared/booking'
+import { MAX_GUESTS, MIN_GUESTS } from '@/shared/booking'
 
 /**
  * Guest counter — the "− N +" control shared by the tour page's booking form and every row of the
@@ -25,6 +25,9 @@ export interface GuestStepperProps {
    * buttons, tighter gaps and a smaller value, with an invisible `before:` expander taking the tap
    * target to the 44×44 minimum. */
   size?: 'md' | 'sm'
+  /** Accessible name of the value itself, e.g. "Средних чемоданов". Without it a screen reader
+   * reaching the number between the two buttons hears a bare digit. */
+  valueLabel?: string
   labelFewer: string
   labelMore: string
   disabled?: boolean
@@ -36,16 +39,24 @@ export function GuestStepper({
   min = MIN_GUESTS,
   max = MAX_GUESTS,
   size = 'md',
+  valueLabel,
   labelFewer,
   labelMore,
   disabled = false,
 }: GuestStepperProps) {
   const compact = size === 'sm'
 
-  /* `clampGuests` first (kills a NaN/fractional value from anywhere), then the caller's own
-     narrower bounds — so passing `max={6}` really does stop at 6. */
+  /*
+    Whole number first (kills a NaN/fractional value from anywhere), then the CALLER's bounds.
+
+    This used to run `clampGuests` before the caller's bounds, which pinned the floor at
+    `MIN_GUESTS` (1) no matter what `min` said — so `min={0}`, which the luggage counters of the
+    transfer request builder need (2026-08-29), was unreachable. For the default bounds
+    (1..16) the two orders are identical, so no existing call site changes behaviour.
+  */
   const emit = (next: number) => {
-    onChange(Math.min(max, Math.max(min, clampGuests(next))))
+    const whole = Number.isFinite(next) ? Math.trunc(next) : min
+    onChange(Math.min(max, Math.max(min, whole)))
   }
 
   /* The `md` class list is byte-for-byte what `BookingCard` shipped with, minus nothing: no
@@ -73,6 +84,7 @@ export function GuestStepper({
         −
       </button>
       <span
+        aria-label={valueLabel}
         className={`text-center font-semibold tabular-nums text-ink ${compact ? 'min-w-7 text-lg' : 'min-w-8 text-xl'}`}
       >
         {value}

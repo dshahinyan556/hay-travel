@@ -23,6 +23,9 @@ namespace ATTours.Common.DTO.Auth
         public bool IsEmailVerified { get; set; }
         public bool IsLocked { get; set; }
 
+        // См. UserInfoModel — тот же флаг, той же причиной (SuperAdminGuard, 2026-08-27).
+        public bool IsSuperAdmin { get; set; }
+
         // Рабочая специализация по умолчанию (Задача D) — карточка сотрудника её
         // показывает и редактирует (UsersController.SetJobRole).
         public EmployeeJobRole? DefaultJobRole { get; set; }

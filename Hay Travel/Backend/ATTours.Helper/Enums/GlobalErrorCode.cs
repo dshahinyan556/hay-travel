@@ -44,7 +44,9 @@ namespace ATTours.Helper.Enums
         TourNoteTemplateNotFound = 2009,
         [Description("Catalog entry is in use and cannot be deleted.")]
         CatalogEntryInUse = 2010,
-        [Description("At most 6 tours can be featured at once.")]
+        // Лимит расширен 6 → 9 (решение 0.5 батча «Трансферы + формат», 2026-08-29).
+        // Источник правды по числу — TourFeaturedService.MaxFeaturedTours.
+        [Description("At most 9 tours can be featured at once.")]
         TooManyFeaturedTours = 2011,
         // Отдаётся только на холодном старте: курс не был сохранён ни разу, и CBA недоступен.
         // Если хоть один курс когда-либо записан, эндпоинт отдаёт его с IsStale = true, а не ошибку.
@@ -133,6 +135,101 @@ namespace ATTours.Helper.Enums
         [Description("Order line employee assignment not found.")]
         OrderLineEmployeeNotFound = 2039,
 
+        // Экран «Фоновые задачи». Состав задач фиксирован BackgroundJobCatalog в коде,
+        // поэтому неизвестный ключ — это 404 (такого ресурса нет), а не 400.
+        [Description("Unknown background job key.")]
+        UnknownJobKey = 2040,
+        [Description("Cron expression is not a valid schedule.")]
+        InvalidCronExpression = 2041,
+        // Ручной запуск при уже идущем прогоне той же задачи. Гонку добивает распределённая
+        // блокировка планировщика — этот код только объясняет админу отказ.
+        [Description("Background job is already running.")]
+        JobAlreadyRunning = 2042,
+        // Параметры задачи правятся с её экрана (PATCH api/Jobs/{key}/Parameters) под правом
+        // jobs:Update. Ключ настройки, не объявленный в BackgroundJobDefinition.ParameterKeys
+        // этой задачи, отвергается: иначе экран задачи стал бы редактором всех настроек
+        // сайта в обход права settings:Update. Это 400 (запрос неверный), а не 404 —
+        // ресурс-то (задача) существует.
+        [Description("Site setting is not a parameter of this background job.")]
+        UnknownJobParameter = 2043,
+
+        // Батч «Трансферы + формат продукта» (2026-08-29), ЗАКАЗНАЯ половина — 2044-2049
+        // (места группового формата, выбор слота/формата/класса авто, багаж). Все шесть
+        // приходят пер-строчно (OrderLinesErrorModel.lines[].errorCode) при чекауте корзины
+        // и плоско — при добавлении строки админом и при отправке кастомной заявки.
+        //
+        // Свободных мест на слоте (тур, дата, время старта) меньше, чем просит строка
+        // (решения 0.19/0.20). Занято = Σ GuestCount по строкам всех заказов на этом слоте,
+        // кроме Rejected.
+        [Description("Not enough seats left for the selected date and start time.")]
+        NoSeatsLeft = 2044,
+        // Время старта не выбрано или не входит в расписание продукта: клиент выбирает слот
+        // ТОЛЬКО из Tour.StartTimes (решение 0.21), свободный ввод не принимается.
+        [Description("Selected start time is missing or not offered by this product.")]
+        InvalidStartTimeSelection = 2045,
+        // Продукт продаётся в обоих форматах (Tour.Format == Both), а строка не сказала,
+        // какой выбрал клиент — считать цену не по чему.
+        [Description("Format must be specified for a product sold in both formats.")]
+        OrderLineFormatRequired = 2046,
+        // Бронь предопределённого трансфера без класса авто либо с классом, у которого на
+        // этом трансфере нет цены (TransferPrice). Отличается от VehicleClassNotFound (2057,
+        // «нет такого класса в справочнике») — здесь класс существует, но не продаётся.
+        [Description("Vehicle class is missing or not available for this transfer.")]
+        VehicleClassNotAvailable = 2047,
+        // Багаж заявки (средний x3 + большой x5, решение 0.13) не влезает в лимит багажа
+        // выбранного класса. Проверяется, только если багаж заполнен И класс выбран.
+        [Description("Luggage exceeds the luggage capacity of the selected vehicle class.")]
+        LuggageExceedsVehicleCapacity = 2048,
+        // Пассажиров больше вместимости выбранного класса. У заявки это подсказка «выберите
+        // другой класс», у брони предопределённого трансфера — жёсткий отказ.
+        [Description("Passenger count exceeds the capacity of the selected vehicle class.")]
+        PassengersExceedVehicleCapacity = 2049,
+
+        // Продуктовая половина того же батча — 2050-2057.
+        //
+        // Формат обязателен у тура/экскурсии и ЗАПРЕЩЁН у трансфера — оба нарушения это
+        // «формат не соответствует типу продукта», отдельных кодов не заводим.
+        [Description("Tour format is missing or not applicable to this product type.")]
+        InvalidTourFormat = 2050,
+        // Групповой формат (Group/Both) без цены за человека или без мест на выезд.
+        [Description("Group format requires a positive price per person and a positive capacity.")]
+        InvalidGroupPricing = 2051,
+        // Минимум одно время начала у тура/экскурсии (клиент выбирает из списка, свой ввести
+        // не может) и НИ ОДНОГО у трансфера (там время подачи вводит сам клиент).
+        [Description("Tour requires at least one start time; a transfer must have none.")]
+        InvalidTourStartTimes = 2052,
+        // Маршрут трансфера: ровно одна точка «откуда» и ровно одна «куда», стопов сколько угодно.
+        [Description("Transfer route must have exactly one 'from' point and exactly one 'to' point.")]
+        InvalidTransferRoute = 2053,
+        // Цены трансфера по классам авто: минимум один класс, обе цены строго положительные.
+        [Description("Transfer requires at least one vehicle class with positive one-way and round-trip prices.")]
+        InvalidTransferPrices = 2054,
+        // Поля тура, которых у трансфера не бывает (дни, галерея, регионы, теги, скидка,
+        // орг.детали/ограничения, доп.расходы) — решение 0.4 чек-листа.
+        [Description("Field is not applicable to a transfer product.")]
+        TransferFieldNotAllowed = 2055,
+        // У трансфера из «богатства» тура остаётся только главная картинка — и она обязательна.
+        [Description("Transfer requires a main image.")]
+        TransferMainImageRequired = 2056,
+        [Description("Vehicle class not found.")]
+        VehicleClassNotFound = 2057,
+
+        // Обратный рейс трансфера (решение 0.12): если он заказан, у него обязаны быть своя
+        // дата и своё время, и он не может начинаться раньше самой поездки. Зарезервированный
+        // диапазон заказной половины (2044-2049) к этому моменту израсходован целиком,
+        // поэтому код взят следующим свободным.
+        [Description("Return trip requires a date and time not earlier than the outbound trip.")]
+        InvalidReturnTrip = 2058,
+
+        // Аудит паритета валидации фронт/бэк (решение 0.29 того же чек-листа): обязательные
+        // поля формы, которые до сих пор держал только фронт — русское название продукта,
+        // главная картинка, русское название дня многодневного тура, название класса авто.
+        // Один код на все: сообщение называет конкретное поле, а разбирать их по отдельным
+        // кодам фронту незачем — он и так не даёт отправить такую форму, а этот 400 адресован
+        // прямому запросу к API в обход формы.
+        [Description("Required field is empty.")]
+        RequiredFieldMissing = 2059,
+
         #endregion
 
         #region DataErrors
@@ -190,6 +287,12 @@ namespace ATTours.Helper.Enums
         CannotImpersonateSelf = 2217,
         [Description("You are not allowed to impersonate this user.")]
         ImpersonationTargetNotAllowed = 2218,
+        // Привязка Telegram (ADR 031 §4): бот не настроен на сервере (нет BotToken или
+        // WebhookSecret). Выдавать код в этом состоянии нельзя — пользователь получил бы
+        // мёртвую ссылку и ждал бы ответа от несуществующего бота. Отдаётся с 503:
+        // это временный пробел конфигурации сервера, а не ошибка запроса.
+        [Description("Telegram notifications are not configured on the server.")]
+        TelegramNotConfigured = 2219,
         #endregion
 
         #region UploadErrors

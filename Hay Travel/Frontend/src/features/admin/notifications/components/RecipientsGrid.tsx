@@ -4,6 +4,7 @@ import { AdminActionButton, Checkbox, Input, Select } from '@/shared/ui'
 import type { SelectOption } from '@/shared/ui'
 // `HelpButton` не выведен в барель `shared/ui` — импортируется напрямую, как в `TranslationGroup`.
 import { HelpButton } from '@/shared/ui/HelpButton'
+import { HelpRevealZone } from '@/shared/ui/HelpReveal'
 import { CloseIcon } from '@/shared/ui/icons'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import type { UserInfoModel } from '@/shared/auth'
@@ -236,12 +237,12 @@ export function RecipientsGrid({
         // Адрес живёт в конфигурации сервера — вводить нечего, но строка обязана существовать
         // и уехать обратно в PUT (см. доккоммент компонента).
         return (
-          <span className="flex items-center gap-1.5 text-sm text-neutral-700">
+          <HelpRevealZone as="span" className="flex items-center gap-2 text-sm text-neutral-700">
             {copy.adminMailboxValue}
             <HelpButton surface="admin" title={copy.adminMailboxValue}>
               {copy.adminMailboxHint}
             </HelpButton>
-          </span>
+          </HelpRevealZone>
         )
     }
   }

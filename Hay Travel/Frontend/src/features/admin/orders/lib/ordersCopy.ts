@@ -26,6 +26,13 @@ const ORDER_MUST_HAVE_AT_LEAST_ONE_LINE = 2028
 const EMPLOYEE_ROLE_REQUIRED = 2029 // AssignEmployee (Задача D) — employeeRole missing/undefined.
 /** UpdateLineEmployee — связку сняли параллельно, править нечего (редизайн 2026-08-23). */
 const ORDER_LINE_EMPLOYEE_NOT_FOUND = 2039
+/* Батч «Трансферы + формат» (2026-08-29) — отказы `OrderLineService.AddLineAsync`. */
+const NO_SEATS_LEFT = 2044
+const INVALID_START_TIME_SELECTION = 2045
+const ORDER_LINE_FORMAT_REQUIRED = 2046
+const VEHICLE_CLASS_NOT_AVAILABLE = 2047
+const PASSENGERS_EXCEED_VEHICLE_CAPACITY = 2049
+const INVALID_RETURN_TRIP = 2058
 
 export const ordersCopy = defineCopy(
   {
@@ -44,6 +51,7 @@ export const ordersCopy = defineCopy(
       [OrderStatus.ReadyForAssignment]: 'Готов к назначению',
       [OrderStatus.PendingPayment]: 'Ждёт оплаты',
       [OrderStatus.Completed]: 'Завершён',
+      [OrderStatus.Request]: 'Заявка',
     } as Record<OrderStatus, string>,
 
     /** Small grey tag pill next to each "История" row — the mockup's §D "тип события". Purely a
@@ -85,6 +93,9 @@ export const ordersCopy = defineCopy(
     openClient: 'Открыть профиль',
     /** Denormalized `tourTitle` is `null` for a tour deleted after the line was created. */
     tourFallback: (tourId: number) => `Тур #${tourId}`,
+    /** Подпись строки БЕЗ продукта (`lineKind === CustomTransfer`). Сервер обычно присылает свою
+     * в `tourTitle`; это фолбэк на случай пустого значения — «Тур #null» здесь недопустим. */
+    customTransferLine: 'Кастомный трансфер',
     /** Body of the 400 the detail loader throws for a non-numeric `:id`. Never rendered
      * (`AdminErrorBoundary` writes its own text), but it lands in dev tools and logs. */
     invalidOrderId: 'Некорректный идентификатор заказа',
@@ -129,6 +140,10 @@ export const ordersCopy = defineCopy(
       'Заказ отклонён или завершён — редактирование недоступно. Нажмите «Возобновить», чтобы продолжить работу.',
     preDecisionBanner:
       'Заказ ещё не одобрен и не отклонён — редактирование недоступно. Одобрите или отклоните заказ, чтобы продолжить работу.',
+    /** Заявка НЕ попадает под `preDecisionBanner`: её как раз и нужно править до одобрения —
+     * иначе одобрять было бы нечего (цены у заявки нет). */
+    requestBanner:
+      'Это заявка: клиент собрал маршрут сам, цены у неё нет. Согласуйте стоимость, проставьте её в блоке «Детали заявки» ниже и сохраните — после этого заказ можно одобрять.',
     actionAssign: 'Назначить исполнителя',
     actionSendToClientLabel: 'Отправить заказ клиенту',
     actionSendToClientPending: 'Отправляем…',
@@ -206,6 +221,18 @@ export const ordersCopy = defineCopy(
     colDiscount: 'Скидка',
     colTotal: 'Итого',
     employeeUnassigned: 'Не назначен',
+
+    // Параметры строки, появившиеся с трансферами и форматом (батч 2026-08-29). Рисуются
+    // чипами под названием продукта, а не отдельными колонками: грид уже 960px минимум, и
+    // четыре новые колонки сделали бы его нечитаемым на любом экране.
+    lineTimeLabel: 'Время',
+    lineFormatLabel: 'Формат',
+    lineVehicleClassLabel: 'Класс авто',
+    lineRoundTrip: 'Туда-обратно',
+    lineReturnLabel: 'Обратно',
+    /** Чип у строки-заявки: продукта у неё нет, и это должно быть видно прямо в гриде. */
+    lineKindRequest: 'Заявка',
+
     selectLine: (tour: string) => `Выбрать строку: ${tour}`,
     /** Кнопка «+ Назначить» в ячейке исполнителей — открывает попап с `lineId` этой строки. */
     assignLine: 'Назначить',
@@ -213,15 +240,75 @@ export const ordersCopy = defineCopy(
     removeLine: 'Удалить строку',
     removeLineSelected: (count: number) => `Удалить (${count})`,
 
+    // Блок «Детали заявки» (пункт 4.5) — рисуется ПОД гридом, обычной карточкой, а не внутри
+    // горизонтально прокручиваемой таблицы: маршрут и багаж должны читаться на 375px.
+    requestDetailsTitle: 'Детали заявки',
+    requestRouteTitle: 'Маршрут',
+    requestRouteEmpty: 'Маршрут не указан.',
+    requestRouteAria: 'Маршрут заявки',
+    requestPassengers: 'Пассажиров',
+    requestLuggageTitle: 'Багаж',
+    requestLuggageMedium: (count: number) => `Средний чемодан × ${count}`,
+    requestLuggageLarge: (count: number) => `Большой чемодан × ${count}`,
+    requestLuggageOther: 'Другое',
+    requestLuggageUnits: (units: number) => `${units} ${pluralizeRu(units, ['единица', 'единицы', 'единиц'])}`,
+    /** Курс «средний = 3, большой = 5» считает сервер (решение 0.13) — за «?», не инлайном. */
+    requestLuggageHelp:
+      'Багаж считается в условных единицах: средний чемодан — 3 единицы, большой — 5. Итог сравнивается с лимитом багажа выбранного класса авто. «Другое» — свободный текст клиента, в единицы не переводится.',
+    requestLuggageEmpty: 'Багаж не указан.',
+    requestDesiredClass: 'Желаемый класс авто',
+    requestDesiredClassHelp:
+      'Это пожелание клиента, а не бронь класса: фактический транспорт и цену согласует менеджер.',
+    requestComment: 'Комментарий клиента',
+    requestPriceTitle: 'Согласованная цена',
+    requestPriceLabel: (currency: string) => `Сумма, ${currency}`,
+    requestPriceHelp:
+      'Итог строки-заявки проставляется вручную: продукта с ценой у неё нет. Сумма попадёт в «Итого» заказа только после сохранения. У обычной строки по продукту это поле не появляется — там сумма считается сервером.',
+    requestPriceNotSet: 'Цена не согласована',
+
     addLineTitle: 'Новая строка заказа',
-    fieldTour: 'Тур',
-    fieldTourPlaceholder: 'Выберите тур…',
-    fieldDate: 'Дата тура',
+    fieldTour: 'Продукт',
+    fieldTourPlaceholder: 'Выберите продукт…',
+    fieldDate: 'Дата',
     fieldGuests: 'Гостей',
     fieldRequiresPrepayment: 'Требуется предоплата',
     fieldPrepaymentAmount: 'Сумма предоплаты',
     addLineSubmit: 'Добавить',
     addLineCancel: 'Отмена',
+
+    /* ── Поля выбора строки (батч «Трансферы + формат», 2026-08-29, пункт 4.5) ──────────────── */
+    fieldStartTime: 'Время старта',
+    fieldStartTimePlaceholder: 'Выберите время…',
+    fieldPickupTime: 'Время подачи',
+    fieldFormat: 'Формат',
+    fieldFormatPlaceholder: 'Выберите формат…',
+    fieldFormatHint:
+      'Продукт продаётся в обоих форматах, и от выбора зависит цена: индивидуальный — фиксированная цена за бронь с наценкой по числу гостей, групповой — цена за человека × гости.',
+    fieldVehicleClass: 'Класс авто',
+    fieldVehicleClassPlaceholder: 'Выберите класс…',
+    fieldRoundTrip: 'Обратный рейс',
+    fieldReturnDate: 'Дата обратно',
+    fieldReturnTime: 'Время обратно',
+    /** Мест в салоне без водителя — подпись у класса авто. */
+    seatsUnit: (count: number) => `${count} ${pluralizeRu(count, ['место', 'места', 'мест'])}`,
+    vehicleClassFallback: (id: number) => `Класс #${id}`,
+    addLineNoStartTimes: 'У продукта не заданы времена старта — строка уйдёт без времени.',
+    addLineNoVehicleClasses:
+      'У этого трансфера нет ни одного класса авто с ценой — добавьте их в карточке продукта.',
+
+    /* Отказы формы. Каждый зеркалит конкретную серверную проверку `OrderLineService` — правило
+       0.29: фронтовая валидация это UX, а не защита. */
+    errorTourRequired: 'Выберите продукт.',
+    errorDateRequired: 'Укажите дату.',
+    errorStartTimeRequired: 'Выберите время старта — оно обязательно.',
+    errorPickupTimeRequired: 'Укажите время подачи — оно обязательно.',
+    errorFormatRequired: 'Выберите формат — продукт продаётся в обоих.',
+    errorVehicleClassRequired: 'Выберите класс авто.',
+    errorReturnDateRequired: 'Укажите дату обратного рейса.',
+    errorReturnTimeRequired: 'Укажите время обратного рейса.',
+    errorReturnBeforeTrip: 'Обратный рейс не может быть раньше самой поездки.',
+    errorGuestsOverCapacity: (capacity: number) =>
+      `В выбранный класс авто помещается не больше ${capacity}.`,
 
     discountBadge: (percent: number) => `−${percent}%`,
 
@@ -277,6 +364,12 @@ export const ordersCopy = defineCopy(
       dateUnavailable: 'Эта дата закрыта для брони.',
       dateInPast: 'Дата тура не может быть в прошлом.',
       invalidGuestCount: 'Число гостей должно быть не меньше 1.',
+      noSeatsLeft: 'На этот выезд не осталось свободных мест — выберите другую дату или время.',
+      invalidStartTime: 'Такого времени у продукта нет — обновите страницу и выберите заново.',
+      formatRequired: 'Продукт продаётся в обоих форматах — выберите формат.',
+      vehicleClassUnavailable: 'У этого трансфера нет цены на выбранный класс авто.',
+      passengersOverCapacity: 'Гостей больше, чем помещается в выбранный класс авто.',
+      invalidReturnTrip: 'Обратный рейс не может быть раньше самой поездки.',
       actionForbidden: (action: string) => `Не удалось ${action}: недостаточно прав.`,
       actionServer: (action: string, status: number) => `Не удалось ${action}: сервер вернул ошибку (${status}).`,
       actionNetwork: (action: string) => `Не удалось ${action}: проверьте соединение и попробуйте ещё раз.`,
@@ -318,6 +411,7 @@ export const ordersCopy = defineCopy(
       [OrderStatus.ReadyForAssignment]: 'Ready for assignment',
       [OrderStatus.PendingPayment]: 'Pending payment',
       [OrderStatus.Completed]: 'Completed',
+      [OrderStatus.Request]: 'Request',
     } as Record<OrderStatus, string>,
 
     eventTypeTagLabels: {
@@ -355,6 +449,7 @@ export const ordersCopy = defineCopy(
     notApprovedYet: 'not yet',
     openClient: 'Open profile',
     tourFallback: (tourId: number) => `Tour #${tourId}`,
+    customTransferLine: 'Custom transfer',
     invalidOrderId: 'Invalid order id',
 
     statusFieldLabel: 'Status',
@@ -392,6 +487,8 @@ export const ordersCopy = defineCopy(
       'The order is rejected or completed — editing is disabled. Press “Reopen” to continue working on it.',
     preDecisionBanner:
       'The order has not been approved or rejected yet — editing is disabled. Approve or reject it to continue working.',
+    requestBanner:
+      'This is a request: the client assembled the route themselves and it carries no price. Agree the amount, enter it in the “Request details” block below and save — after that the order can be approved.',
     actionAssign: 'Assign an employee',
     actionSendToClientLabel: 'Send the order to the client',
     actionSendToClientPending: 'Sending…',
@@ -457,21 +554,82 @@ export const ordersCopy = defineCopy(
     colDiscount: 'Discount',
     colTotal: 'Total',
     employeeUnassigned: 'Unassigned',
+
+    lineTimeLabel: 'Time',
+    lineFormatLabel: 'Format',
+    lineVehicleClassLabel: 'Vehicle class',
+    lineRoundTrip: 'Round trip',
+    lineReturnLabel: 'Return',
+    lineKindRequest: 'Request',
+
     selectLine: (tour: string) => `Select line: ${tour}`,
     assignLine: 'Assign',
     addLine: 'Add line',
     removeLine: 'Remove line',
     removeLineSelected: (count: number) => `Remove (${count})`,
 
+    requestDetailsTitle: 'Request details',
+    requestRouteTitle: 'Route',
+    requestRouteEmpty: 'No route given.',
+    requestRouteAria: 'Requested route',
+    requestPassengers: 'Passengers',
+    requestLuggageTitle: 'Luggage',
+    requestLuggageMedium: (count: number) => `Medium suitcase × ${count}`,
+    requestLuggageLarge: (count: number) => `Large suitcase × ${count}`,
+    requestLuggageOther: 'Other',
+    requestLuggageUnits: (units: number) => `${units} ${pluralizeEn(units, ['unit', 'units'])}`,
+    requestLuggageHelp:
+      'Luggage is counted in units: a medium suitcase is 3 units, a large one is 5. The total is checked against the luggage limit of the chosen vehicle class. “Other” is the client’s free text and is not converted into units.',
+    requestLuggageEmpty: 'No luggage given.',
+    requestDesiredClass: 'Preferred vehicle class',
+    requestDesiredClassHelp:
+      'This is the client’s preference, not a booked class: the actual vehicle and the price are agreed by the manager.',
+    requestComment: 'Client’s comment',
+    requestPriceTitle: 'Agreed price',
+    requestPriceLabel: (currency: string) => `Amount, ${currency}`,
+    requestPriceHelp:
+      'A request line’s total is entered by hand — it has no priced product behind it. The amount reaches the order total only after saving. A regular product line has no such field: there the total is computed by the server.',
+    requestPriceNotSet: 'Price not agreed',
+
     addLineTitle: 'New order line',
-    fieldTour: 'Tour',
-    fieldTourPlaceholder: 'Select a tour…',
-    fieldDate: 'Tour date',
+    fieldTour: 'Product',
+    fieldTourPlaceholder: 'Select a product…',
+    fieldDate: 'Date',
     fieldGuests: 'Guests',
     fieldRequiresPrepayment: 'Prepayment required',
     fieldPrepaymentAmount: 'Prepayment amount',
     addLineSubmit: 'Add',
     addLineCancel: 'Cancel',
+
+    fieldStartTime: 'Start time',
+    fieldStartTimePlaceholder: 'Select a time…',
+    fieldPickupTime: 'Pickup time',
+    fieldFormat: 'Format',
+    fieldFormatPlaceholder: 'Select a format…',
+    fieldFormatHint:
+      'The product is sold in both formats and the price follows the choice: individual — a fixed price per booking with a surcharge by guest count, group — price per person × guests.',
+    fieldVehicleClass: 'Vehicle class',
+    fieldVehicleClassPlaceholder: 'Select a class…',
+    fieldRoundTrip: 'Return trip',
+    fieldReturnDate: 'Return date',
+    fieldReturnTime: 'Return time',
+    seatsUnit: (count: number) => `${count} ${pluralizeEn(count, ['seat', 'seats'])}`,
+    vehicleClassFallback: (id: number) => `Class #${id}`,
+    addLineNoStartTimes: 'The product has no start times — the line will be sent without one.',
+    addLineNoVehicleClasses:
+      'This transfer has no priced vehicle class — add one on the product page.',
+
+    errorTourRequired: 'Pick a product.',
+    errorDateRequired: 'Set the date.',
+    errorStartTimeRequired: 'Pick the start time — it is required.',
+    errorPickupTimeRequired: 'Set the pickup time — it is required.',
+    errorFormatRequired: 'Pick the format — the product is sold in both.',
+    errorVehicleClassRequired: 'Pick the vehicle class.',
+    errorReturnDateRequired: 'Set the return date.',
+    errorReturnTimeRequired: 'Set the return time.',
+    errorReturnBeforeTrip: 'The return trip cannot be earlier than the trip itself.',
+    errorGuestsOverCapacity: (capacity: number) =>
+      `The selected vehicle class fits no more than ${capacity}.`,
 
     discountBadge: (percent: number) => `−${percent}%`,
 
@@ -524,6 +682,12 @@ export const ordersCopy = defineCopy(
       dateUnavailable: 'This date is closed for booking.',
       dateInPast: 'The tour date cannot be in the past.',
       invalidGuestCount: 'The number of guests must be at least 1.',
+      noSeatsLeft: 'No seats left on this departure — pick another date or time.',
+      invalidStartTime: 'The product does not offer that time — refresh the page and pick again.',
+      formatRequired: 'The product is sold in both formats — pick one.',
+      vehicleClassUnavailable: 'This transfer has no price for the selected vehicle class.',
+      passengersOverCapacity: 'More guests than the selected vehicle class fits.',
+      invalidReturnTrip: 'The return trip cannot be earlier than the trip itself.',
       actionForbidden: (action: string) => `Could not ${action}: not enough permissions.`,
       actionServer: (action: string, status: number) => `Could not ${action}: the server returned an error (${status}).`,
       actionNetwork: (action: string) => `Could not ${action}: check your connection and try again.`,
@@ -562,11 +726,16 @@ export const statusBadgeTone: Record<OrderStatus, 'neutral' | 'strong' | 'muted'
   [OrderStatus.ReadyForAssignment]: 'neutral',
   [OrderStatus.PendingPayment]: 'neutral',
   [OrderStatus.Completed]: 'strong',
+  /** Заявка — такое же «в работе», как Open/PendingPayment: решение по ней ещё не принято. */
+  [OrderStatus.Request]: 'neutral',
 }
 
 /** Status filter/`Select` options, in the order they should list — not `Object.values` order,
  * which would follow the enum's declaration order (fine here, kept explicit for readability). */
 export const STATUS_ORDER: OrderStatus[] = [
+  /** Первой: заявка — единственный статус, который НИЧЕГО не стоит, пока за него не взялись
+   * (цену проставляет менеджер), поэтому вкладка с ней должна попадаться на глаза раньше всех. */
+  OrderStatus.Request,
   OrderStatus.Open,
   OrderStatus.PendingPayment,
   OrderStatus.Hold,
@@ -659,6 +828,12 @@ export function ordersErrorMessage(copy: OrdersCopy, err: unknown, action: strin
     if (code === TOUR_DATE_UNAVAILABLE) return errors.dateUnavailable
     if (code === ORDER_DATE_IN_PAST) return errors.dateInPast
     if (code === INVALID_GUEST_COUNT) return errors.invalidGuestCount
+    if (code === NO_SEATS_LEFT) return errors.noSeatsLeft
+    if (code === INVALID_START_TIME_SELECTION) return errors.invalidStartTime
+    if (code === ORDER_LINE_FORMAT_REQUIRED) return errors.formatRequired
+    if (code === VEHICLE_CLASS_NOT_AVAILABLE) return errors.vehicleClassUnavailable
+    if (code === PASSENGERS_EXCEED_VEHICLE_CAPACITY) return errors.passengersOverCapacity
+    if (code === INVALID_RETURN_TRIP) return errors.invalidReturnTrip
     if (err.status === 403) return errors.actionForbidden(action)
     return errors.actionServer(action, err.status)
   }

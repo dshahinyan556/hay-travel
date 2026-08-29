@@ -69,7 +69,7 @@ export function setTourArchived(id: number, isArchived: boolean): Promise<void> 
 }
 
 /** PATCH the featured flag of a tour (show / hide in the public "избранное" section). Rejects
- * with `ApiError` carrying `errorCode: TooManyFeaturedTours` (2011) when 6 are already featured. */
+ * with `ApiError` carrying `errorCode: TooManyFeaturedTours` (2011) when 9 are already featured. */
 export function setTourFeatured(id: number, isFeatured: boolean): Promise<void> {
   return authFetch<void>('api/Tour/SetFeatured', {
     method: 'PATCH',

@@ -8,6 +8,10 @@ namespace ATTours.Common.DTO.Init
     {
         // null = глобальное правило (все туры).
         public int? TourId { get; set; }
+        // null = правило не привязано к типу продукта. Заполнено = правило закрывает/
+        // открывает ВСЕ продукты этого типа (решение 0.27, «закрыть только трансферы»).
+        // Вместе с TourId не принимается: правило либо про один продукт, либо про тип.
+        public TourType? TourType { get; set; }
         public ClosureRuleType Type { get; set; }
         public ClosureAction Action { get; set; }
         // Обязательно при Type == SpecificDate.

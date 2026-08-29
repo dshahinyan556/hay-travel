@@ -12,7 +12,10 @@ namespace ATTours.Exceptions
         // 0-based индекс строки в запросе = позиция в корзине на клиенте.
         public int Index { get; set; }
 
-        public int TourId { get; set; }
+        // Nullable с 2026-08-29: у строки кастомного трансфера продукта нет, и записывать
+        // сюда 0 значило бы сообщить о несуществующем «туре №0». Такую строку клиент
+        // сопоставляет с позицией только по Index.
+        public int? TourId { get; set; }
 
         public DateOnly TourDate { get; set; }
 

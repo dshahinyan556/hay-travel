@@ -23,7 +23,34 @@ namespace ATTours.BusinessServices.Notifications
                 [Pickup] = "Место встречи",
                 [Navigator] = "Навигатор",
                 [Comment] = "Комментарий",
-                [Role] = "Роль"
+                [Role] = "Роль",
+                [Order] = "Заказ"
+            };
+
+        // Заголовок Telegram-уведомления по событию (ADR 031 §2): у Telegram шаблона в
+        // модели нет, текст собирает бэкенд, значит и заголовок живёт в коде.
+        //
+        // Формулировки нейтральные (не «вас назначили»): одно и то же событие уходит и
+        // персонально исполнителю, и общим получателям (админам), а разводить два набора
+        // заголовков ради одной строки — лишняя развилка.
+        private static readonly IReadOnlyDictionary<EmailActionKey, string> RussianEventTitles =
+            new Dictionary<EmailActionKey, string>
+            {
+                [EmailActionKey.OrderCreated] = "Новая бронь",
+                [EmailActionKey.OrderAssignEmployee] = "Назначение исполнителя",
+                [EmailActionKey.OrderUnassignEmployee] = "Снятие исполнителя",
+                [EmailActionKey.OrderSendToClient] = "Документы заказа",
+                [EmailActionKey.OrderAutoCancelled] = "Бронь отменена автоматически"
+            };
+
+        private static readonly IReadOnlyDictionary<EmailActionKey, string> EnglishEventTitles =
+            new Dictionary<EmailActionKey, string>
+            {
+                [EmailActionKey.OrderCreated] = "New booking",
+                [EmailActionKey.OrderAssignEmployee] = "Employee assignment",
+                [EmailActionKey.OrderUnassignEmployee] = "Employee unassignment",
+                [EmailActionKey.OrderSendToClient] = "Order documents",
+                [EmailActionKey.OrderAutoCancelled] = "Booking cancelled automatically"
             };
 
         private static readonly IReadOnlyDictionary<string, string> English =
@@ -35,7 +62,8 @@ namespace ATTours.BusinessServices.Notifications
                 [Pickup] = "Pickup",
                 [Navigator] = "Navigator",
                 [Comment] = "Comment",
-                [Role] = "Role"
+                [Role] = "Role",
+                [Order] = "Order"
             };
 
         public const string Tour = nameof(Tour);
@@ -45,6 +73,7 @@ namespace ATTours.BusinessServices.Notifications
         public const string Navigator = nameof(Navigator);
         public const string Comment = nameof(Comment);
         public const string Role = nameof(Role);
+        public const string Order = nameof(Order);
 
         // Неизвестный токен — пустая строка, а не имя токена: литерал в письме выглядел бы
         // как баг (тот же принцип, что у неизвестного плейсхолдера в рендерере).
@@ -60,6 +89,14 @@ namespace ATTours.BusinessServices.Notifications
             => language == LanguageCode.English
                 ? date.ToString("dd MMM yyyy", EnglishCulture)
                 : date.ToString("dd.MM.yyyy", RussianCulture);
+
+        // Неизвестное событие — пустая строка, по тому же правилу, что и неизвестный токен
+        // подписи: заголовок просто не печатается, а не показывает имя enum-значения.
+        public static string EventTitle(EmailActionKey key, LanguageCode language)
+        {
+            var titles = language == LanguageCode.English ? EnglishEventTitles : RussianEventTitles;
+            return titles.TryGetValue(key, out var title) ? title : string.Empty;
+        }
 
         public static CultureInfo CultureFor(LanguageCode language)
             => language == LanguageCode.English ? EnglishCulture : RussianCulture;

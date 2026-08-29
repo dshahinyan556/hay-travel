@@ -76,6 +76,42 @@ namespace ATTours.ClientAPI.Controllers
             return result;
         }
 
+        // Кастомная заявка на трансфер (решение 0.11 чек-листа
+        // checklist-transfers-format-2026-08-29): клиент собрал маршрут в конструкторе,
+        // продукта под это в каталоге нет, цену согласует менеджер.
+        //
+        // Права ровно те же, что у обычной брони: [Authorize] без ролей, владелец — из
+        // токена. «Заявка» — это не «анонимная форма обратной связи»: по ней будут звонить
+        // и её будут превращать в заказ, поэтому за ней стоит настоящая учётка.
+        //
+        // Отдельный маршрут, а не флаг в Create: у заявки нет ни корзины, ни цены, ни
+        // продукта — общего тела запроса с чекаутом у неё не существует.
+        [HttpPost]
+        [Route("CreateTransferRequest")]
+        [Authorize]
+        public async Task<OrderInfoModel> CreateTransferRequestAsync([FromBody] CustomTransferRequestCreateModel model,
+            CancellationToken cancellationToken)
+        {
+            int orderId;
+            using (var requestService = new CustomTransferRequestCreationService(model, User.GetUserId(), cancellationToken))
+            {
+                await requestService.ExecuteEntityChangesAsync();
+                orderId = requestService.Entities.Single().Id;
+            }
+
+            using var info = new OrderInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
+            var result = mapper.Map<OrderInfoModel>(await info.GetByIdAsync(orderId, cancellationToken));
+
+            // Тот же канал, что у обычной брони: заявка без цены точно так же требует, чтобы
+            // менеджер о ней узнал, а не наткнулся на неё в списке сам. Провайдер письма
+            // наружу не бросает — сбой уведомления не должен ронять уже принятую заявку.
+            await notificationService.SendOrderCreatedAsync(result, cancellationToken);
+
+            await OrderEventLog.LogOrderCreatedAsync(orderId, User.GetUserId(), cancellationToken);
+
+            return result;
+        }
+
         // Деталь одного заказа для админского OrderDetailPage — только админ.
         [HttpGet]
         [Route("{id:int}")]
@@ -149,8 +185,8 @@ namespace ATTours.ClientAPI.Controllers
             using (var lineService = new OrderLineService(cancellationToken))
                 removed = await lineService.RemoveLineAsync(lineId);
 
-            await OrderEventLog.LogLineRemovedAsync(removed.OrderId, User.GetUserId(), removed.TourId,
-                removed.TourDate, removed.GuestCount, cancellationToken);
+            await OrderEventLog.LogLineRemovedAsync(removed.OrderId, User.GetUserId(), removed.LineKind,
+                removed.TourId, removed.TourDate, removed.GuestCount, cancellationToken);
         }
 
         // Правка строки: предоплата — только админ. "Детали для выполнения" переехали

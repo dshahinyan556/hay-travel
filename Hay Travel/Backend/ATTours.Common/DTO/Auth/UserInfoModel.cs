@@ -23,6 +23,14 @@ namespace ATTours.Common.DTO.Auth
         public bool IsEmailVerified { get; set; }
         public bool IsLocked { get; set; }
 
+        // Неприкосновенность аккаунта (SuperAdminGuard, 2026-08-27): раньше этот флаг уходил
+        // только в MyPermissionsModel (свой аккаунт) — экран списка/карточки чужого
+        // пользователя не мог его прочитать и блокировал действия только по роли
+        // (CanManageAdmins), что не эквивалентно. Нужен здесь, чтобы UI мог заранее
+        // задизейблить Delete/ForcePasswordReset/ChangeRole/итд для цели-SuperAdmin, а не
+        // узнавать о запрете только по 403 с бэкенда.
+        public bool IsSuperAdmin { get; set; }
+
         // Рабочая специализация по умолчанию (Задача D) — попапу назначения исполнителя
         // нужен дефолт прямо из списка сотрудников, без похода за карточкой.
         public EmployeeJobRole? DefaultJobRole { get; set; }

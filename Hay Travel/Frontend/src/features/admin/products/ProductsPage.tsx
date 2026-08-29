@@ -31,7 +31,7 @@ import { productsCopy } from './lib/productsCopy'
 import { ProductsToolbar } from './components/ProductsToolbar'
 import { ProductsTable, type ProductsView } from './components/ProductsTable'
 
-const MAX_FEATURED = 6
+const MAX_FEATURED = 9
 /** `GlobalErrorCode.TooManyFeaturedTours` — surfaced as a specific message instead of the
  * generic "сервер вернул ошибку (400)". */
 const TOO_MANY_FEATURED_CODE = 2011

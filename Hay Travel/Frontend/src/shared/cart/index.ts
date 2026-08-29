@@ -6,7 +6,14 @@
  * three unrelated places need the same state, and features may not import from one another.
  */
 
-export type { AddCartItemInput, AddCartItemResult, CartItem, CartItemSnapshot, CartState } from './types'
+export type {
+  AddCartItemInput,
+  AddCartItemResult,
+  CartItem,
+  CartItemSnapshot,
+  CartState,
+  CartTransferSelection,
+} from './types'
 
 export {
   CART_STORAGE_KEY,
@@ -16,6 +23,7 @@ export {
   clearCart,
   findCartItem,
   getCartState,
+  isReturnLegValid,
   removeCartItem,
   subscribeCart,
   updateCartItem,

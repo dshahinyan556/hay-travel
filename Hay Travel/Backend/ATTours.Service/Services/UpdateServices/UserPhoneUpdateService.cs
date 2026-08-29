@@ -1,4 +1,5 @@
 using ArmeniaTours.DataLayer;
+using ATTours.BusinessServices.Services.Authorization;
 using ATTours.Common.Entities;
 using ATTours.Common.Settings;
 using ATTours.ContextRepository;
@@ -13,6 +14,11 @@ namespace ATTours.BusinessServices.Services.UpdateServices
     //
     // Владелец операции — сам пользователь (AccountController передаёт User.GetUserId()),
     // поэтому никаких ролевых guard'ов здесь нет: чужую строку этим сервисом не достать.
+    //
+    // actingUserId (2026-08-27) сегодня всегда равен userId и выглядит избыточным — он тут
+    // как страховка на будущее: если кто-то заведёт админский эндпоинт правки чужого
+    // телефона, компилятор заставит передать вызывающего, и SuperAdminGuard отработает.
+    // Без параметра такой эндпоинт молча получил бы дыру.
     public class UserPhoneUpdateService : RepositoryCoreBase<User, ATToursContextFactory>
     {
         // Фактическая ширина колонки User.PhoneNumber (UserConfiguration.HasMaxLength(15)).
@@ -28,7 +34,7 @@ namespace ATTours.BusinessServices.Services.UpdateServices
             this.cancellationToken = cancellationToken;
         }
 
-        public async Task<User> UpdatePhoneAsync(int userId, string? phoneNumber)
+        public async Task<User> UpdatePhoneAsync(int userId, string? phoneNumber, int actingUserId)
         {
             // Include(Role) — контроллер отдаёт UserInfoModel, а его маппинг читает Role.Type.
             // !IsDeleted: удалённый пользователь отвечает 404, как и несуществующий.
@@ -37,6 +43,8 @@ namespace ATTours.BusinessServices.Services.UpdateServices
                                              .SingleOrDefaultAsync(x => x.Id == userId && !x.IsDeleted, cancellationToken)
                        ?? throw new ErrorModelException(GlobalErrorCode.RelationalEntityNotFound, HttpStatusCode.NotFound,
                            $"User with id {userId} not found.");
+
+            SuperAdminGuard.GuardSuperAdminTarget(user, actingUserId);
 
             var normalizedPhoneNumber = Normalize(phoneNumber);
 

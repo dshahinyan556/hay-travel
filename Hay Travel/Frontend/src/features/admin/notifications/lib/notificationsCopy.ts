@@ -52,8 +52,11 @@ const ru = {
   platformWorking: 'Отправка работает',
   platformSetupOnly: 'Настраивается, сообщения пока не отправляются',
   platformToggleAria: (name: string) => `Включить платформу «${name}»`,
-  telegramNotImplementedBanner:
-    'Telegram сейчас только настраивается: получатели сохраняются, но сообщения не уходят.',
+  // Формулировка без имени платформы: показывается по флагу `isImplemented` с бэкенда для ЛЮБОГО
+  // канала, у которого ещё нет отправки, — раньше здесь был захардкожен Telegram, который с
+  // 2026-08-27 реализован (spec 015 §8).
+  platformNotImplementedBanner: (name: string) =>
+    `«${name}» сейчас только настраивается: получатели сохраняются, но сообщения не уходят.`,
 
   /* -------------------------------- Получатели --------------------------------- */
   recipientsTitle: 'Получатели',
@@ -145,8 +148,8 @@ const en: { [K in keyof typeof ru]: (typeof ru)[K] } = {
   platformWorking: 'Delivery works',
   platformSetupOnly: 'Being set up, messages are not sent yet',
   platformToggleAria: (name: string) => `Enable the “${name}” platform`,
-  telegramNotImplementedBanner:
-    'Telegram is still being set up: recipients are stored, but no messages are sent.',
+  platformNotImplementedBanner: (name: string) =>
+    `“${name}” is still being set up: recipients are stored, but no messages are sent.`,
 
   recipientsTitle: 'Recipients',
   colActive: 'Active',

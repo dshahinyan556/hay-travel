@@ -29,16 +29,22 @@ namespace ATTours.BusinessServices.Services.UpdateServices
         private IEntityRepository<User>? userRepository;
         private IEntityRepository<User> UserRepository => userRepository ??= new EntityRepository<User>(Context);
 
-        public async Task<List<UserPermissionOverride>> SaveAsync(int userId, UserPermissionOverrideSaveModel model)
+        // actingUserId (2026-08-27) — только ради SuperAdminGuard: набор override'ов
+        // SuperAdmin'а вообще не влияет на его доступ (он идёт мимо матрицы), но строку его
+        // учётки всё равно не должен трогать никто, кроме него самого.
+        public async Task<List<UserPermissionOverride>> SaveAsync(int userId, UserPermissionOverrideSaveModel model,
+            int actingUserId)
         {
             // Валидация ключей и применимости уровней — до любых записей.
             var incoming = RolePermissionMatrix.NormalizeOverrides(model?.Overrides);
 
-            var userExists = await UserRepository.AsQueryable()
-                                                 .AnyAsync(user => user.Id == userId && !user.IsDeleted, cancellationToken);
-            if (!userExists)
-                throw new ErrorModelException(GlobalErrorCode.RelationalEntityNotFound, HttpStatusCode.NotFound,
-                    $"User with id {userId} not found.");
+            // Строка целевого пользователя, а не AnyAsync: guard'у нужен сам IsSuperAdmin.
+            var targetUser = await UserRepository.AsQueryable()
+                                                 .SingleOrDefaultAsync(user => user.Id == userId && !user.IsDeleted, cancellationToken)
+                             ?? throw new ErrorModelException(GlobalErrorCode.RelationalEntityNotFound, HttpStatusCode.NotFound,
+                                 $"User with id {userId} not found.");
+
+            SuperAdminGuard.GuardSuperAdminTarget(targetUser, actingUserId);
 
             var existing = await EntityRepository.AsQueryable()
                                                  .Where(permissionOverride => permissionOverride.UserId == userId)

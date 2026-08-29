@@ -21,3 +21,6 @@ export { NotificationsPage, notificationsLoader } from './notifications/Notifica
 export { NotificationEventPage, notificationEventLoader } from './notifications/NotificationEventPage'
 export { RolesPage, rolesLoader } from './roles/RolesPage'
 export { RoleDetailPage, roleDetailLoader } from './roles/RoleDetailPage'
+export { JobsPage, jobsLoader } from './jobs/JobsPage'
+export { JobDetailPage, jobDetailLoader } from './jobs/JobDetailPage'
+export { JobRunReportPage, jobRunReportLoader } from './jobs/JobRunReportPage'

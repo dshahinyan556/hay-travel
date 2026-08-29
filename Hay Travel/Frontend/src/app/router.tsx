@@ -78,6 +78,37 @@ export const router = createBrowserRouter([
             loader: m.regionsLoader,
           })),
       },
+      // Трансферы (батч 2026-08-29, решение 0.15). ОТДЕЛЬНЫЙ раздел, а не `?kind=transfer` в
+      // каталоге: у трансфера нет ни регионов, ни длительности, ни тегов, и фильтры каталога ему
+      // нечем заполнить. Бэк исключает трансферы из `GetToursClient`, поэтому попасть в `/trips`
+      // они не могут даже теоретически.
+      //
+      // `transfers/custom` объявлен ПЕРЕД `transfers/:id`: иначе `:id` съел бы слово `custom` и
+      // конструктор открывался бы как «трансфер не найден».
+      {
+        path: 'transfers',
+        lazy: () =>
+          import('@/features/transfers').then((m) => ({
+            Component: m.TransfersPage,
+            loader: m.transfersLoader,
+          })),
+      },
+      {
+        path: 'transfers/custom',
+        lazy: () =>
+          import('@/features/transfers').then((m) => ({
+            Component: m.TransferRequestPage,
+            loader: m.transferRequestLoader,
+          })),
+      },
+      {
+        path: 'transfers/:id',
+        lazy: () =>
+          import('@/features/transfers').then((m) => ({
+            Component: m.TransferDetailPage,
+            loader: m.transferDetailLoader,
+          })),
+      },
       // Auth lives under one `/auth` prefix: `AuthPage` is the login/sign-up pair, the rest are
       // steps of the email flows. The signed-in ACCOUNT screen is `/account` below — `/auth` now
       // redirects a signed-in visitor there (or to `?returnTo=`), see `authPageLoader`.
@@ -235,6 +266,26 @@ export const router = createBrowserRouter([
           import('@/features/admin').then((m) => ({
             Component: m.NotificationEventPage,
             loader: m.notificationEventLoader,
+          })),
+      },
+      {
+        path: 'jobs',
+        lazy: () => import('@/features/admin').then((m) => ({ Component: m.JobsPage, loader: m.jobsLoader })),
+      },
+      {
+        path: 'jobs/:key',
+        lazy: () =>
+          import('@/features/admin').then((m) => ({
+            Component: m.JobDetailPage,
+            loader: m.jobDetailLoader,
+          })),
+      },
+      {
+        path: 'jobs/:key/runs/:runId',
+        lazy: () =>
+          import('@/features/admin').then((m) => ({
+            Component: m.JobRunReportPage,
+            loader: m.jobRunReportLoader,
           })),
       },
       {

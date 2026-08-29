@@ -25,8 +25,16 @@ namespace ATTours.BusinessServices.Services.Shared
             [OrderStatus.Rejected] = "Отклонён",
             [OrderStatus.ReadyForAssignment] = "Готов к назначению",
             [OrderStatus.PendingPayment] = "Ожидает оплаты",
-            [OrderStatus.Completed] = "Выполнен"
+            [OrderStatus.Completed] = "Выполнен",
+            // Кастомная заявка на трансфер (батч 2026-08-29): заказ без цены, пока менеджер
+            // не согласует сумму.
+            [OrderStatus.Request] = "Заявка"
         };
+
+        // Подпись строки-заявки там, где у обычной строки стоит название тура. Продукта у
+        // неё нет, и «—» (fallback пустого названия) в истории читалось бы как потерянные
+        // данные, а не как «это кастомный трансфер».
+        private const string CustomTransferTitle = "Кастомный трансфер";
 
         public static Task LogOrderCreatedAsync(int orderId, int actorUserId, CancellationToken cancellationToken)
             => SafeAsync(cancellationToken, service =>
@@ -45,6 +53,15 @@ namespace ATTours.BusinessServices.Services.Shared
 
                 return service.WriteAsync(orderId, actorUserId, OrderEventType.StatusChanged, description);
             });
+
+        // Автоотмена фоновой задачей. actorUserId не принимается вовсе (а не передаётся
+        // null «на всякий случай»): у планировщика автора нет по определению, и подставить
+        // сюда чью-то учётку значило бы соврать в журнале.
+        public static Task LogAutoCancelledAsync(int orderId, OrderStatus previous, string reason,
+            CancellationToken cancellationToken)
+            => SafeAsync(cancellationToken, service =>
+                service.WriteAsync(orderId, actorUserId: null, OrderEventType.AutoCancelled,
+                    $"Автоотмена: «{DescribeStatus(previous)}» → «{DescribeStatus(OrderStatus.Rejected)}». {reason}"));
 
         public static Task LogOrderUpdatedAsync(int orderId, int actorUserId, DateOnly previousDate,
             int previousGuestCount, DateOnly currentDate, int currentGuestCount, CancellationToken cancellationToken)
@@ -74,7 +91,7 @@ namespace ATTours.BusinessServices.Services.Shared
                     return;
 
                 await service.WriteAsync(line.OrderId, actorUserId, OrderEventType.LineAdded,
-                    $"Добавлена строка: «{DescribeTour(line.TourTitle)}», {FormatDate(line.TourDate)}, гостей: {line.GuestCount}");
+                    $"Добавлена строка: «{DescribeLine(line.LineKind, line.TourTitle)}», {FormatDate(line.TourDate)}, гостей: {line.GuestCount}");
             });
 
         public static Task LogLineUpdatedAsync(int lineId, int actorUserId, CancellationToken cancellationToken)
@@ -90,20 +107,31 @@ namespace ATTours.BusinessServices.Services.Shared
                 var pickup = line.HasPickupDetails ? "указано" : "не указано";
                 var navigator = line.HasNavigatorLink ? "указан" : "не указан";
 
+                // У заявки главное в этой правке — согласованная менеджером цена (решение
+                // 0.11), а не место встречи: показываем сумму, иначе история молчала бы ровно
+                // про то, ради чего строку и открывали.
+                var price = line.LineKind == OrderLineKind.CustomTransfer
+                    ? $", цена — {FormatAmount(line.LineTotal)}"
+                    : string.Empty;
+
                 await service.WriteAsync(line.OrderId, actorUserId, OrderEventType.LineUpdated,
-                    $"Изменена строка «{DescribeTour(line.TourTitle)}», {FormatDate(line.TourDate)}: " +
-                    $"предоплата — {prepayment}, место встречи — {pickup}, навигатор — {navigator}");
+                    $"Изменена строка «{DescribeLine(line.LineKind, line.TourTitle)}», {FormatDate(line.TourDate)}: " +
+                    $"предоплата — {prepayment}, место встречи — {pickup}, навигатор — {navigator}{price}");
             });
 
         // Строки уже нет в БД — данные приходят снапшотом из OrderLineService.RemoveLineAsync.
-        public static Task LogLineRemovedAsync(int orderId, int actorUserId, int tourId,
+        //
+        // tourId nullable (2026-08-29): у строки-заявки продукта нет, и запрос названия тура
+        // по id 0 нашёл бы пустоту — в историю ушло бы «Удалена строка: «—»». Тип строки
+        // приезжает явным полем, а не выводится из отсутствия id.
+        public static Task LogLineRemovedAsync(int orderId, int actorUserId, OrderLineKind lineKind, int? tourId,
             DateOnly tourDate, int guestCount, CancellationToken cancellationToken)
             => SafeAsync(cancellationToken, async service =>
             {
-                var tourTitle = await service.GetTourTitleAsync(tourId);
+                var tourTitle = tourId is null ? null : await service.GetTourTitleAsync(tourId.Value);
 
                 await service.WriteAsync(orderId, actorUserId, OrderEventType.LineRemoved,
-                    $"Удалена строка: «{DescribeTour(tourTitle)}», {FormatDate(tourDate)}, гостей: {guestCount}");
+                    $"Удалена строка: «{DescribeLine(lineKind, tourTitle)}», {FormatDate(tourDate)}, гостей: {guestCount}");
             });
 
         public static Task LogEmployeeAssignedAsync(int orderId, int actorUserId, string employeeFullName,
@@ -121,7 +149,7 @@ namespace ATTours.BusinessServices.Services.Shared
                     var line = assignedLineIds.Count == 0 ? null : await service.GetLineContextAsync(assignedLineIds[0]);
                     description = line is null
                         ? $"Назначен исполнитель {employeeFullName}"
-                        : $"Назначен исполнитель {employeeFullName} на строку «{DescribeTour(line.TourTitle)}», {FormatDate(line.TourDate)}";
+                        : $"Назначен исполнитель {employeeFullName} на строку «{DescribeLine(line.LineKind, line.TourTitle)}», {FormatDate(line.TourDate)}";
                 }
 
                 await service.WriteAsync(orderId, actorUserId, OrderEventType.EmployeeAssigned, description);
@@ -144,7 +172,7 @@ namespace ATTours.BusinessServices.Services.Shared
                     var line = unassignedLineIds.Count == 0 ? null : await service.GetLineContextAsync(unassignedLineIds[0]);
                     description = line is null
                         ? $"Снят исполнитель {employeeFullName}"
-                        : $"Снят исполнитель {employeeFullName} со строки «{DescribeTour(line.TourTitle)}», {FormatDate(line.TourDate)}";
+                        : $"Снят исполнитель {employeeFullName} со строки «{DescribeLine(line.LineKind, line.TourTitle)}», {FormatDate(line.TourDate)}";
                 }
 
                 await service.WriteAsync(orderId, actorUserId, OrderEventType.EmployeeUnassigned, description);
@@ -166,7 +194,7 @@ namespace ATTours.BusinessServices.Services.Shared
 
                 await service.WriteAsync(payment.OrderId, actorUserId, OrderEventType.PaymentAdded,
                     $"Проведена оплата {payment.Number}: {type} {FormatAmount(payment.Amount)} {payment.Currency} " +
-                    $"по строке «{DescribeTour(payment.TourTitle)}», {FormatDate(payment.TourDate)}");
+                    $"по строке «{DescribeLine(payment.LineKind, payment.TourTitle)}», {FormatDate(payment.TourDate)}");
             });
 
         private static async Task SafeAsync(CancellationToken cancellationToken, Func<OrderEventService, Task> write)
@@ -188,6 +216,11 @@ namespace ATTours.BusinessServices.Services.Shared
 
         private static string DescribeTour(string? tourTitle)
             => string.IsNullOrWhiteSpace(tourTitle) ? "—" : tourTitle;
+
+        // Чем подписана строка в истории: названием продукта либо «Кастомный трансфер».
+        // Ни одна строка-заявка не должна попасть в журнал как тур — ни под id 0, ни под «—».
+        private static string DescribeLine(OrderLineKind lineKind, string? tourTitle)
+            => lineKind == OrderLineKind.CustomTransfer ? CustomTransferTitle : DescribeTour(tourTitle);
 
         private static string FormatDate(DateOnly date) => date.ToString("dd.MM.yyyy", Culture);
 

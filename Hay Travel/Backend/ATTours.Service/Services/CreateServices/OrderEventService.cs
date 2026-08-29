@@ -54,6 +54,11 @@ namespace ATTours.BusinessServices.Services.CreateServices
                                     .Select(x => new OrderEventLineContext
                                     {
                                         OrderId = x.OrderId,
+                                        // Тип строки: у заявки кастомного трансфера продукта
+                                        // нет, и подпись события берётся не из названия тура
+                                        // (LEFT JOIN ниже вернул бы null).
+                                        LineKind = x.LineKind,
+                                        LineTotal = x.LineTotal,
                                         TourTitle = x.Tour.Translations
                                                      .Where(translation => translation.Type == TourTranslationType.Title)
                                                      .OrderBy(translation => translation.LanguageCode == LanguageCode.Russian ? 0 : 1)
@@ -85,6 +90,7 @@ namespace ATTours.BusinessServices.Services.CreateServices
                                 .Select(x => new OrderEventPaymentContext
                                 {
                                     OrderId = x.OrderLine.OrderId,
+                                    LineKind = x.OrderLine.LineKind,
                                     Number = x.Number,
                                     Type = x.Type,
                                     Amount = x.Amount,
@@ -141,11 +147,19 @@ namespace ATTours.BusinessServices.Services.CreateServices
     public class OrderEventLineContext
     {
         public int OrderId { get; set; }
+
+        // Продукт или кастомная заявка (2026-08-29). Журнал подписывает строку по этому полю,
+        // а не по «TourTitle == null»: пустое название бывает и у тура без переводов.
+        public OrderLineKind LineKind { get; set; }
+
         public string? TourTitle { get; set; }
         public DateOnly TourDate { get; set; }
         public int GuestCount { get; set; }
         public bool RequiresPrepayment { get; set; }
         public decimal PrepaymentAmount { get; set; }
+
+        // Итог строки — журналу нужен, чтобы записать согласованную менеджером цену заявки.
+        public decimal LineTotal { get; set; }
 
         // Не сами тексты, а факт их наличия: журнал печатает «указано»/«не указано»,
         // а деталей теперь несколько (по одной карточке на исполнителя).
@@ -156,6 +170,7 @@ namespace ATTours.BusinessServices.Services.CreateServices
     public class OrderEventPaymentContext
     {
         public int OrderId { get; set; }
+        public OrderLineKind LineKind { get; set; }
         public string? Number { get; set; }
         public OrderPaymentType Type { get; set; }
         public decimal Amount { get; set; }

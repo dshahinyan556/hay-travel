@@ -23,8 +23,11 @@
  *
  * INVARIANT (ADR 011, extended by ADR 024): `AuthUser.isSuperAdmin` AND `AuthUser.hasPanelAccess`
  * are written ONLY from a decoded access token. No path that builds a user from a `UserInfoModel`
- * may overwrite them — that DTO carries neither flag, so "not present" there means "unknown", not
- * "false". Both have the same four write sites, numbered in the comments below.
+ * may overwrite them. `hasPanelAccess` is absent from that DTO outright, so "not present" there
+ * means "unknown", not "false"; `isSuperAdmin` has been ON it since 2026-08-27, and the invariant
+ * covers it anyway — that field answers "is the account this admin screen is showing untouchable",
+ * a question about somebody else, and a response body is not evidence about the session's own
+ * privileges the way a signed claim is. Both have the same four write sites, numbered below.
  */
 
 import { setAuthTokenProvider } from '@/shared/lib/http'
@@ -364,8 +367,9 @@ function expiryFromToken(token: string, expiresInSeconds: number): number {
 /* -------------------------------------------------------------------------- */
 
 /** Wire user → UI user. Note `role` (the role row's type, `null` for a custom role), never
- * `roleId` (the table key). Neither `isSuperAdmin` nor `hasPanelAccess` is set here: the DTO does
- * not carry them, and "absent" must not be read as "false" (see the module invariant). */
+ * `roleId` (the table key). Neither `isSuperAdmin` nor `hasPanelAccess` is set here — `model
+ * .isSuperAdmin` is deliberately dropped rather than copied through (module invariant): only the
+ * token may answer that about the session. "Absent" must not be read as "false" either. */
 export function toAuthUser(model: UserInfoModel): AuthUser {
   return {
     id: model.id,

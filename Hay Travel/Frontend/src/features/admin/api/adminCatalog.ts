@@ -1,12 +1,12 @@
 /**
  * Admin Reference Catalog API — one function per backend endpoint, all routed through
  * `authFetch`. Backend route bases: `api/Place`, `api/ExpenseTemplate`, `api/TourNoteTemplate`,
- * `api/Region`.
+ * `api/Region`, `api/VehicleClass`.
  *
  * Each catalog is its OWN permission key (`catalog.places`, `catalog.expense-templates`,
- * `catalog.note-templates`, `catalog.regions`, `catalog.tags`) — five independent keys behind one
- * `/admin/catalog` route, by decision 7 of the roles checklist. `GetAll` needs that key's `View`,
- * every write its `Create`/`Update`/`Delete`.
+ * `catalog.note-templates`, `catalog.regions`, `catalog.tags`, `catalog.vehicle-classes`) — six
+ * independent keys behind one `/admin/catalog` route, by decision 7 of the roles checklist.
+ * `GetAll` needs that key's `View`, every write its `Create`/`Update`/`Delete`.
  *
  * Note the reach of the View flags: the TOUR FORM loads all five to fill its pickers, so a role
  * that may create tours but cannot read the catalogs gets a 403 on the form itself. The role editor
@@ -30,6 +30,8 @@ import type {
   TagInfoModel,
   TourNoteTemplateCreateModel,
   TourNoteTemplateInfoModel,
+  VehicleClassCreateModel,
+  VehicleClassInfoModel,
 } from '@/shared/types/attours'
 
 /* -------------------------------------------------------------------------- */
@@ -168,4 +170,33 @@ export function updateRegionBlurb(id: number, blurbRu: string, blurbEn: string):
     method: 'PUT',
     body: JSON.stringify({ id, blurbRu, blurbEn }),
   })
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Vehicle classes (batch 2026-08-29, decision 0.7) — pricing tiers for      */
+/*  predefined transfers. `catalog.vehicle-classes` permission key.           */
+/* -------------------------------------------------------------------------- */
+
+export function getVehicleClasses(): Promise<VehicleClassInfoModel[]> {
+  return authFetch<VehicleClassInfoModel[]>('api/VehicleClass/GetAll')
+}
+
+export function createVehicleClass(model: VehicleClassCreateModel): Promise<VehicleClassInfoModel> {
+  return authFetch<VehicleClassInfoModel>('api/VehicleClass/Create', {
+    method: 'POST',
+    body: JSON.stringify(model),
+  })
+}
+
+export function updateVehicleClass(model: VehicleClassInfoModel): Promise<VehicleClassInfoModel> {
+  return authFetch<VehicleClassInfoModel>('api/VehicleClass/Update', {
+    method: 'PUT',
+    body: JSON.stringify(model),
+  })
+}
+
+/** Rejects with `ApiError` carrying `errorCode: CatalogEntryInUse` (2010) when still referenced
+ * by a transfer's pricing table or by an order line. */
+export function deleteVehicleClass(id: number): Promise<void> {
+  return authFetch<void>(`api/VehicleClass/Delete?id=${id}`, { method: 'DELETE' })
 }

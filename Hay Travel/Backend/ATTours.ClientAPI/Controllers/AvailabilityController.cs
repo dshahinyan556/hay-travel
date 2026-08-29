@@ -95,13 +95,36 @@ namespace ATTours.ClientAPI.Controllers
         #region ClientEndpoints
         // Публичный намеренно (как GetForClient у PlaceController): booking-card на сайте
         // должен гасить закрытые дни ещё до логина, а наружу уходят только даты.
+        //
+        // tourId стал необязательным (решение 0.27): у конструктора кастомного трансфера
+        // продукта нет вовсе, и спрашивает он по типу — GetClosedDates?tourType=3. Когда
+        // tourId задан, тип продукта берётся из БД, а tourType из запроса игнорируется.
         [HttpGet]
         [Route("GetClosedDates")]
-        public async Task<List<DateOnly>> GetClosedDatesAsync([FromQuery] int tourId, [FromQuery] DateOnly from,
-            [FromQuery] DateOnly to, CancellationToken cancellationToken)
+        public async Task<List<DateOnly>> GetClosedDatesAsync([FromQuery] int? tourId, [FromQuery] DateOnly from,
+            [FromQuery] DateOnly to, CancellationToken cancellationToken, [FromQuery] TourType? tourType = null)
         {
             using var info = new ClosureRuleInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
-            return await info.GetClosedDatesAsync(tourId, from, to);
+            return await info.GetClosedDatesAsync(tourId, from, to, tourType);
+        }
+
+        // Остаток мест группового формата (решения 0.19/0.20 чек-листа
+        // checklist-transfers-format-2026-08-29): блок брони показывает «осталось N мест» на
+        // выбранные дату+время и блокирует кнопку на нуле.
+        //
+        // Публичный по той же причине, что и GetClosedDates: гасить недоступные слоты сайт
+        // обязан ДО логина. Наружу едут только числа — ни заказов, ни клиентов.
+        //
+        // Живёт рядом с закрытыми датами, а не в TourController: и то, и другое — «можно ли
+        // сюда бронировать», и блок брони спрашивает их одной парой запросов. В детали
+        // продукта остаток мест не кладём: та ответка кэшируется и не знает диапазона дат.
+        [HttpGet]
+        [Route("GetGroupSeats")]
+        public async Task<TourGroupSeatsModel> GetGroupSeatsAsync([FromQuery] int tourId, [FromQuery] DateOnly from,
+            [FromQuery] DateOnly to, CancellationToken cancellationToken)
+        {
+            using var info = new GroupSeatsInfo(cancellationToken);
+            return await info.GetAsync(tourId, from, to);
         }
         #endregion
     }

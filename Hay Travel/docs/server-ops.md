@@ -125,6 +125,8 @@ EOF
 | `BREVO_API_KEY` | ключ Brevo для отправки писем |
 | `CORS_ALLOWED_ORIGINS` | сейчас `https://haytravel.duckdns.org` |
 | `PUBLIC_BASE_URL` | база для ссылок в письмах (verify/reset) |
+| `TELEGRAM_BOT_TOKEN` | токен `HayTravelNotificationsBot` от @BotFather |
+| `TELEGRAM_WEBHOOK_SECRET` | произвольная строка, придумывает Давит; сверяется с заголовком `X-Telegram-Bot-Api-Secret-Token` при регистрации webhook (`setWebhook`) |
 
 Поменять значение → отредактировать `/opt/haytravel/.env` → `docker compose up -d`
 (пересоздаст только бэкенд, БД не тронет).

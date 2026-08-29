@@ -26,6 +26,9 @@ export function Header() {
     { to: '/', label: t('nav.home'), end: true },
     // One catalog entry: tours and excursions are tabs inside `/trips`, not separate sections.
     { to: '/trips', label: t('nav.trips') },
+    // Отдельный раздел, а не вкладка каталога (решение 0.15): у трансфера нет ни регионов, ни
+    // длительности, и фильтры каталога ему нечем заполнить.
+    { to: '/transfers', label: t('nav.transfers') },
     { to: '/regions', label: t('nav.regions') },
   ]
 

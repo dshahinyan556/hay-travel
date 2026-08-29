@@ -24,7 +24,7 @@ ASPNETCORE_ENVIRONMENT=Development dotnet ef database update --project ATTours.D
 ## Оглавление
 - [client-site.md](client-site.md) — публичный сайт: дизайн-токены (тёмный люкс), карта марзов, правила карточек.
 - [admin-panel.md](admin-panel.md) — админ-панель: роуты, каркас, сайдбар/мобильное меню, дашборд, страница «Продукты».
-- [product-model.md](product-model.md) — как устроен продукт: тур vs экскурсия, форма, цена, валидации, архив, переводы.
+- [product-model.md](product-model.md) — как устроен продукт: тур / экскурсия / трансфер, формат и время старта, форма, цена, валидации, архив, переводы.
 - [backend-api.md](backend-api.md) — контракт бэкенда: енумы, эндпоинты, ключевые правила.
 - [tech-debt.md](tech-debt.md) — сознательно отложенные решения, проверять при новых сессиях.
 - [server-ops.md](server-ops.md) — продовый сервер (netcup): доступ, команды, деплой, секреты.

@@ -77,7 +77,8 @@ namespace ATTours.ClientAPI.Controllers
             await archivalService.SetArchivedAsync(model.Id, model.IsArchived);
         }
 
-        // Отметка/снятие «избранного» (не больше 6 одновременно, TourFeaturedService).
+        // Отметка/снятие «избранного» (не больше 9 одновременно с 2026-08-29, TourFeaturedService).
+        // Трансферы участвуют в избранном наравне с турами и экскурсиями (решение 0.4).
         // Было Admin-only, стало products.Update (§0.3): курирование избранного — та же
         // работа с контентом тура, которую и так ведёт тур-менеджер.
         [HttpPatch]
@@ -147,9 +148,12 @@ namespace ATTours.ClientAPI.Controllers
             // Публичный эндпоинт: только опубликованные и неархивные туры, опционально
             // дополнительно отфильтрованные по slug региона (?region=). Неизвестный slug
             // отдаёт пустой список, а не 400 — параметр приходит из адресной строки.
-            Expression<Func<Tour, bool>> where = x => x.IsActive && !x.IsArchived;
+            //
+            // Трансферы из общего каталога исключены (решение 0.15 батча 2026-08-29): публично
+            // они живут только на /transfers (api/Transfer) и в «Избранном» на главной.
+            Expression<Func<Tour, bool>> where = x => x.Type != TourType.Transfer && x.IsActive && !x.IsArchived;
             if (!string.IsNullOrWhiteSpace(region))
-                where = x => x.IsActive && !x.IsArchived && x.TourRegions.Any(tr => tr.Region.Slug == region);
+                where = x => x.Type != TourType.Transfer && x.IsActive && !x.IsArchived && x.TourRegions.Any(tr => tr.Region.Slug == region);
 
             // Облегчённый card-граф (D-11): резолв каталога на списке не нужен, лишь одна локаль
             // тур-уровневых переводов. Тип возврата — List<TourCardModel> (было List<TourInfoModel>).
@@ -159,7 +163,9 @@ namespace ATTours.ClientAPI.Controllers
         }
 
         // Публичная секция «избранное» на главной: только опубликованные, неархивные,
-        // отмеченные IsFeatured туры, в порядке FeaturedSortOrder. Тот же облегчённый
+        // отмеченные IsFeatured продукты, в порядке FeaturedSortOrder. Фильтра по типу тут
+        // намеренно НЕТ: трансферы участвуют в избранном наравне с турами (решение 0.4/6.8),
+        // в отличие от общего каталога GetToursClient выше. Тот же облегчённый
         // card-граф, что и GetToursClient (пункт 3.5/D-11) — списку карточек не нужен весь граф.
         [HttpGet]
         [Route("GetFeaturedToursClient")]
@@ -182,6 +188,12 @@ namespace ATTours.ClientAPI.Controllers
             var tour = await info.GetClientDetailAsync(id);
             // Публичный эндпоинт: черновик/архив должны выглядеть так же, как
             // несуществующий id — иначе по ответу можно узнать о существовании тура.
+            // Трансфер здесь тоже 404: у него своя публичная детальная
+            // (api/Transfer/GetTransferInfo) со своей моделью — отдавать его как тур значило
+            // бы вернуть продукт с пустыми днями/регионами/тегами и без маршрута и цен.
+            if (tour is { Type: TourType.Transfer })
+                tour = null;
+
             if (tour is not { IsActive: true, IsArchived: false })
             {
                 throw new ErrorModelException(GlobalErrorCode.TourNotFound, HttpStatusCode.NotFound, $"Tour with id {id} not found.");

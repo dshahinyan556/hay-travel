@@ -11,7 +11,12 @@ import {
   type DayOfWeekCode,
 } from '@/shared/types/booking'
 import { calendarCopy, type CalendarCopy } from '../lib/calendarCopy'
-import { groupClosureRules, tourTitleResolver, type ClosureRuleGroup } from '../lib/calendarModel'
+import {
+  groupClosureRules,
+  tourTitleResolver,
+  tourTypeScopeLabel,
+  type ClosureRuleGroup,
+} from '../lib/calendarModel'
 
 export interface ClosureRulesTableProps {
   rules: ClosureRuleInfoModel[]
@@ -34,20 +39,34 @@ function describePeriod(rule: ClosureRuleInfoModel, copy: CalendarCopy): string 
   return copy.rulesPeriodRange(from, to)
 }
 
-/** Область for a group: the one tour/global scope every rule shares, or a count when the batch
- * covers several tours (a global rule can never mix with tour-scoped ones in the same batch —
- * `BulkClosurePanel`'s scope radio and `DayClosureControls`' `tourIds` are both exclusive). */
+/** Область одного правила: продукт / целый тип продукта / глобально (решение 0.27). */
+function describeRuleScope(
+  rule: ClosureRuleInfoModel,
+  tourTitle: (id: number) => string,
+  copy: CalendarCopy,
+): string {
+  if (rule.tourId !== null) return tourTitle(rule.tourId)
+  if (rule.tourType !== null) return tourTypeScopeLabel(rule.tourType, copy)
+  return copy.rulesAllTours
+}
+
+/**
+ * Область for a group: the one scope every rule shares, or a count when the batch covers several.
+ *
+ * Батч из одной массовой операции однороден по ВИДУ области (радио «Область» исключающее), но
+ * одиночное закрытие дня умеет отправить смешанный набор — типы продукта и отдельные продукты
+ * разом. Поэтому: все правила про продукты → «N продуктов», иначе → «N областей»; врать одной из
+ * них в сводке хуже, чем назвать число.
+ */
 function describeGroupScope(
   group: ClosureRuleGroup,
   tourTitle: (id: number) => string,
   copy: CalendarCopy,
 ): string {
-  const tourIds = Array.from(new Set(group.rules.map((rule) => rule.tourId)))
-  if (tourIds.length === 1) {
-    const only = tourIds[0]
-    return only === null ? copy.rulesAllTours : tourTitle(only)
-  }
-  return copy.rulesManyTours(tourIds.length)
+  const keys = new Set(group.rules.map((rule) => `${rule.tourId}/${rule.tourType}`))
+  if (keys.size === 1) return describeRuleScope(group.rules[0], tourTitle, copy)
+  if (group.rules.every((rule) => rule.tourId !== null)) return copy.rulesManyTours(keys.size)
+  return copy.rulesManyScopes(keys.size)
 }
 
 /** Когда for a group: a date range for `SpecificDate` batches, the set of weekdays for `Weekly`
@@ -307,8 +326,10 @@ function RuleRow({ rule, tourTitle, selected, onToggle, selectable, nested = fal
         />
       </td>
       <td className={`px-2 py-2.5 text-neutral-900 ${nested ? 'pl-8' : ''}`}>
+        {/* Полужирным — области шире одного продукта: глобальная и «весь тип продукта». Строка
+            про конкретный продукт остаётся обычной и обрезается по ширине колонки. */}
         {rule.tourId === null ? (
-          <span className="font-semibold">{copy.rulesAllTours}</span>
+          <span className="font-semibold">{describeRuleScope(rule, tourTitle, copy)}</span>
         ) : (
           <span className="block max-w-[240px] truncate" title={tourTitle(rule.tourId)}>
             {tourTitle(rule.tourId)}

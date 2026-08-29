@@ -1,4 +1,5 @@
 using ArmeniaTours.DataLayer;
+using ATTours.BusinessServices.Services.Authorization;
 using ATTours.Common.Entities;
 using ATTours.Common.Settings;
 using ATTours.ContextRepository;
@@ -66,6 +67,11 @@ namespace ATTours.BusinessServices.Services.UpdateServices
         // RoleType — CanManageAdmins может стоять у любой (в т.ч. кастомной) роли.
         private static void GuardRoleChange(User actingUser, User target, UserRole newRole)
         {
+            // Раньше всей логики про CanManageAdmins (2026-08-27): роль SuperAdmin'у не
+            // меняет никто, кроме него самого, — даже другой SuperAdmin. Проверка не зависит
+            // от того, какие флаги несут старая и новая роль, поэтому и стоит до них.
+            SuperAdminGuard.GuardSuperAdminTarget(target, actingUser.Id);
+
             var touchesAdminRole = newRole.CanManageAdmins || target.Role.CanManageAdmins;
             if (!touchesAdminRole)
                 return;

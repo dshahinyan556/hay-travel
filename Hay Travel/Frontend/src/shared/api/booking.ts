@@ -16,7 +16,7 @@
 
 import { apiFetch } from '@/shared/lib/http'
 import { authFetch } from '@/shared/auth'
-import type { OrderCreateModel, OrderInfoModel } from '@/shared/types/booking'
+import type { OrderCreateModel, OrderInfoModel, TourGroupSeatsModel } from '@/shared/types/booking'
 
 /**
  * Days closed for this tour within `[from, to]` (inclusive), as flat `YYYY-MM-DD` strings.
@@ -27,6 +27,23 @@ import type { OrderCreateModel, OrderInfoModel } from '@/shared/types/booking'
 export function getClosedDates(tourId: number, from: string, to: string): Promise<string[]> {
   return apiFetch<string[]>(
     `api/Availability/GetClosedDates?tourId=${tourId}&from=${from}&to=${to}`,
+  )
+}
+
+/**
+ * Остаток мест группового формата на `[from, to]` (решения 0.19/0.20, батч 2026-08-29).
+ *
+ * Запрашивается ПАРОЙ с `getClosedDates` — это два ответа на один и тот же вопрос «можно ли
+ * сюда бронировать», и блок брони нуждается в обоих сразу. Публичный, как и закрытые даты:
+ * гасить занятые слоты сайт обязан ещё до логина.
+ *
+ * `slots` в ответе — только слоты С БРОНЯМИ; отсутствие даты означает «свободно всё»
+ * (см. `TourGroupSeatsModel`). Разбор ответа — `shared/booking/groupSeats.ts`, чтобы
+ * «мест осталось» считалось в одном месте, а не в каждом вызывающем.
+ */
+export function getGroupSeats(tourId: number, from: string, to: string): Promise<TourGroupSeatsModel> {
+  return apiFetch<TourGroupSeatsModel>(
+    `api/Availability/GetGroupSeats?tourId=${tourId}&from=${from}&to=${to}`,
   )
 }
 

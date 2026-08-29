@@ -2,9 +2,10 @@
  * Dictionary keys for the failures only the account screen can produce.
  *
  * `shared/auth/authErrors.ts` owns the shared 2200-block codes (bad password, locked account, …)
- * and is the fallback here. The four codes below belong to the email-change flow (B8) and are
- * meaningless anywhere else, so they stay in the feature rather than widening the shared map —
- * the same split `features/admin/users/lib/userCopy.ts` already uses for the admin-only codes.
+ * and is the fallback here. The codes below belong to the email-change flow (B8) and to Telegram
+ * linking, and are meaningless anywhere else, so they stay in the feature rather than widening the
+ * shared map — the same split `features/admin/users/lib/userCopy.ts` already uses for the
+ * admin-only codes.
  */
 
 import { authErrorCodeOf, authErrorMessageKey } from '@/shared/auth'
@@ -21,6 +22,10 @@ export const AccountErrorCode = {
   EmailChangeNotConfirmed: 2210,
   /** Step 3: somebody else already owns that address. */
   EmailAlreadyTaken: 2211,
+  /** Telegram linking (ADR 031): the server has no bot token / webhook secret, so it refuses to
+   * mint a code that would only produce a dead deep link. Answered with 503, not 400 — nothing the
+   * visitor typed is wrong. */
+  TelegramNotConfigured: 2219,
 } as const
 
 export type AccountErrorCode = (typeof AccountErrorCode)[keyof typeof AccountErrorCode]
@@ -30,6 +35,7 @@ const CODE_TO_KEY: Record<number, TranslationKey> = {
   [AccountErrorCode.EmailChangeLinkInvalid]: 'account.error.linkInvalid',
   [AccountErrorCode.EmailChangeNotConfirmed]: 'account.error.notConfirmed',
   [AccountErrorCode.EmailAlreadyTaken]: 'account.error.emailTaken',
+  [AccountErrorCode.TelegramNotConfigured]: 'account.error.telegramNotConfigured',
 }
 
 /**

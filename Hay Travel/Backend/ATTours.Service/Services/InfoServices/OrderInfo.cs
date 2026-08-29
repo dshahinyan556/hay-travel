@@ -39,6 +39,16 @@ namespace ATTours.BusinessServices.Services.InfoServices
                                .ThenInclude(assignment => assignment.Employee)
                        .Include((Expression<Func<Order, ICollection<OrderLine>>>)(x => x.Lines))
                            .ThenInclude(line => line.Payments)
+                       // Детали кастомной заявки (батч 2026-08-29): маршрут и желаемый класс
+                       // с переводами. Грузятся всегда, а не «только для заявок» — граф у
+                       // Include один на запрос, а у обычных строк это LEFT JOIN по пустоте.
+                       .Include((Expression<Func<Order, ICollection<OrderLine>>>)(x => x.Lines))
+                           .ThenInclude(line => line.CustomTransferDetails)
+                               .ThenInclude(details => details.Stops)
+                       .Include((Expression<Func<Order, ICollection<OrderLine>>>)(x => x.Lines))
+                           .ThenInclude(line => line.CustomTransferDetails)
+                               .ThenInclude(details => details.DesiredVehicleClass)
+                                   .ThenInclude((Expression<Func<VehicleClass, ICollection<VehicleClassTranslation>>>)(vehicleClass => vehicleClass.Translations))
                        // Lines->Payments — коллекция внутри коллекции, тот же cartesian-explosion
                        // риск, что у Tour (см. tech-debt.md, TourInfo/TourClientInfo 2026-08-16).
                        .AsSplitQuery();

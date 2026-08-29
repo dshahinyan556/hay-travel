@@ -9,14 +9,18 @@ export type DangerConfirmKind = 'delete' | 'reset'
 interface UserDangerZoneProps {
   /** Full name (or username fallback) shown in the confirm modal's title. */
   userLabel: string
-  /** `false` on your own profile, and on another Admin's profile unless the actor is the SuperAdmin
-   * (D3) — mirrors the backend's guards (`CannotDeleteSelf`, `SuperAdminPrivilegeRequired`).
-   * `UserDetailPage` computes this the same way `UsersTable` computes `isSelf`/`roleLocked`. */
+  /** `false` on your own profile, on another Admin's profile unless the actor is the SuperAdmin
+   * (D3), and ALWAYS on the SuperAdmin's own row (`SuperAdminGuard`, 2026-08-27) — mirrors the
+   * backend's guards (`CannotDeleteSelf`, `SuperAdminPrivilegeRequired`). `UserDetailPage` computes
+   * this the same way `UsersTable` computes `isSelf`/`roleLocked`. */
   canDelete: boolean
-  /** `users.Update`. Disables the reset button rather than hiding it: the row explains what the
-   * action is, and an explanation with no control reads better than a silently missing section. */
+  /** `users.Update`, minus the SuperAdmin lock (2026-08-27) — same `canEditUser` the page hands to
+   * every other editor on the screen. Disables the reset button rather than hiding it: the row
+   * explains what the action is, and an explanation with no control reads better than a silently
+   * missing section. */
   canReset: boolean
-  /** Shown under the reset button when `canReset` is false. */
+  /** Shown under the reset button when `canReset` is false — WHICH of the two reasons it is, picked
+   * by the page, exactly like `deleteDisabledHint`. */
   resetDisabledHint: string
   /** The account being viewed is an Admin (and not you). Only changes the confirm dialog's WORDING:
    * deleting a colleague with panel access has wider consequences than deleting a customer, and the

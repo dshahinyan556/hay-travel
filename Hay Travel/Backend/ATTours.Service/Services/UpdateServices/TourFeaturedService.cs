@@ -12,7 +12,11 @@ namespace ATTours.BusinessServices.Services.UpdateServices
     // По образцу TourActivationService/TourArchivalService: точечные операции без include-графа.
     public class TourFeaturedService : RepositoryCoreBase<Tour, ATToursContextFactory>
     {
-        private const int MaxFeaturedTours = 6;
+        // 6 -> 9 (решение 0.5 батча «Трансферы + формат», 2026-08-29). Единственное место на
+        // бэке, где лимит задан числом: текст ошибки собирается из этой же константы, описание
+        // GlobalErrorCode.TooManyFeaturedTours приведено к ней вручную. Трансферы участвуют в
+        // избранном наравне с турами/экскурсиями (решение 0.4) — отдельного лимита у них нет.
+        private const int MaxFeaturedTours = 9;
 
         private readonly CancellationToken cancellationToken;
 
@@ -33,8 +37,9 @@ namespace ATTours.BusinessServices.Services.UpdateServices
 
             if (isFeatured && !tour.IsFeatured)
             {
-                // One fetch covers both the 6-item cap and "append at the end" — the featured set
-                // is at most 6 rows, so pulling it into memory is cheaper than a second round trip.
+                // One fetch covers both the cap and "append at the end" — the featured set is at
+                // most MaxFeaturedTours rows, so pulling it into memory is cheaper than a second
+                // round trip.
                 var currentlyFeatured = await EntityRepository.AsQueryable()
                                                                .Where(x => x.IsFeatured)
                                                                .ToListAsync(cancellationToken);

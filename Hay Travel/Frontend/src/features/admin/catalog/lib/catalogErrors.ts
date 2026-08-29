@@ -19,11 +19,21 @@ function errorCodeOf(body: unknown): number | undefined {
   return typeof raw === 'number' ? raw : undefined
 }
 
-export function catalogErrorMessage(copy: CatalogCopy, err: unknown, action: string): string {
+/**
+ * @param inUseMessage Override for the `CatalogEntryInUse` wording — the shared `errors.inUse`
+ * says "used in tours", which fits Places/Expenses/Notes/Tags but not Vehicle classes (used by
+ * transfers/orders, not by tours directly). Defaults to the shared message.
+ */
+export function catalogErrorMessage(
+  copy: CatalogCopy,
+  err: unknown,
+  action: string,
+  inUseMessage: string = copy.common.errors.inUse,
+): string {
   const errors = copy.common.errors
   if (err instanceof ApiError) {
     const code = errorCodeOf(err.body)
-    if (code === CATALOG_ENTRY_IN_USE) return errors.inUse
+    if (code === CATALOG_ENTRY_IN_USE) return inUseMessage
     if (code === INVALID_ENTITY_RELATION) return errors.invalidData(action)
     return errors.server(action, err.status)
   }

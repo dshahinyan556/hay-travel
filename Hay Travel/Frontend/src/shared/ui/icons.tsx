@@ -110,6 +110,20 @@ export function GuideIcon(props: IconProps) {
   )
 }
 
+/** Групповой формат продукта (батч 2026-08-29) — две фигуры вместо одной. Тот же силуэт
+ * «голова и плечи», что у `GuideIcon`, плюс вторая, смещённая и обрезанная: рядом с
+ * индивидуальным бейджем разница обязана читаться в 13px, а не только на макете. */
+export function UsersIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="9.5" cy="8.5" r="3.2" />
+      <path d="M3.5 20a6 6 0 0 1 12 0" />
+      <path d="M16 5.6a3.2 3.2 0 0 1 0 5.8" />
+      <path d="M17.6 14.4A6 6 0 0 1 20.5 20" />
+    </Icon>
+  )
+}
+
 /** Identity/name field — same geometry as `GuideIcon` (a head-and-shoulders silhouette), under a
  * distinct name for the auth form's "name"/"username" fields, which are not about guided tours. */
 export function UserIcon(props: IconProps) {
@@ -244,6 +258,18 @@ export function SaveIcon(props: IconProps) {
   )
 }
 
+/** Filled triangle — "Запустить сейчас" on the background-jobs screen (`AdminActionButton`
+ * `secondary`, deliberately not `SaveIcon`: this is an immediate action outside the toolbar's
+ * draft, never a "commit the form" gesture). Same 24×24 box as the rest of this set, filled
+ * rather than stroked so it reads at the small `size={17}` toolbar icons use. */
+export function PlayIcon(props: IconProps) {
+  return (
+    <Icon {...props} fill="currentColor" stroke="none">
+      <path d="M7 4.7c0-1 1.1-1.7 2-1.1l10.5 6.7a1.3 1.3 0 0 1 0 2.2L9 19.2c-.9.6-2-.1-2-1.1V4.7Z" />
+    </Icon>
+  )
+}
+
 export function RefreshIcon(props: IconProps) {
   return (
     <Icon {...props}>
@@ -276,6 +302,52 @@ export function ArrowRightIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="M4 12h15M13 6l6 6-6 6" />
+    </Icon>
+  )
+}
+
+/**
+ * Транспорт — маркер трансфера (батч 2026-08-29): чип на карточке, вкладка «Трансферы» в
+ * нижней навигации, подпись «цена за авто». Силуэт седана в том же контракте 24×24 / stroke 1.5,
+ * что и остальная семья: одна линия крыши и капота, два колеса.
+ */
+export function CarIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 16h18v-3.2l-1.6-4A2 2 0 0 0 17.5 7.5h-11A2 2 0 0 0 4.6 8.8L3 12.8Z" />
+      <path d="M3 12.8h18M4 16v2.5M20 16v2.5" />
+      <path d="M7.5 15.9h.01M16.5 15.9h.01" />
+    </Icon>
+  )
+}
+
+/** Маршрут — две точки, соединённые изгибом. Заголовок блока «Маршрут» и кнопка входа в
+ * конструктор своего трансфера. */
+export function RouteIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="6" cy="18" r="2.4" />
+      <circle cx="18" cy="6" r="2.4" />
+      <path d="M8.4 18h5.1a4 4 0 0 0 0-8H10.5a4 4 0 0 1 0-8" />
+    </Icon>
+  )
+}
+
+/** Стрелка вверх — ручное перемещение остановки на мобильном (пара к `ArrowDownIcon`). */
+export function ArrowUpIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 19V6M6 12l6-6 6 6" />
+    </Icon>
+  )
+}
+
+/** Стрелка вниз — пара к `ArrowUpIcon`. Не `ChevronDownIcon`: та означает «раскрыть список»,
+ * а не «сдвинуть строку», и путать их в одном ряду кнопок нельзя. */
+export function ArrowDownIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 5v13M6 12l6 6 6-6" />
     </Icon>
   )
 }

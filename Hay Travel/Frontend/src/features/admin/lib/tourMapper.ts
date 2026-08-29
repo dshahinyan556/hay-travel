@@ -11,9 +11,11 @@ import {
   ExpenseTranslationType,
   LanguageCode,
   TourDayTranslationType,
+  TourFormat,
   TourNoteType,
   TourTranslationType,
   TourType,
+  TransferRoutePointKind,
 } from '@/features/admin/lib/enums'
 import type {
   ExpenseTemplateInfoModel,
@@ -25,6 +27,7 @@ import type {
   TourNoteTemplateInfoModel,
   TranslatableCreateModel,
   TranslatableInfoModel,
+  VehicleClassInfoModel,
 } from '@/shared/types/attours'
 import type {
   ExpenseFormState,
@@ -33,8 +36,11 @@ import type {
   LocalizedListItem,
   PlaceOption,
   RoutePointFormState,
+  StartTimeFormState,
   TourDayFormState,
   TourFormState,
+  TransferPriceFormState,
+  TransferRoutePointFormState,
 } from '@/features/admin/types/form'
 
 /* -------------------------------------------------------------------------- */
@@ -75,6 +81,34 @@ export const emptyExpense = (): ExpenseFormState => ({
   description: emptyLocalized(),
 })
 
+/** A fresh, empty start-time row. Blank rather than pre-filled: an admin adding a slot always
+ * has a specific time in mind, and a default like "09:00" would silently save itself if they
+ * clicked Add and got distracted. */
+export const emptyStartTime = (): StartTimeFormState => ({
+  key: newKey(),
+  time: '',
+})
+
+/** A fresh transfer route point of the given role. `From`/`To` are created once when the form is
+ * built (they are single-valued fields); `Stop` is what the add button produces. */
+export const emptyTransferRoutePoint = (
+  kind: TransferRoutePointFormState['kind'],
+): TransferRoutePointFormState => ({
+  key: newKey(),
+  kind,
+  text: emptyLocalized(),
+})
+
+export const emptyTransferStop = (): TransferRoutePointFormState =>
+  emptyTransferRoutePoint(TransferRoutePointKind.Stop)
+
+export const emptyTransferPrice = (): TransferPriceFormState => ({
+  key: newKey(),
+  vehicleClassId: null,
+  oneWayPrice: '',
+  roundTripPrice: '',
+})
+
 export const emptyDay = (): TourDayFormState => ({
   key: newKey(),
   price: '',
@@ -109,6 +143,27 @@ export function writeLocalized(type: number, value: Localized): TranslatableCrea
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Time of day: 'HH:mm:ss' (wire) <-> 'HH:mm' (form)                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * `TimeOnly` is serialized by System.Text.Json as `'HH:mm:ss'` (and `'HH:mm:ss.fffffff'` when it
+ * carries sub-second precision, which start times never do). `<input type="time">` binds to
+ * `'HH:mm'`, so the two are trimmed to each other here — the only place that knows either format.
+ * Anything unparseable becomes `''`, which the form renders as an empty (invalid) row rather than
+ * dropping the slot silently.
+ */
+export function wireTimeToForm(value: string | null | undefined): string {
+  const match = /^(\d{2}):(\d{2})/.exec(value ?? '')
+  return match ? `${match[1]}:${match[2]}` : ''
+}
+
+/** `'HH:mm'` -> `'HH:mm:00'`. Only called for values validation already accepted. */
+export function formTimeToWire(value: string): string {
+  return `${value}:00`
+}
+
+/* -------------------------------------------------------------------------- */
 /*  Catalog suggestions (autocomplete)                                        */
 /* -------------------------------------------------------------------------- */
 
@@ -139,6 +194,28 @@ function placeImageUrls(place: PlaceInfoModel): string[] {
   return fallback ? [fallback] : []
 }
 
+/** One pickable vehicle class in the transfer's price table. `capacity`/`luggageCapacity` are
+ * shown next to the name so the admin prices the right class without opening the catalog;
+ * `isActive` lets the picker hide retired classes while still naming one an existing price row
+ * already points at. */
+export interface VehicleClassOption {
+  id: number
+  name: Localized
+  capacity: number
+  luggageCapacity: number
+  isActive: boolean
+}
+
+export function vehicleClassesToOptions(classes: VehicleClassInfoModel[]): VehicleClassOption[] {
+  return sortBySortOrder(classes).map((vc) => ({
+    id: vc.id,
+    name: readLocalized(vc.translations, CATALOG_NAME_TYPE),
+    capacity: vc.capacity,
+    luggageCapacity: vc.luggageCapacity,
+    isActive: vc.isActive,
+  }))
+}
+
 export function expenseTemplatesToSuggestions(templates: ExpenseTemplateInfoModel[]): Localized[] {
   return templates.map((t) => readLocalized(t.translations, CATALOG_NAME_TYPE))
 }
@@ -163,10 +240,102 @@ function sortBySortOrder<T extends { sortOrder: number }>(items: T[]): T[] {
   return [...items].sort((a, b) => a.sortOrder - b.sortOrder)
 }
 
+/* ---- start times / transfer graph (shared by the create and edit directions) ---- */
+
+/** Create rows carry no `id`, info rows do — one reader serves both, `serverId` simply stays
+ * undefined for a freshly initialised skeleton. */
+type AnyStartTime = { id?: number; time: string; sortOrder: number }
+type AnyTransferRoutePoint = {
+  id?: number
+  kind: number
+  sortOrder: number
+  translations?: AnyTranslation[] | null
+}
+type AnyTransferPrice = {
+  id?: number
+  vehicleClassId: number
+  oneWayPrice: number
+  roundTripPrice: number
+}
+
+function readStartTimes(rows: AnyStartTime[] | null | undefined): StartTimeFormState[] {
+  return sortBySortOrder(rows ?? []).map((row) => ({
+    key: newKey(),
+    serverId: row.id,
+    time: wireTimeToForm(row.time),
+  }))
+}
+
+function readTransferRoutePoint(row: AnyTransferRoutePoint): TransferRoutePointFormState {
+  return {
+    key: newKey(),
+    serverId: row.id,
+    kind: row.kind as TransferRoutePointFormState['kind'],
+    text: readLocalized(row.translations ?? [], ExpenseTranslationType.Description),
+  }
+}
+
+/**
+ * Split the flat wire route into the form's three slots. The backend guarantees exactly one
+ * `From` and one `To` on a saved transfer, but a tour/excursion has none at all and the create
+ * skeleton could in principle come back short — a missing endpoint falls back to a blank point so
+ * the form always has something to bind to (validation then flags it as empty).
+ */
+function readTransferRoute(rows: AnyTransferRoutePoint[] | null | undefined): {
+  from: TransferRoutePointFormState
+  stops: TransferRoutePointFormState[]
+  to: TransferRoutePointFormState
+} {
+  const ordered = sortBySortOrder(rows ?? [])
+  const from = ordered.find((r) => r.kind === TransferRoutePointKind.From)
+  const to = ordered.find((r) => r.kind === TransferRoutePointKind.To)
+  return {
+    from: from ? readTransferRoutePoint(from) : emptyTransferRoutePoint(TransferRoutePointKind.From),
+    stops: ordered.filter((r) => r.kind === TransferRoutePointKind.Stop).map(readTransferRoutePoint),
+    to: to ? readTransferRoutePoint(to) : emptyTransferRoutePoint(TransferRoutePointKind.To),
+  }
+}
+
+function readTransferPrices(rows: AnyTransferPrice[] | null | undefined): TransferPriceFormState[] {
+  return (rows ?? []).map((row) => ({
+    key: newKey(),
+    serverId: row.id,
+    vehicleClassId: row.vehicleClassId,
+    oneWayPrice: String(row.oneWayPrice),
+    roundTripPrice: String(row.roundTripPrice),
+  }))
+}
+
+/** Form -> wire for the route: `From`, then the stops in their display order, then `To`. One
+ * flat, densely numbered list — the backend reconciles it by id and re-reads `kind`/`sortOrder`
+ * as given. */
+function writeTransferRoute(form: TourFormState): TransferRoutePointFormState[] {
+  return [
+    { ...form.transferFrom, kind: TransferRoutePointKind.From },
+    ...form.transferStops.map((s) => ({ ...s, kind: TransferRoutePointKind.Stop })),
+    { ...form.transferTo, kind: TransferRoutePointKind.To },
+  ]
+}
+
 /** Build the create form from the `InitTour` skeleton (translations pre-seeded as null). */
 export function createModelToForm(dto: TourCreateModel): TourFormState {
+  // Старый бэкенд этих полей не прислал бы вовсе, поэтому `Partial`, а не прямое чтение:
+  // скелет с пустым форматом должен открываться как «индивидуальный», а не падать.
+  const wire = dto as Partial<TourCreateModel>
+  const type = (dto.type as TourType) ?? TourType.Tour
+  const route = readTransferRoute(wire.transferRoutePoints)
   return {
-    type: (dto.type as TourType) ?? TourType.Tour,
+    type,
+    // A tour/excursion always has a format; the skeleton seeds `Individual`, and an older backend
+    // that sends nothing gets the same default rather than an unsaveable blank radio group.
+    format: type === TourType.Transfer ? null : ((wire.format as TourFormat) ?? TourFormat.Individual),
+    groupPricePerPerson: wire.groupPricePerPerson == null ? '' : String(wire.groupPricePerPerson),
+    groupCapacity: wire.groupCapacity == null ? '' : String(wire.groupCapacity),
+    startTimes: readStartTimes(wire.startTimes),
+    transferFrom: route.from,
+    transferStops: route.stops,
+    transferTo: route.to,
+    transferPrices: readTransferPrices(wire.transferPrices),
     mainImageUrl: dto.mainImageUrl ?? '',
     isActive: dto.isActive,
     requiresPrepayment: dto.requiresPrepayment,
@@ -214,8 +383,20 @@ export function createModelToForm(dto: TourCreateModel): TourFormState {
 
 /** Build the edit form from `InitUpdate`, carrying server ids for the update diff later. */
 export function infoToForm(dto: TourInfoModel): TourFormState {
+  const type = dto.type as TourType
+  const route = readTransferRoute(dto.transferRoutePoints)
   return {
-    type: dto.type as TourType,
+    type,
+    // Products created before the batch have no format stored; the migration back-fills
+    // `Individual`, and this mirrors it so an un-migrated record still opens on a valid radio.
+    format: type === TourType.Transfer ? null : ((dto.format as TourFormat) ?? TourFormat.Individual),
+    groupPricePerPerson: dto.groupPricePerPerson == null ? '' : String(dto.groupPricePerPerson),
+    groupCapacity: dto.groupCapacity == null ? '' : String(dto.groupCapacity),
+    startTimes: readStartTimes(dto.startTimes),
+    transferFrom: route.from,
+    transferStops: route.stops,
+    transferTo: route.to,
+    transferPrices: readTransferPrices(dto.transferPrices),
     mainImageUrl: dto.mainImageUrl ?? '',
     isActive: dto.isActive,
     requiresPrepayment: dto.requiresPrepayment,
@@ -331,23 +512,92 @@ function dayTexts(form: TourFormState, day: TourDayFormState): Pick<TourDayFormS
   return day
 }
 
+/**
+ * The type/format-dependent slice of the payload, identical for create and update.
+ *
+ * Three domain rules are enforced here rather than by hoping the UI never produces a stale value
+ * (switching the type mid-create leaves the previous branch's data in state on purpose, so the
+ * admin can switch back without retyping):
+ *  - a transfer has NO format, NO group pricing, NO start times, and no days/notes/expenses/
+ *    regions/tags/discount — the backend rejects all of them (`TourValidationService`);
+ *  - a tour/excursion has no transfer route and no transfer prices;
+ *  - group pricing is sent only for `Group`/`Both`; at `Individual` both fields go as `null`,
+ *    which is exactly what `InvalidGroupPricing`/2051 checks.
+ */
+function typeDependentFields(form: TourFormState) {
+  const transfer = form.type === TourType.Transfer
+  const grouped = form.format === TourFormat.Group || form.format === TourFormat.Both
+  return {
+    format: transfer ? null : form.format,
+    groupPricePerPerson:
+      !transfer && grouped && form.groupPricePerPerson.trim() !== ''
+        ? parseDecimal(form.groupPricePerPerson)
+        : null,
+    groupCapacity:
+      !transfer && grouped && form.groupCapacity.trim() !== ''
+        ? parseInteger(form.groupCapacity)
+        : null,
+    /** The form rows themselves (not wire rows) — the two directions need different id handling. */
+    startTimes: transfer ? [] : form.startTimes,
+    /** Only a transfer sends a route — and it always sends the full one. */
+    transferRoute: transfer ? writeTransferRoute(form) : [],
+    transferPrices: transfer ? form.transferPrices : [],
+    /** A transfer keeps its main image and texts; everything else in the "rich" half is dropped. */
+    days: transfer ? [] : form.days,
+    notes: transfer
+      ? { organizationalDetails: [], restrictions: [], included: [], notIncluded: [] }
+      : {
+          organizationalDetails: form.organizationalDetails,
+          restrictions: form.restrictions,
+          included: form.included,
+          notIncluded: form.notIncluded,
+        },
+    additionalExpenses: transfer ? [] : form.additionalExpenses,
+    regions: transfer ? [] : form.regions,
+    tags: transfer ? [] : form.tags,
+    discountPercent:
+      transfer || form.discountPercent.trim() === '' ? null : parseDecimal(form.discountPercent),
+    discountStartDate: transfer || form.discountStartDate.trim() === '' ? null : form.discountStartDate,
+    discountValidUntil:
+      transfer || form.discountValidUntil.trim() === '' ? null : form.discountValidUntil,
+  }
+}
+
 /** Assemble the create payload. Emits no ids; derives sortOrder from array index. */
 export function formToCreateModel(form: TourFormState): TourCreateModel {
+  const typed = typeDependentFields(form)
   return {
     type: form.type,
+    format: typed.format,
+    groupPricePerPerson: typed.groupPricePerPerson,
+    groupCapacity: typed.groupCapacity,
+    startTimes: typed.startTimes.map((slot, i) => ({
+      time: formTimeToWire(slot.time),
+      sortOrder: i,
+    })),
+    transferRoutePoints: typed.transferRoute.map((rp, i) => ({
+      kind: rp.kind,
+      sortOrder: i,
+      translations: writeLocalized(ExpenseTranslationType.Description, rp.text),
+    })),
+    transferPrices: typed.transferPrices.map((row) => ({
+      vehicleClassId: row.vehicleClassId ?? 0,
+      oneWayPrice: parseDecimal(row.oneWayPrice),
+      roundTripPrice: parseDecimal(row.roundTripPrice),
+    })),
     mainImageUrl: form.mainImageUrl.trim() === '' ? null : form.mainImageUrl.trim(),
     isActive: form.isActive,
     requiresPrepayment: form.requiresPrepayment,
-    discountPercent: form.discountPercent.trim() === '' ? null : parseDecimal(form.discountPercent),
-    discountStartDate: form.discountStartDate.trim() === '' ? null : form.discountStartDate,
-    discountValidUntil: form.discountValidUntil.trim() === '' ? null : form.discountValidUntil,
+    discountPercent: typed.discountPercent,
+    discountStartDate: typed.discountStartDate,
+    discountValidUntil: typed.discountValidUntil,
     translations: [
       ...writeLocalized(TourTranslationType.Title, form.title),
       ...writeLocalized(TourTranslationType.ShortDescription, form.shortDescription),
       ...writeLocalized(TourTranslationType.Description, form.description),
       ...writeLocalized(TourTranslationType.Duration, form.duration),
     ],
-    tourDays: form.days.map((day) => {
+    tourDays: typed.days.map((day) => {
       const texts = dayTexts(form, day)
       return {
         price: parseDecimal(day.price),
@@ -365,34 +615,34 @@ export function formToCreateModel(form: TourFormState): TourCreateModel {
         })),
       }
     }) satisfies TourDayCreateModel[],
-    additionalExpenses: form.additionalExpenses.map((e) => ({
+    additionalExpenses: typed.additionalExpenses.map((e) => ({
       amount: e.amount.trim() === '' ? null : parseDecimal(e.amount),
       translations: writeLocalized(ExpenseTranslationType.Description, e.description),
     })),
     notes: [
-      ...form.organizationalDetails.map((o, i) => ({
+      ...typed.notes.organizationalDetails.map((o, i) => ({
         type: TourNoteType.OrganizationalDetail,
         sortOrder: i,
         translations: writeLocalized(ExpenseTranslationType.Description, o.text),
       })),
-      ...form.restrictions.map((o, i) => ({
+      ...typed.notes.restrictions.map((o, i) => ({
         type: TourNoteType.Restriction,
         sortOrder: i,
         translations: writeLocalized(ExpenseTranslationType.Description, o.text),
       })),
-      ...form.included.map((o, i) => ({
+      ...typed.notes.included.map((o, i) => ({
         type: TourNoteType.Included,
         sortOrder: i,
         translations: writeLocalized(ExpenseTranslationType.Description, o.text),
       })),
-      ...form.notIncluded.map((o, i) => ({
+      ...typed.notes.notIncluded.map((o, i) => ({
         type: TourNoteType.NotIncluded,
         sortOrder: i,
         translations: writeLocalized(ExpenseTranslationType.Description, o.text),
       })),
     ],
-    regions: form.regions.map((r, i) => ({ regionId: r.regionId, sortOrder: i })),
-    tags: form.tags.map((tg) => ({ tagId: tg.tagId })),
+    regions: typed.regions.map((r, i) => ({ regionId: r.regionId, sortOrder: i })),
+    tags: typed.tags.map((tg) => ({ tagId: tg.tagId })),
   }
 }
 
@@ -420,6 +670,7 @@ function asInfoTranslations(rows: TranslatableCreateModel[]): TranslatableInfoMo
  * are irrelevant.
  */
 export function formToUpdateModel(form: TourFormState, tourId: number): TourInfoModel {
+  const typed = typeDependentFields(form)
   return {
     id: tourId,
     type: form.type,
@@ -431,9 +682,32 @@ export function formToUpdateModel(form: TourFormState, tourId: number): TourInfo
     featuredSortOrder: 0,
     // NOT ignored by UpdateTour, unlike the three flags above (B12, 2026-08-13).
     requiresPrepayment: form.requiresPrepayment,
-    discountPercent: form.discountPercent.trim() === '' ? null : parseDecimal(form.discountPercent),
-    discountStartDate: form.discountStartDate.trim() === '' ? null : form.discountStartDate,
-    discountValidUntil: form.discountValidUntil.trim() === '' ? null : form.discountValidUntil,
+    format: typed.format,
+    groupPricePerPerson: typed.groupPricePerPerson,
+    groupCapacity: typed.groupCapacity,
+    // Start times, the transfer route and the transfer prices are reconciled by id like the rest
+    // of the graph — `null` is NOT "leave alone" for them (only `regions`/`tags` have that
+    // exception), so the real list is always sent, empty included.
+    startTimes: typed.startTimes.map((slot, i) => ({
+      id: slot.serverId ?? NEW,
+      time: formTimeToWire(slot.time),
+      sortOrder: i,
+    })),
+    transferRoutePoints: typed.transferRoute.map((rp, i) => ({
+      id: rp.serverId ?? NEW,
+      kind: rp.kind,
+      sortOrder: i,
+      translations: asInfoTranslations(writeLocalized(ExpenseTranslationType.Description, rp.text)),
+    })),
+    transferPrices: typed.transferPrices.map((row) => ({
+      id: row.serverId ?? NEW,
+      vehicleClassId: row.vehicleClassId ?? 0,
+      oneWayPrice: parseDecimal(row.oneWayPrice),
+      roundTripPrice: parseDecimal(row.roundTripPrice),
+    })),
+    discountPercent: typed.discountPercent,
+    discountStartDate: typed.discountStartDate,
+    discountValidUntil: typed.discountValidUntil,
     mainImageUrl: form.mainImageUrl.trim() === '' ? null : form.mainImageUrl.trim(),
     translations: asInfoTranslations([
       ...writeLocalized(TourTranslationType.Title, form.title),
@@ -441,7 +715,7 @@ export function formToUpdateModel(form: TourFormState, tourId: number): TourInfo
       ...writeLocalized(TourTranslationType.Description, form.description),
       ...writeLocalized(TourTranslationType.Duration, form.duration),
     ]),
-    tourDays: form.days.map((day) => {
+    tourDays: typed.days.map((day) => {
       const texts = dayTexts(form, day)
       return {
       id: day.serverId ?? NEW,
@@ -461,31 +735,31 @@ export function formToUpdateModel(form: TourFormState, tourId: number): TourInfo
       })),
       }
     }),
-    additionalExpenses: form.additionalExpenses.map((e) => ({
+    additionalExpenses: typed.additionalExpenses.map((e) => ({
       id: e.serverId ?? NEW,
       amount: e.amount.trim() === '' ? null : parseDecimal(e.amount),
       translations: asInfoTranslations(writeLocalized(ExpenseTranslationType.Description, e.description)),
     })),
     notes: [
-      ...form.organizationalDetails.map((o, i) => ({
+      ...typed.notes.organizationalDetails.map((o, i) => ({
         id: o.serverId ?? NEW,
         type: TourNoteType.OrganizationalDetail,
         sortOrder: i,
         translations: asInfoTranslations(writeLocalized(ExpenseTranslationType.Description, o.text)),
       })),
-      ...form.restrictions.map((o, i) => ({
+      ...typed.notes.restrictions.map((o, i) => ({
         id: o.serverId ?? NEW,
         type: TourNoteType.Restriction,
         sortOrder: i,
         translations: asInfoTranslations(writeLocalized(ExpenseTranslationType.Description, o.text)),
       })),
-      ...form.included.map((o, i) => ({
+      ...typed.notes.included.map((o, i) => ({
         id: o.serverId ?? NEW,
         type: TourNoteType.Included,
         sortOrder: i,
         translations: asInfoTranslations(writeLocalized(ExpenseTranslationType.Description, o.text)),
       })),
-      ...form.notIncluded.map((o, i) => ({
+      ...typed.notes.notIncluded.map((o, i) => ({
         id: o.serverId ?? NEW,
         type: TourNoteType.NotIncluded,
         sortOrder: i,
@@ -497,16 +771,23 @@ export function formToUpdateModel(form: TourFormState, tourId: number): TourInfo
     // `TourInfoModel.regions`'s doc comment. `slug` is unused by the update mapping (`UpdateTour`
     // ignores it, matching by `RegionId`) — sent blank rather than threading the full region list
     // through just to fill a field nothing reads.
-    regions: form.regions.map((r, i) => ({ id: r.serverId ?? NEW, regionId: r.regionId, slug: '', sortOrder: i })),
+    regions: typed.regions.map((r, i) => ({ id: r.serverId ?? NEW, regionId: r.regionId, slug: '', sortOrder: i })),
     // Always the real list too (never omitted) — same "the admin form can express it, so never
     // rely on the backend's null-means-untouched contract" reasoning as `regions` above.
-    tags: form.tags.map((tg) => ({ id: tg.serverId ?? NEW, tagId: tg.tagId })),
+    tags: typed.tags.map((tg) => ({ id: tg.serverId ?? NEW, tagId: tg.tagId })),
   }
 }
 
 /** Parse a user-entered decimal string; empty/invalid becomes 0. */
 function parseDecimal(value: string): number {
   const n = Number(value.replace(',', '.'))
+  return Number.isFinite(n) ? n : 0
+}
+
+/** Parse a user-entered whole number (seats). Empty/invalid becomes 0 — validation has already
+ * rejected those before a submit can reach here. */
+function parseInteger(value: string): number {
+  const n = Number.parseInt(value.trim(), 10)
   return Number.isFinite(n) ? n : 0
 }
 

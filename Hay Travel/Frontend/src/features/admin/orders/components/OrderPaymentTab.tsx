@@ -4,6 +4,7 @@ import { useCopy } from '@/shared/i18n/defineCopy'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { OrderPaymentType, type OrderInfoModel } from '@/shared/types/booking'
 import { formatOrderDateTime, formatOrderMoney, ordersCopy, type OrdersCopy } from '../lib/ordersCopy'
+import { lineTitle } from '../lib/ordersModel'
 
 export interface OrderPaymentTabProps {
   order: OrderInfoModel
@@ -118,8 +119,8 @@ export function OrderPaymentTab({ order, pending, createHint = null, onAddPaymen
       {order.lines.map((line) => (
         <div key={line.id} className="rounded-xl border border-neutral-200 bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="font-semibold text-neutral-900">{line.tourTitle ?? copy.tourFallback(line.tourId)}</p>
+            <div className="min-w-0">
+              <p className="break-words font-semibold text-neutral-900">{lineTitle(line, copy)}</p>
               <p className="text-xs text-neutral-500">{line.tourDate}</p>
             </div>
             <p className="text-xs text-neutral-500">

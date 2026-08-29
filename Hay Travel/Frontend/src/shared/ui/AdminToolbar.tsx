@@ -24,8 +24,16 @@ export interface AdminToolbarActionState {
 export interface AdminToolbarProps {
   onCancel: () => void
   onSave: () => void
-  onAdd: () => void
-  onDelete: () => void
+  /**
+   * `onAdd`/`onDelete` — and their `addState`/`deleteState` — are OPTIONAL (background-jobs
+   * screen, 2026-08-29): a record whose set is fixed by server code (`BackgroundJobCatalog`) can
+   * be neither created nor deleted, and forcing a caller to wire two handlers that would 403 on
+   * the backend anyway was worse than a conditional render. Omit `onAdd` and Add doesn't render
+   * at all (not "rendered disabled") — same for `onDelete`/Delete, together with the divider that
+   * used to separate it from Add.
+   */
+  onAdd?: () => void
+  onDelete?: () => void
   cancelState?: AdminToolbarActionState
   saveState?: AdminToolbarActionState
   addState?: AdminToolbarActionState
@@ -121,30 +129,36 @@ export function AdminToolbar({
           className={saveState.hint ? 'w-full sm:w-auto' : 'flex-1 sm:flex-none'}
         />
       </Tooltip>
-      <Tooltip enabled={Boolean(addState.hint)} content={addState.hint} cursor="not-allowed">
-        <AdminActionButton
-          label={text.add}
-          icon={<PlusIcon size={17} />}
-          onClick={onAdd}
-          disabled={addState.disabled}
-          pending={addState.pending}
-          collapseOnMobile
-        />
-      </Tooltip>
-      {/* Divider before Delete — sets the destructive action apart so it's never a stray misclick
-          next to Add. Hidden on mobile (hand-off table: "мобильный: убирается"). */}
-      <span aria-hidden="true" className="mx-1 hidden h-[22px] w-px shrink-0 bg-neutral-200 sm:block" />
-      <Tooltip enabled={Boolean(deleteState.hint)} content={deleteState.hint} cursor="not-allowed">
-        <AdminActionButton
-          label={text.delete}
-          icon={<TrashIcon size={17} />}
-          onClick={onDelete}
-          disabled={deleteState.disabled}
-          pending={deleteState.pending}
-          variant="destructive"
-          collapseOnMobile
-        />
-      </Tooltip>
+      {onAdd && (
+        <Tooltip enabled={Boolean(addState.hint)} content={addState.hint} cursor="not-allowed">
+          <AdminActionButton
+            label={text.add}
+            icon={<PlusIcon size={17} />}
+            onClick={onAdd}
+            disabled={addState.disabled}
+            pending={addState.pending}
+            collapseOnMobile
+          />
+        </Tooltip>
+      )}
+      {onDelete && (
+        <>
+          {/* Divider before Delete — sets the destructive action apart so it's never a stray
+              misclick next to Add. Hidden on mobile (hand-off table: "мобильный: убирается"). */}
+          <span aria-hidden="true" className="mx-1 hidden h-[22px] w-px shrink-0 bg-neutral-200 sm:block" />
+          <Tooltip enabled={Boolean(deleteState.hint)} content={deleteState.hint} cursor="not-allowed">
+            <AdminActionButton
+              label={text.delete}
+              icon={<TrashIcon size={17} />}
+              onClick={onDelete}
+              disabled={deleteState.disabled}
+              pending={deleteState.pending}
+              variant="destructive"
+              collapseOnMobile
+            />
+          </Tooltip>
+        </>
+      )}
       {actionsMenu}
     </div>
   )

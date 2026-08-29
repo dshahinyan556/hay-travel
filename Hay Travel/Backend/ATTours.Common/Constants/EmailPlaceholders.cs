@@ -39,7 +39,13 @@ namespace ATTours.Common.Constants
                 [EmailActionKey.OrderUnassignEmployee] =
                     [OrderNumber, EmployeeName, EmployeeRole],
                 [EmailActionKey.OrderSendToClient] =
-                    [OrderNumber, ClientName]
+                    [OrderNumber, ClientName],
+
+                // Тот же набор, что у OrderCreated: письмо об автоотмене читает тот же
+                // админ и о том же заказе — ему нужно узнать бронь, а не выяснять, какое
+                // из полей тут отличается от письма о её создании.
+                [EmailActionKey.OrderAutoCancelled] =
+                    [OrderNumber, TourTitle, TourDate, GuestCount, OrderLines, ClientName, ClientEmail]
             };
 
         private static readonly IReadOnlyDictionary<EmailActionKey, string> DisplayNames =
@@ -48,7 +54,8 @@ namespace ATTours.Common.Constants
                 [EmailActionKey.OrderCreated] = "Новая бронь с сайта",
                 [EmailActionKey.OrderAssignEmployee] = "Назначение исполнителя",
                 [EmailActionKey.OrderUnassignEmployee] = "Снятие исполнителя",
-                [EmailActionKey.OrderSendToClient] = "Отправка заказа клиенту"
+                [EmailActionKey.OrderSendToClient] = "Отправка заказа клиенту",
+                [EmailActionKey.OrderAutoCancelled] = "Автоотмена неподтверждённой брони"
             };
 
         // RecipientDescriptions удалены (редизайн 2026-08-23): описание получателя больше не

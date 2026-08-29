@@ -1,14 +1,23 @@
-import { useMemo } from 'react'
-import { Link, useLoaderData } from 'react-router'
+import { useMemo, useState } from 'react'
+import { useLoaderData, useNavigate } from 'react-router'
 import type { LoaderFunctionArgs } from 'react-router'
 import { UnsavedChangesModal } from '@/shared/ui'
 import { useUnsavedChangesGuard } from '@/shared/hooks'
+import { AdminScreen, useScreenPermission } from '@/shared/auth'
+import { ApiError } from '@/shared/lib/http'
 import { useCopy } from '@/shared/i18n/defineCopy'
+import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { getStoredLocale } from '@/shared/lib/locale'
 import { TourNoteType, TourType } from '@/features/admin/lib/enums'
-import { adminEnumsCopy } from '@/features/admin/lib/adminEnumsCopy'
-import { getAllTours, initUpdate } from '@/features/admin/api/adminTours'
-import { getExpenseTemplates, getPlaces, getRegions, getTags, getTourNoteTemplates } from '@/features/admin/api/adminCatalog'
+import { getAllTours, initUpdate, setTourArchived } from '@/features/admin/api/adminTours'
+import {
+  getExpenseTemplates,
+  getPlaces,
+  getRegions,
+  getTags,
+  getTourNoteTemplates,
+  getVehicleClasses,
+} from '@/features/admin/api/adminCatalog'
 import {
   expenseTemplatesToSuggestions,
   infoToForm,
@@ -16,13 +25,17 @@ import {
   placesToOptions,
   placesToSuggestions,
   toursToDaySources,
+  vehicleClassesToOptions,
 } from '@/features/admin/lib/tourMapper'
-import type { DaySource } from '@/features/admin/lib/tourMapper'
+import type { DaySource, VehicleClassOption } from '@/features/admin/lib/tourMapper'
 import type { CatalogSuggestions } from '@/features/admin/types/form'
 import type { RegionInfoModel, TagInfoModel, TourInfoModel } from '@/shared/types/attours'
 import { useTourForm } from './hooks/useTourForm'
 import { tourFormCopy } from './lib/tourFormCopy'
+import { tourTitle } from '@/features/admin/ui/TourTableParts'
 import { TourForm } from './components/TourForm'
+import { TourArchiveModal } from './components/TourArchiveModal'
+import { TourFormScreen } from './components/TourFormScreen'
 
 /**
  * Loads the full edit model for the tour named by `:id`, plus the reference catalogs used for
@@ -37,15 +50,19 @@ export async function tourEditLoader({ params }: LoaderFunctionArgs) {
     // never reads this body, so it stays a plain technical statusText.
     throw new Response('Invalid tour id', { status: 400 })
   }
-  const [dto, places, expenseTemplates, noteTemplates, regions, tags, allTours] = await Promise.all([
-    initUpdate(id),
-    getPlaces(),
-    getExpenseTemplates(),
-    getTourNoteTemplates(),
-    getRegions(),
-    getTags(),
-    getAllTours(),
-  ])
+  const [dto, places, expenseTemplates, noteTemplates, regions, tags, allTours, vehicleClasses] =
+    await Promise.all([
+      initUpdate(id),
+      getPlaces(),
+      getExpenseTemplates(),
+      getTourNoteTemplates(),
+      getRegions(),
+      getTags(),
+      getAllTours(),
+      // Мягко — см. тот же вызов в `tourCreateLoader`: справочник классов авто за отдельным
+      // правом, и его отсутствие не должно ломать редактирование обычного тура.
+      getVehicleClasses().catch(() => []),
+    ])
   const catalogSuggestions: CatalogSuggestions = {
     routePoints: placesToSuggestions(places),
     placeOptions: placesToOptions(places),
@@ -58,11 +75,19 @@ export async function tourEditLoader({ params }: LoaderFunctionArgs) {
   // Excludes the tour being edited — filling one of its own days from itself is meaningless.
   // A loader runs outside React, so the copy is resolved from the stored locale, not `useCopy`.
   const daySources = toursToDaySources(allTours, tourFormCopy(getStoredLocale()).days.label, dto.id)
-  return { dto, catalogSuggestions, regions, tags, daySources }
+  return {
+    dto,
+    catalogSuggestions,
+    regions,
+    tags,
+    daySources,
+    vehicleClasses: vehicleClassesToOptions(vehicleClasses),
+  }
 }
 
 export function TourEditPage() {
-  const { dto, catalogSuggestions, regions, tags, daySources } = useLoaderData<typeof tourEditLoader>()
+  const { dto, catalogSuggestions, regions, tags, daySources, vehicleClasses } =
+    useLoaderData<typeof tourEditLoader>()
   // Keyed by id so navigating between two edit URLs remounts the editor with fresh state
   // instead of carrying the previous tour's form over.
   return (
@@ -73,6 +98,7 @@ export function TourEditPage() {
       regions={regions}
       tags={tags}
       daySources={daySources}
+      vehicleClasses={vehicleClasses}
     />
   )
 }
@@ -83,56 +109,114 @@ function TourEditView({
   regions,
   tags,
   daySources,
+  vehicleClasses,
 }: {
   dto: TourInfoModel
   catalogSuggestions: CatalogSuggestions
   regions: RegionInfoModel[]
   tags: TagInfoModel[]
   daySources: DaySource[]
+  vehicleClasses: VehicleClassOption[]
 }) {
   const initialState = useMemo(() => infoToForm(dto), [dto])
+  const navigate = useNavigate()
+  const { locale } = useLocale()
   const copy = useCopy(tourFormCopy)
-  const typeLabels = useCopy(adminEnumsCopy).tourType
+  // Архивирование — это `Delete` экрана «Продукты» на бэкенде (мягкое удаление того же продукта),
+  // отдельного права у него нет: без `products.Delete` кнопки в тулбаре просто нет.
+  const canArchive = useScreenPermission(AdminScreen.Products).canDelete
   const { state, actions, validation, hasAttemptedSubmit, submit, isSubmitting, error, isDirty } =
     useTourForm(initialState, {
       kind: 'edit',
       tourId: dto.id,
       initialIsActive: dto.isActive,
     })
-  const guard = useUnsavedChangesGuard(isDirty && !isSubmitting)
 
-  const typeLabel = typeLabels[state.type]
-  const title = state.type === TourType.Excursion ? copy.page.editExcursion : copy.page.editTour
+  const [archiveOpen, setArchiveOpen] = useState(false)
+  const [archivePending, setArchivePending] = useState(false)
+  const [archiveError, setArchiveError] = useState<string | null>(null)
+
+  // `archivePending` снимает охрану ровно так же, как `isSubmitting`: продукт уже в архиве, и
+  // диалог «есть несохранённые изменения» на редиректе после успеха был бы тупиком.
+  const guard = useUnsavedChangesGuard(isDirty && !isSubmitting && !archivePending)
+
+  const title =
+    state.type === TourType.Excursion
+      ? copy.page.editExcursion
+      : state.type === TourType.Transfer
+        ? copy.page.editTransfer
+        : copy.page.editTour
+  // Название берётся из загруженного продукта, а не из черновика: в архив уходит сохранённая
+  // запись, и подтверждение должно называть именно её.
+  const productTitle = tourTitle(dto, locale).text
+
+  async function confirmArchive(): Promise<void> {
+    if (archivePending) return
+    setArchivePending(true)
+    setArchiveError(null)
+    try {
+      await setTourArchived(dto.id, true)
+      // Без `setArchivePending(false)`: экран заменяется списком продуктов, и кнопка должна
+      // остаться в состоянии ожидания до самого перехода.
+      navigate('/admin/products')
+    } catch (err) {
+      setArchiveOpen(false)
+      setArchiveError(
+        err instanceof ApiError ? copy.archive.errorServer(err.status) : copy.archive.errorNetwork,
+      )
+      setArchivePending(false)
+    }
+  }
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <nav className="text-xs text-neutral-500" aria-label={copy.page.breadcrumbs}>
-          <Link to="/admin/products" className="transition-colors hover:text-neutral-800">
-            {copy.page.products}
-          </Link>
-          <span aria-hidden="true"> · </span>
-          <span className="font-semibold text-neutral-800">{typeLabel}</span>
-        </nav>
-        <h1 className="text-xl font-bold text-neutral-900">{title}</h1>
-      </header>
-
+    <TourFormScreen
+      type={state.type}
+      title={title}
+      subtitle={copy.page.subtitleEdit}
+      /* Ошибка сохранения и ошибка архивации показываются в одном слоте — одновременно они
+         возникнуть не могут: обе операции блокируют тулбар целиком. */
+      error={error ?? archiveError}
+      isValid={validation.isValid}
+      hasAttemptedSubmit={hasAttemptedSubmit}
+      isDirty={isDirty}
+      isSubmitting={isSubmitting}
+      onSave={submit}
+      onCancel={() => navigate('/admin/products')}
+      archive={
+        canArchive
+          ? {
+              pending: archivePending,
+              onRequest: () => {
+                setArchiveError(null)
+                setArchiveOpen(true)
+              },
+            }
+          : undefined
+      }
+    >
       <TourForm
         state={state}
         actions={actions}
         validation={validation}
-        hasAttemptedSubmit={hasAttemptedSubmit}
-        isSubmitting={isSubmitting}
-        submitError={error}
         typeLocked
         catalogSuggestions={catalogSuggestions}
         regions={regions}
         tags={tags}
         daySources={daySources}
+        vehicleClasses={vehicleClasses}
         onSubmit={submit}
       />
 
+      <TourArchiveModal
+        open={archiveOpen}
+        productTitle={productTitle}
+        pending={archivePending}
+        hasUnsavedChanges={isDirty}
+        onCancel={() => setArchiveOpen(false)}
+        onConfirm={() => void confirmArchive()}
+      />
+
       <UnsavedChangesModal open={guard.isBlocking} onCancel={guard.cancel} onConfirm={guard.confirm} />
-    </div>
+    </TourFormScreen>
   )
 }

@@ -9,6 +9,19 @@ namespace ATTours.Common.Entities
     public class Tour : EntityBase
     {
         public TourType Type { get; set; }
+        // Формат проведения (батч 2026-08-29): индивидуальный / групповой / оба. Обязателен
+        // у тура и экскурсии, ВСЕГДА null у трансфера (TourType.Transfer) — у трансфера
+        // формата не бывает, там цена определяется классом авто. Существующим продуктам
+        // миграция проставила Individual — прежнее поведение цены.
+        public TourFormat? Format { get; set; }
+        // Групповой формат: цена ЗА ЧЕЛОВЕКА (умножается на число гостей, без тирной
+        // наценки 1-4/5-6/7+ и без скрытия цены на 7+). null у индивидуального формата
+        // и у трансфера; обязательна при Format == Group/Both.
+        public decimal? GroupPricePerPerson { get; set; }
+        // Групповой формат: мест на выезд — ОДНО число на весь продукт, а не на дату.
+        // Остаток считается по паре (дата + выбранное время старта): занято = Σ GuestCount
+        // по строкам заказов на этот слот. null у индивидуального формата и у трансфера.
+        public int? GroupCapacity { get; set; }
         public decimal? TotalPrice { get; set; }
         public bool IsActive { get; set; }
         // Мягкое удаление: архивный тур скрыт из основного списка, но восстановим.
@@ -41,5 +54,12 @@ namespace ATTours.Common.Entities
         public HashSet<TourRegion> TourRegions { get; set; } = [];
         // Мерч-теги (до 3, максимум 1 Discount) — TourValidationService.
         public HashSet<TourTag> TourTags { get; set; } = [];
+        // Предопределённые времена начала (батч 2026-08-29): минимум одно у тура/экскурсии,
+        // пусто у трансфера — там время подачи вводит клиент при бронировании.
+        public HashSet<TourStartTime> StartTimes { get; set; } = [];
+        // Только для TourType.Transfer: маршрут «откуда / стопы / куда» и цены по классам
+        // авто. У тура и экскурсии обе коллекции пустые.
+        public HashSet<TransferRoutePoint> TransferRoutePoints { get; set; } = [];
+        public HashSet<TransferPrice> TransferPrices { get; set; } = [];
     }
 }

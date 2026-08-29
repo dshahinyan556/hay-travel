@@ -1,19 +1,20 @@
 import { Link, useLoaderData, type LoaderFunctionArgs } from 'react-router'
 import { getTourInfo, getToursByRegion } from '@/shared/api/tours'
-import { getClosedDates } from '@/shared/api/booking'
+import { getClosedDates, getGroupSeats } from '@/shared/api/booking'
 import { getContentText, type ContentText } from '@/shared/api/siteSettings'
 import { REGION_BY_SLUG } from '@/shared/data/armeniaRegions'
 import type { Tour, TourDetail } from '@/shared/types/tour'
+import type { TourGroupSeatsModel } from '@/shared/types/booking'
 import { formatDuration } from '@/shared/lib/format'
 import { useMoney } from '@/shared/currency'
 import { getStoredLocale } from '@/shared/lib/locale'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { translate } from '@/shared/i18n/translate'
-import { KindChip, Reveal, TourCard } from '@/shared/ui'
+import { FormatChip, KindChip, Reveal, TourCard } from '@/shared/ui'
 import { CheckIcon, ClockIcon, CloseIcon, MapPinIcon, TagIcon } from '@/shared/ui/icons'
 import { TourGallery } from './components/TourGallery'
 import { TourItinerary } from './components/TourItinerary'
-import { getBookingWindow } from '@/shared/booking'
+import { catalogBasePrice, getBookingWindow } from '@/shared/booking'
 import { BookingCard } from './components/BookingCard'
 
 export async function tourDetailLoader({ params }: LoaderFunctionArgs) {
@@ -35,27 +36,35 @@ export async function tourDetailLoader({ params }: LoaderFunctionArgs) {
   // network. `.catch(() => [])` is mandatory — availability must NEVER take the tour page down
   // (same contract as `getContentText`). Losing the list only means a visitor can pick a closed
   // day and get it rejected on submit (error code 2014, handled in the card).
+  //
+  // Остаток мест (батч 2026-08-29) едет тем же рейсом и по тем же правилам: это второй ответ на
+  // вопрос «можно ли сюда бронировать», и блок брони нуждается в обоих сразу. `.catch(() => null)`
+  // здесь — не копия соседней строки: `null` это ЗНАЧАЩЕЕ значение, «ограничитель неизвестен, не
+  // мешать» (см. `seatsLeftOn`), тогда как у закрытых дат ту же роль играет пустой список.
   const window = getBookingWindow()
-  const [related, content, closedDates] = await Promise.all([
+  const [related, content, closedDates, groupSeats] = await Promise.all([
     tour.regionSlugs[0] ? getToursByRegion(tour.regionSlugs[0]) : Promise.resolve<readonly Tour[]>([]),
     getContentText(),
     // The public `Tour.id` is a string; the backend wants a number. Converted here, once.
     getClosedDates(Number(tour.id), window.fromISO, window.toISO).catch(() => [] as string[]),
+    getGroupSeats(Number(tour.id), window.fromISO, window.toISO).catch(() => null),
   ])
   return {
     tour,
     related: related.filter((t) => t.id !== tour.id).slice(0, 3),
     content,
     closedDates,
+    groupSeats,
   }
 }
 
 export function TourDetailPage() {
-  const { tour, related, content, closedDates } = useLoaderData() as {
+  const { tour, related, content, closedDates, groupSeats } = useLoaderData() as {
     tour: TourDetail
     related: readonly Tour[]
     content: ContentText
     closedDates: readonly string[]
+    groupSeats: TourGroupSeatsModel | null
   }
   const regions = tour.regionSlugs.map((slug) => REGION_BY_SLUG[slug])
   const { locale, t } = useLocale()
@@ -82,7 +91,13 @@ export function TourDetailPage() {
           </nav>
 
           <header className="mt-4">
-            <KindChip kind={tour.kind} />
+            {/* Тип и формат — один ряд, как на карточке каталога: посетитель, пришедший из
+                каталога, должен увидеть здесь ровно то же, что было на плашке. `tone="surface"` —
+                под шапкой не фотография, а фон страницы, поэтому бейдж следует за темой. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <KindChip kind={tour.kind} />
+              <FormatChip format={tour.format} tone="surface" />
+            </div>
 
             <h1 className="text-gold-sheen h1-page mt-3">{tour.title}</h1>
 
@@ -244,6 +259,7 @@ export function TourDetailPage() {
                 tour={tour}
                 largeGroupInvitation={content.largeGroupInvitation || t('booking.largeGroupFallback')}
                 closedDates={closedDates}
+                groupSeats={groupSeats}
               />
             </Reveal>
           </aside>
@@ -254,8 +270,11 @@ export function TourDetailPage() {
             <Reveal as="div">
               <h2 className="font-display text-2xl text-ink">
                 {t('tourDetail.moreIn', { region: regionName(regions[0]) })}
+                {/* Та же витринная цена, что на карточке под этим заголовком
+                    (`catalogBasePrice`): у группового продукта это цена за человека, и «от N»
+                    обязано сойтись с ценником, который посетитель увидит строкой ниже. */}
                 <span className="ml-2 align-middle text-sm text-ink-muted">
-                  {money.format(related[0].priceFrom)} {t('tourDetail.andUp')}
+                  {money.format(catalogBasePrice(related[0]))} {t('tourDetail.andUp')}
                 </span>
               </h2>
             </Reveal>

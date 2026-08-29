@@ -66,6 +66,28 @@ export function registerRequest(request: RegisterRequest): Promise<MessageResult
   })
 }
 
+/**
+ * Re-sends the verification email for an address that registered but never confirmed.
+ *
+ * Added 2026-08-27, after `Register`'s implicit resend (see above) turned out to be the only way
+ * to get a second letter — which meant re-typing the whole sign-up form. The answer is the same
+ * generic 200 as `Register`/`ForgotPassword`, deliberately indistinguishable between "sent",
+ * "no such address", "already verified" and "still inside the 60s server-side cooldown": anything
+ * else would turn this into an account-existence oracle. The caller therefore cannot learn whether
+ * a letter actually went out — the cooldown is mirrored in the UI purely so the button doesn't
+ * invite pointless clicks.
+ *
+ * `devToken` comes back non-null only when a letter was really sent AND no mail provider is
+ * configured (`DevEmailSender`); the resend rotates the token, so a previously shown dev link
+ * stops working.
+ */
+export function resendVerificationRequest(email: string): Promise<MessageResultModel> {
+  return apiFetch<MessageResultModel>('api/Auth/ResendVerification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
 /** 400 VerificationTokenInvalid when unknown/expired/already used. */
 export function verifyEmailRequest(request: VerifyEmailRequest): Promise<MessageResultModel> {
   return apiFetch<MessageResultModel>('api/Auth/VerifyEmail', {
