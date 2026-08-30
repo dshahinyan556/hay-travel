@@ -70,7 +70,16 @@ export function DataEntryScreenLayout({
         {subtitle && <p className="mt-0.5 text-sm text-neutral-500">{subtitle}</p>}
       </div>
 
-      {controlZone && <div className="flex flex-wrap items-center gap-3">{controlZone}</div>}
+      {/* Pinned the same way as the «Справочники» tab strip (`CatalogPage`): below the mobile
+          hamburger bar (60px) on phones, flush to the viewport top on desktop where that bar
+          doesn't exist. Bleeds to `main`'s own edges (`-mx-4 sm:-mx-6`) so the background covers
+          content scrolling underneath it — Save must stay reachable without scrolling back up on
+          a long form (решение Давида 2026-08-31). */}
+      {controlZone && (
+        <div className="sticky top-[60px] z-10 -mx-4 flex flex-wrap items-center gap-3 bg-neutral-50 px-4 py-2 sm:-mx-6 sm:px-6 md:top-0">
+          {controlZone}
+        </div>
+      )}
 
       {message && <div className="flex flex-col gap-2">{message}</div>}
 
