@@ -76,8 +76,12 @@ export function TransfersPage() {
         <Reveal group as="div">
           {visible.length > 0 ? (
             <ul className="mt-6 grid gap-4 sm:mt-8 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+              {/* `min-w-0` on the `<li>`: a grid item defaults to `min-width: auto` same as a flex
+                  item, so without it the card's own un-shrunk content (the horizontal mobile
+                  layout's flex row) blows the track past the grid's available width instead of
+                  the row truncating inside it (David, 2026-08-31). */}
               {visible.map((transfer) => (
-                <li key={transfer.id} className="reveal-item grid">
+                <li key={transfer.id} className="reveal-item grid min-w-0">
                   <TransferCard transfer={transfer} />
                 </li>
               ))}

@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { applyUser, toAuthUser, type UserInfoModel } from '@/shared/auth'
-import { PhoneField } from '../../components/PhoneField'
+import { PhoneField } from '@/shared/ui/PhoneField'
 import { AuthError, AuthNotice, AuthSubmitButton } from '../../components/AuthShell'
-import { useDefaultPhoneCountry } from '../../hooks/useDefaultPhoneCountry'
+import { useDefaultPhoneCountry } from '@/shared/hooks/useDefaultPhoneCountry'
 import { updatePhone } from '../api/account'
 import { accountErrorMessageKey } from '../lib/accountErrors'
 
