@@ -15,7 +15,15 @@ namespace ATTours.BusinessServices.Security
         // impersonatedByUserId — id админа, вошедшего в этот аккаунт (spec 014 §3.2):
         // передаётся при impersonation и на каждой последующей ротации (значение живёт на
         // строке RefreshToken), уезжает в claim imp_by. null у обычных сессий.
-        AccessTokenModel CreateAccessToken(User user, ResolvedPermissionSet permissions, int? impersonatedByUserId = null);
+        //
+        // sessionTokenHash — TokenHash refresh-токена, для которого выпускается этот
+        // access-токен (David, 2026-08-31): уезжает в claim sid и даёт мгновенному отзыву
+        // сессии (ISessionRevocationRegistry) бить точечно — по конкретному устройству,
+        // а не по всем сессиям пользователя разом, как единственный отзыв до этого умел
+        // (ADR 030, только impersonation). Обязателен: без sid отозванная сессия не имела
+        // бы способа доказать это по уже выданному, ещё не истёкшему access-токену.
+        AccessTokenModel CreateAccessToken(User user, ResolvedPermissionSet permissions, string sessionTokenHash,
+            int? impersonatedByUserId = null);
 
         // rememberMe задаёт длину скользящего окна сессии (ADR 029): 14 дней против
         // Jwt:InactivityMinutes. Окно пересчитывается от «сейчас» и при каждой ротации.

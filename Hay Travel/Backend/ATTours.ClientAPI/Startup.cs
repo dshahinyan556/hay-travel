@@ -1,5 +1,6 @@
 using ATTours.BusinessServices.Jobs;
 using ATTours.ClientAPI.DependencyInjection;
+using ATTours.ClientAPI.Extensions;
 using ATTours.ClientAPI.Jobs;
 using ATTours.ClientAPI.Mapper.MappingProfile;
 using ATTours.ClientAPI.Middleware;
@@ -10,6 +11,7 @@ using ATTours.DataLayer;
 using ATTours.Helper.Interfaces;
 using ATTours.Helper.MiddlewareAbstraction;
 using ATTours.Helper.MvcRegistrars;
+using ATTours.Helper.Security;
 using ATTours.Helper.StartupAbstraction.ApiAbstraction;
 using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -216,6 +218,29 @@ namespace ATTours.ClientAPI
                             ClockSkew = TimeSpan.FromSeconds(30),
                             RoleClaimType = ClaimTypes.Role,
                             NameClaimType = ClaimTypes.Name
+                        };
+
+                        // Мгновенный отзыв ОДНОЙ сессии (David, 2026-08-31): «Завершить сеанс» в
+                        // «Активных сеансах» гасит refresh-токен в БД, но уже выпущенный
+                        // access-токен — stateless JWT — прожил бы до 15 минут (AccessTokenMinutes)
+                        // на устройстве, которое отозвали, полностью незамеченно. Проверка стоит
+                        // здесь, а не только в permission-атрибутах (как IAccessTokenRevocationRegistry
+                        // после impersonation, ADR 030): у обычного клиента их почти нигде нет, а
+                        // «Активные сеансы» — клиентская фича, не admin-панель. Быстрый путь
+                        // (`registry.IsEmpty`) держит цену для 99.9% запросов, где никто ничего не
+                        // отзывал, нулевой — тот же приём, что уже используется для impersonation.
+                        options.Events = new JwtBearerEvents
+                        {
+                            OnTokenValidated = context =>
+                            {
+                                var registry = context.HttpContext.RequestServices
+                                    .GetRequiredService<ISessionRevocationRegistry>();
+
+                                if (context.Principal?.IsSessionRevoked(registry) == true)
+                                    context.Fail("Session has been revoked.");
+
+                                return Task.CompletedTask;
+                            }
                         };
                     });
 

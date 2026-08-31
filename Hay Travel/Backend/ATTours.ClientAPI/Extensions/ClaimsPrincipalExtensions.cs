@@ -86,6 +86,26 @@ namespace ATTours.ClientAPI.Extensions
             return registry.IsRevoked(userId, issuedAtUtc);
         }
 
+        // Мгновенный отзыв ОДНОЙ сессии (David, 2026-08-31) — пара к IsAccessTokenRevoked,
+        // но проверяется на КАЖДОМ аутентифицированном запросе (JwtBearerEvents.OnTokenValidated
+        // в Startup.cs), не только в permission-атрибутах: у обычного клиента (не staff) их
+        // попросту нет на большинстве эндпоинтов, и без общей проверки отзыв сессии из
+        // «Активных сеансов» не подействовал бы вовсе.
+        public static bool IsSessionRevoked(this ClaimsPrincipal principal, ISessionRevocationRegistry registry)
+        {
+            if (registry is null || registry.IsEmpty)
+                return false;
+
+            var sessionTokenHash = principal?.FindFirstValue("sid");
+            if (string.IsNullOrEmpty(sessionTokenHash))
+                return false;
+
+            if (!TryGetIssuedAtUtc(principal!, out var issuedAtUtc))
+                return registry.IsRevoked(sessionTokenHash, DateTime.MinValue);
+
+            return registry.IsRevoked(sessionTokenHash, issuedAtUtc);
+        }
+
         // iat — unix-секунды. Дефолтный inbound-map JwtBearer timestamp-claim'ы не
         // переименовывает (проверено на выпущенном токене: claim остаётся "iat"), но
         // читаем и по возможному отображённому имени — тот же приём, что в GetUserId,
