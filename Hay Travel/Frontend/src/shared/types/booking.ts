@@ -46,6 +46,7 @@
  * деталей одного исполнителя делает новый `OrderLineEmployeeUpdateModel`.
  */
 
+import type { OrderContactInput, OrderContactModel } from './contact'
 import type { EmployeeJobRole } from './employeeRole'
 import type { LanguageCode } from './language'
 import type { TourFormat } from './tourFormat'
@@ -280,6 +281,19 @@ export interface OrderInfoModel {
 
   lines: OrderLineInfoModel[]
 
+  /**
+   * Контакты для связи по этому заказу, ОСНОВНОЙ ПЕРВЫМ (порядок задаёт сервер, фронт не
+   * сортирует — та же гарантия, что у справочника профиля).
+   *
+   * Это СНИМОК значений на момент оформления, а не ссылки на справочник (ADR 032 Р1): правка или
+   * удаление контакта в профиле уже созданный заказ не трогает, поэтому здесь `OrderContactModel`,
+   * а не `ContactMethodModel`.
+   *
+   * Пустой массив — законное значение: у заказов, созданных до батча 2026-08-29, контактов нет и
+   * бэкфилла не было, так что любой рендер обязан переживать пустой список.
+   */
+  contacts: OrderContactModel[]
+
   /** Sum of each line's snapshot-price × discount — server-computed aggregate. */
   discountTotal: number
   /** Sum of `lines[].lineTotal` — server-computed aggregate. */
@@ -335,6 +349,17 @@ export interface OrderCreateLineModel {
  * 1..10 строк; пустой список — 2028, больше десяти — 2032. */
 export interface OrderCreateModel {
   lines: OrderCreateLineModel[]
+  /**
+   * С кем связаться по этому заказу: 1..3 контакта, ровно один основной (батч 2026-08-29).
+   *
+   * Обязательное поле, а не опциональное: пустой список сервер отбивает `OrderContactRequired`/2060,
+   * больше трёх — 2061, основной не ровно один — 2062. Все три приходят ПЛОСКО, не в массиве
+   * `lines`: контакт — свойство заказа целиком.
+   *
+   * Уезжает СНИМКОМ значений, без ссылки на строку справочника профиля (ADR 032 Р1) — поэтому
+   * правка или удаление контакта в кабинете не меняет уже созданные заказы.
+   */
+  contacts: OrderContactInput[]
 }
 
 /** Один пункт пер-строчного отказа валидации. `index` — 0-based позиция строки В ОТПРАВЛЕННОМ
@@ -415,6 +440,13 @@ export interface CustomTransferRequestCreateModel {
   comment: string
   /** Ровно одна точка `From`, 0..N `Stop`, ровно одна `To`. */
   stops: CustomTransferStopCreateModel[]
+  /**
+   * Контакты для связи: 1..3, ровно один основной (спека 016). Пустой список — отказ
+   * `OrderContactRequired`/2060: заявка уходит без цены, и единственное, что делает её
+   * выполнимой, — возможность позвонить. Брать номер из профиля молча нельзя: заказ часто
+   * оформляют не на себя.
+   */
+  contacts: OrderContactInput[]
 }
 
 /**

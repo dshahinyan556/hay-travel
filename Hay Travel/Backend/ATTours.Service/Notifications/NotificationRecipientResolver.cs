@@ -219,17 +219,29 @@ namespace ATTours.BusinessServices.Notifications
 
             if (row.OrderLinkedRole == OrderLinkedRecipient.Client)
             {
-                // Telegram клиенту — осознанно вне скоупа (ADR 031 §5): chat id клиента не
-                // спроецирован в OrderInfoModel. Настроить такую строку валидация по-прежнему
-                // разрешает, доставка просто no-op с логом — в духе «тихо не шлём».
+                var order = context?.Order;
+
+                // Telegram клиенту (2026-08-29): раньше здесь стоял осознанный no-op — chat id
+                // клиента не был спроецирован в OrderInfoModel (ADR 031 §5). Теперь проецируется,
+                // и строка «Клиент → Telegram» доставляется по тем же правилам, что остальные:
+                // непривязанный клиент НЕ отсеивается тут, его отсекает отправка с логом
+                // «настроен, но аккаунт не привязан» (то же, что в ExpandUser).
                 if (platform == NotificationPlatform.Telegram)
                 {
-                    logger.LogInformation("Notification recipient {RecipientId} targets the order client over Telegram, " +
-                        "which is not supported yet; skipped.", row.Id);
-                    return [];
-                }
+                    if (order is null)
+                        return [];
 
-                var order = context?.Order;
+                    return
+                    [
+                        new ResolvedRecipient
+                        {
+                            Name = order.UserFullName,
+                            Type = type,
+                            Language = order.UserPreferredLanguage,
+                            TelegramChatId = order.UserTelegramChatId
+                        }
+                    ];
+                }
 
                 if (order is null || string.IsNullOrWhiteSpace(order.UserEmail))
                     return [];

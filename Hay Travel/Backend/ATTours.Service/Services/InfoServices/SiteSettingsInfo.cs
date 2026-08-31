@@ -40,6 +40,20 @@ namespace ATTours.BusinessServices.Services.InfoServices
             return Merge(stored);
         }
 
+        // Срез каталога для экрана «Настройки сайта»: без групп, которыми владеет другой экран
+        // (SiteSettingCatalog.BelongsToSettingsScreen). Отдельный метод, а не параметр
+        // GetMergedAsync: полный слитый список нужен и внутри самого класса (GetPublicAsync),
+        // и на записи — обрезать его по умолчанию значило бы менять смысл всех вызовов ради
+        // одного экрана.
+        public async Task<List<SiteSetting>> GetMergedForSettingsScreenAsync()
+            => FilterForSettingsScreen(await GetMergedAsync());
+
+        // Тот же фильтр для уже слитого списка — им пользуется ответ Update: экран настроек
+        // получает после сохранения ровно тот набор ключей, что и при загрузке, иначе скрытые
+        // группы возвращались бы на экран первым же сохранением.
+        public static List<SiteSetting> FilterForSettingsScreen(List<SiteSetting> merged)
+            => merged.Where(setting => SiteSettingCatalog.BelongsToSettingsScreen(setting.Key)).ToList();
+
         // Публичное чтение: только IsPublic-ключи, одна локаль, значение уже разрешено.
         // Никогда не отдаёт null для известного ключа и никогда не отвечает 404.
         public async Task<Dictionary<string, string>> GetPublicAsync(int languageCode, SiteSettingGroup? group = null)

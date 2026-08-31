@@ -77,6 +77,16 @@ export const ordersCopy = defineCopy(
     filterTourLabel: 'Тур',
     filterTourAll: 'Все туры',
     filterClientLabel: 'Клиент',
+    // Контакты заказа (батч 2026-08-29). Подписи способов связи зеркалят ContactMethodType
+    // на бэкенде; ключи — значения enum'а, а не алфавитный порядок.
+    contactPrimary: 'основной',
+    contactMethods: {
+      1: 'Телефон',
+      2: 'WhatsApp',
+      3: 'Telegram',
+      4: 'Viber',
+      5: 'Email',
+    } as Record<number, string>,
     filterClientPlaceholder: 'Имя или email',
     filterNumberLabel: '№ заказа',
     filterNumberPlaceholder: 'Например, 160826-0007',
@@ -434,6 +444,14 @@ export const ordersCopy = defineCopy(
     filterTourLabel: 'Tour',
     filterTourAll: 'All tours',
     filterClientLabel: 'Client',
+    contactPrimary: 'primary',
+    contactMethods: {
+      1: 'Phone',
+      2: 'WhatsApp',
+      3: 'Telegram',
+      4: 'Viber',
+      5: 'Email',
+    } as Record<number, string>,
     filterClientPlaceholder: 'Name or email',
     filterNumberLabel: 'Order no.',
     filterNumberPlaceholder: 'For example, 160826-0007',

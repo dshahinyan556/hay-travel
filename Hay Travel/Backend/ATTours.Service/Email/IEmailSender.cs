@@ -7,23 +7,12 @@ namespace ATTours.BusinessServices.Email
         // иначе его неоткуда взять. Продакшн-реализация обязана возвращать false.
         bool ExposesTokenToCaller { get; }
 
-        Task SendEmailVerificationAsync(string toEmail, string toName, string token, CancellationToken cancellationToken = default);
-
-        Task SendPasswordResetAsync(string toEmail, string toName, string token, CancellationToken cancellationToken = default);
-
-        // Email-change flow (B8, 2026-08-06). Шаг 1: числовой код на ТЕКУЩИЙ (старый) адрес.
-        Task SendEmailChangeOldEmailCodeAsync(string toEmail, string toName, string code, CancellationToken cancellationToken = default);
-
-        // Email-change flow (B8, 2026-08-06). Шаг 3: ссылка-подтверждение на НОВЫЙ адрес.
-        Task SendEmailChangeConfirmationAsync(string toEmail, string toName, string token, CancellationToken cancellationToken = default);
-
-        // Единая точка отправки писем ЗАКАЗОВ (Задача E, §E.9). Тема и HTML-тело приходят
-        // уже отрендеренными из шаблона (OrderNotificationService) — транспорт ничего не
-        // сочиняет и не решает, слать или нет. Раньше вместо этого метода было три
-        // order-специфичных (NewOrderNotification/OrderDocument/Assignment) с текстами,
-        // зашитыми в EmailMessageFactory; тексты переехали в БД, в EmailTemplate.
-        //
-        // Auth-методы выше остаются plaintext-специфичными: ими админ не управляет.
+        // Единая точка отправки писем (Задача E, §E.9; Notification Templates, 2026-08-31).
+        // Тема и HTML-тело приходят уже отрендеренными из шаблона — транспорт ничего не
+        // сочиняет и не решает, слать или нет. Раньше здесь было ещё 4 auth-специфичных
+        // метода (verify/reset/email-change) с текстами, зашитыми в EmailMessageFactory —
+        // они переехали в NotificationTemplate (AuthService сам рендерит и вызывает эту же
+        // единую точку, как заказы).
         Task SendTransactionalAsync(string toEmail, string toName, string subject, string bodyHtml,
             EmailAttachment? attachment = null, CancellationToken cancellationToken = default);
 

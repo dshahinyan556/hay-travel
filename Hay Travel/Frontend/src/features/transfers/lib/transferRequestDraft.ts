@@ -2,8 +2,12 @@
  * Черновик кастомной заявки в `localStorage` (пункт 6.6).
  *
  * Зачем вообще: отправка заявки требует логина, а логин — это НАВИГАЦИЯ на `/auth` и обратно
- * (`?returnTo=`), то есть полный размонтаж конструктора. Форма из четырёх шагов, которую
- * приходится заполнять заново после входа, — это форма, которую бросают.
+ * (`?returnTo=`), то есть полный размонтаж конструктора. Форма, которую приходится заполнять
+ * заново после входа, — это форма, которую бросают.
+ *
+ * С переходом конструктора на мастер (2026-08-29) черновик хранит ещё и НОМЕР ШАГА: вернуться со
+ * входа на первый шаг, когда человек ушёл с третьего, — это заставить его трижды нажать «Далее»
+ * по уже заполненным полям, то есть ровно то, ради чего черновик и заводился.
  *
  * Тот же приём, что у корзины (ADR 022): модуль-хранилище вне React, снимок целиком, санитайзер
  * на чтении. Отличия — по существу задачи, а не по вкусу:
@@ -21,6 +25,8 @@
 
 import { formatISODate, stripTime } from '@/shared/lib/date'
 import { isDisplayTime } from '@/shared/booking'
+import { ContactLimits, ContactMethodType, type OrderContactInput } from '@/shared/types/contact'
+import { WIZARD_STEP_COUNT } from './transferWizard'
 
 export const TRANSFER_DRAFT_STORAGE_KEY = 'hay-travel-transfer-request'
 
@@ -61,6 +67,19 @@ export interface TransferRequestDraft {
   /** `null` — «не важно, подберите сами». */
   vehicleClassId: number | null
   comment: string
+  /**
+   * Контакты для связи, выбранные на последнем шаге мастера. Снимок значений, а не ссылки на
+   * записи справочника: в заказ уезжает именно снимок (ADR 032 Р1), и черновик обязан хранить
+   * то же самое — иначе после входа в форму вернулись бы уже другие данные.
+   *
+   * Необязательное поле: панель брони готового трансфера пишет черновик без него.
+   */
+  contacts?: readonly OrderContactInput[]
+  /**
+   * Шаг мастера (0..2), на котором черновик был сохранён. Необязателен: у панели брони шагов
+   * нет, и придумывать ей нулевой шаг незачем.
+   */
+  step?: number
 }
 
 interface StoredDraft extends TransferRequestDraft {
@@ -83,6 +102,48 @@ function toDate(value: unknown, todayISO: string): string {
 
 function toTime(value: unknown): string {
   return typeof value === 'string' && isDisplayTime(value) ? value : ''
+}
+
+const CONTACT_TYPES: readonly number[] = Object.values(ContactMethodType)
+
+/**
+ * Контакты из хранилища. Санитайзер здесь ГРУБЫЙ по существу задачи: формат значения по типу
+ * (номер с `+`, e-mail, `@username`) проверяет форма контактов и, окончательно, сервер (2063).
+ * Задача этого места — не пустить в состояние React то, что сломает рендер: не-объект, лишние
+ * поля, четвёртый контакт при лимите в три.
+ */
+function toContacts(value: unknown): OrderContactInput[] {
+  if (!Array.isArray(value)) return []
+  const contacts: OrderContactInput[] = []
+  for (const item of value.slice(0, ContactLimits.maxOrderContacts)) {
+    if (typeof item !== 'object' || item === null) continue
+    const record = item as Record<string, unknown>
+    if (typeof record.type !== 'number' || !CONTACT_TYPES.includes(record.type)) continue
+    const contactValue = toText(record.value, ContactLimits.maxValueLength)
+    const firstName = toText(record.firstName, ContactLimits.maxNameLength)
+    if (contactValue === '' || firstName === '') continue
+    contacts.push({
+      type: record.type as OrderContactInput['type'],
+      value: contactValue,
+      firstName,
+      lastName:
+        typeof record.lastName === 'string' && record.lastName.trim() !== ''
+          ? record.lastName.slice(0, ContactLimits.maxNameLength)
+          : null,
+      isPrimary: record.isPrimary === true,
+    })
+  }
+  /* «Ровно один основной» — правило заказа (2062), и восстановленный черновик обязан ему
+     подчиняться: подделанный список из трёх основных иначе вернулся бы в форму как есть. */
+  if (contacts.length > 0 && contacts.filter((contact) => contact.isPrimary).length !== 1) {
+    return contacts.map((contact, index) => ({ ...contact, isPrimary: index === 0 }))
+  }
+  return contacts
+}
+
+function toStep(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0
+  return Math.min(Math.max(Math.trunc(value), 0), WIZARD_STEP_COUNT - 1)
 }
 
 /**
@@ -125,6 +186,8 @@ export function readTransferRequestDraft(owner: string | null): TransferRequestD
           ? parsed.vehicleClassId
           : null,
       comment: toText(parsed.comment, 2000),
+      contacts: toContacts(parsed.contacts),
+      step: toStep(parsed.step),
     }
   } catch {
     return null

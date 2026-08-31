@@ -4,6 +4,7 @@ using ATTours.BusinessServices.Geo;
 using ATTours.BusinessServices.Security;
 using ATTours.BusinessServices.Services.Authorization;
 using ATTours.BusinessServices.Services.ValidationServices;
+using ATTours.Common.Constants;
 using ATTours.Common.DTO.Auth;
 using ATTours.Common.DTO.Authorization;
 using ATTours.Common.Entities;
@@ -17,14 +18,16 @@ using ATTours.Exceptions;
 using ATTours.Helper.Enums;
 using ATTours.Helper.Security;
 using AutoMapper;
+using Microsoft.EntityFrameworkCore;
 using System.Net;
+using System.Text.RegularExpressions;
 
 namespace ATTours.BusinessServices.Services.AuthServices
 {
     // Единственная точка, где меняется состояние аутентификации: пароли, подтверждение
     // почты, блокировки и сессии. Доступ к БД — как у соседних сервисов (свой контекст
     // по строке из CommonSettings); DI отвечает только за коллабораторов (ADR 005).
-    public class AuthService : RepositoryCoreBase<User, ATToursContextFactory>, IAuthService
+    public partial class AuthService : RepositoryCoreBase<User, ATToursContextFactory>, IAuthService
     {
         private const int MaxFailedLoginAttempts = 5;
         private const int LockoutMinutes = 15;
@@ -39,6 +42,12 @@ namespace ATTours.BusinessServices.Services.AuthServices
         // RequestedAtUtc уже выпущенного токена, а не по счётчику в памяти — иначе
         // рестарт процесса или второй инстанс API обнуляли бы защиту.
         private const int ResendVerificationCooldownSeconds = 60;
+
+        // Окно прощения гонки ротации refresh-токена (ADR 033). Хватает на перекос часов и
+        // сетевой round-trip между двумя устройствами, которые честно гонятся за один и тот
+        // же истёкший access-токен; украденный токен всплывает минутами позже и в окно уже
+        // не попадает. Единственная ручка настройки этого поведения.
+        private const int RefreshReuseGraceSeconds = 10;
 
         // Один и тот же текст для «письмо ушло» и «такого аккаунта нет» — иначе по ответу
         // перебирались бы зарегистрированные адреса.
@@ -61,21 +70,68 @@ namespace ATTours.BusinessServices.Services.AuthServices
         private readonly IPasswordHasher passwordHasher;
         private readonly IJwtTokenService jwtTokenService;
         private readonly IEmailSender emailSender;
+        private readonly EmailSettings emailSettings;
         private readonly IGeoIpLookup geoIpLookup;
         private readonly IAccessTokenRevocationRegistry accessTokenRevocationRegistry;
+        private readonly ISessionRevocationRegistry sessionRevocationRegistry;
 
         public AuthService(IMapper mapper, IPasswordHasher passwordHasher, IJwtTokenService jwtTokenService,
-            IEmailSender emailSender, IGeoIpLookup geoIpLookup,
-            IAccessTokenRevocationRegistry accessTokenRevocationRegistry)
+            IEmailSender emailSender, EmailSettings emailSettings, IGeoIpLookup geoIpLookup,
+            IAccessTokenRevocationRegistry accessTokenRevocationRegistry,
+            ISessionRevocationRegistry sessionRevocationRegistry)
             : base(CommonSettings.Instance.ATToursConnectionString)
         {
             this.mapper = mapper;
             this.passwordHasher = passwordHasher;
             this.jwtTokenService = jwtTokenService;
             this.emailSender = emailSender;
+            this.emailSettings = emailSettings;
             this.geoIpLookup = geoIpLookup;
             this.accessTokenRevocationRegistry = accessTokenRevocationRegistry;
+            this.sessionRevocationRegistry = sessionRevocationRegistry;
         }
+
+        // Notification Templates (2026-08-31): auth-письма больше не хардкодятся в
+        // EmailMessageFactory — subject/body читаются из NotificationTemplate по Trigger и
+        // рендерятся тем же синтаксисом {{Token}}, что и остальные шаблоны (см.
+        // NotificationAuthPlaceholders — фиксированный набор токенов конкретного потока,
+        // не общий каталог полей сущности). Шаблон отсутствует (например, админ снял
+        // назначение) -> тихо не шлём, как и у заказных уведомлений: операция (регистрация/
+        // сброс пароля) уже состоялась в БД, письмо — побочный эффект, а не её условие.
+        private async Task SendAuthEmailAsync(NotificationTemplateTrigger trigger, string toEmail, string toName,
+            IReadOnlyDictionary<string, string> tokens, CancellationToken cancellationToken)
+        {
+            var template = await Context.Set<NotificationTemplate>()
+                                        .AsNoTracking()
+                                        .SingleOrDefaultAsync(x => x.Trigger == trigger, cancellationToken);
+
+            if (template is null)
+                return;
+
+            var subject = RenderAuthTemplate(template.Subject, tokens, encodeText: false);
+            var bodyHtml = RenderAuthTemplate(template.BodyHtml, tokens, encodeText: true);
+
+            await emailSender.SendTransactionalAsync(toEmail, toName, subject, bodyHtml, cancellationToken: cancellationToken);
+        }
+
+        // Неизвестный токен -> пустая строка (то же правило, что у OrderNotificationService.
+        // Render) — литерал {{Foo}} в письме выглядел бы как баг сильнее, чем пропуск.
+        private static string RenderAuthTemplate(string source, IReadOnlyDictionary<string, string> tokens, bool encodeText)
+        {
+            if (string.IsNullOrEmpty(source))
+                return string.Empty;
+
+            return AuthPlaceholderRegex().Replace(source, match =>
+            {
+                if (!tokens.TryGetValue(match.Groups["token"].Value, out var value))
+                    return string.Empty;
+
+                return encodeText ? WebUtility.HtmlEncode(value) : value;
+            });
+        }
+
+        [GeneratedRegex(@"\{\{(?<token>[A-Za-z0-9_]+)\}\}", RegexOptions.CultureInvariant)]
+        private static partial Regex AuthPlaceholderRegex();
 
         #region Repositories
 
@@ -153,7 +209,12 @@ namespace ATTours.BusinessServices.Services.AuthServices
                 transaction.Complete();
             }
 
-            await emailSender.SendEmailVerificationAsync(user.Email, user.FirstName, verificationToken, cancellationToken);
+            await SendAuthEmailAsync(NotificationTemplateTrigger.VerifyEmail, user.Email, user.FirstName,
+                new Dictionary<string, string>
+                {
+                    [NotificationAuthPlaceholders.UserName] = user.FirstName,
+                    [NotificationAuthPlaceholders.VerifyUrl] = EmailMessageFactory.BuildVerifyUrl(emailSettings, verificationToken)
+                }, cancellationToken);
             return GenericEmailSent(verificationToken);
         }
 
@@ -244,6 +305,7 @@ namespace ATTours.BusinessServices.Services.AuthServices
                 ExpiresAtUtc = refreshToken.ExpiresAtUtc,
                 CreatedAtUtc = now,
                 CreatedByIp = requestContext.IpAddress,
+                CreatedByUserAgent = requestContext.UserAgent,
                 RememberMe = model.RememberMe
             }, cancellationToken);
 
@@ -267,7 +329,8 @@ namespace ATTours.BusinessServices.Services.AuthServices
             // запись в историю входов фиксируются вместе.
             await UserRepository.SaveChangesAsync(cancellationToken);
 
-            var accessToken = jwtTokenService.CreateAccessToken(user, await ResolvePermissionsAsync(user, cancellationToken));
+            var accessToken = jwtTokenService.CreateAccessToken(user, await ResolvePermissionsAsync(user, cancellationToken),
+                refreshToken.TokenHash);
             var result = new LoginResultModel
             {
                 AccessToken = accessToken.AccessToken,
@@ -302,11 +365,13 @@ namespace ATTours.BusinessServices.Services.AuthServices
                 ExpiresAtUtc = refreshToken.ExpiresAtUtc,
                 CreatedAtUtc = now,
                 CreatedByIp = requestContext.IpAddress,
+                CreatedByUserAgent = requestContext.UserAgent,
                 RememberMe = false
             }, cancellationToken);
             await UserRepository.SaveChangesAsync(cancellationToken);
 
-            var accessToken = jwtTokenService.CreateAccessToken(user, await ResolvePermissionsAsync(user, cancellationToken));
+            var accessToken = jwtTokenService.CreateAccessToken(user, await ResolvePermissionsAsync(user, cancellationToken),
+                refreshToken.TokenHash);
             var result = new LoginResultModel
             {
                 AccessToken = accessToken.AccessToken,
@@ -334,11 +399,36 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
             var now = DateTime.UtcNow;
 
-            // Reuse-detection: предъявлен токен, который уже был отозван (значит, ротация
-            // по нему прошла раньше) — считаем цепочку скомпрометированной и гасим все сессии.
+            // Reuse-detection (ADR 033): предъявлен уже отозванный токен. Причину отзыва
+            // различаем по ReplacedByTokenHash — заполнен только у токена, умершего РОТАЦИЕЙ.
+            // До ADR 033 любой такой случай считался компрометацией и гасил все сессии, из-за
+            // чего обычная гонка двух устройств за один истёкший access-токен выкидывала
+            // пользователя отовсюду.
             if (storedToken.RevokedAtUtc.HasValue)
             {
-                await RevokeAllRefreshTokensAsync(storedToken.UserId, now, null, cancellationToken);
+                // 1. Прощаемая гонка ротации: токен умер ротацией, предъявлен внутри окна,
+                //    и его НЕПОСРЕДСТВЕННЫЙ преемник (один хоп, дальше по цепочке не идём)
+                //    ещё жив. Отставание на два хопа гонкой уже не является — это шаг 3.
+                if (storedToken.ReplacedByTokenHash is not null &&
+                    now - storedToken.RevokedAtUtc.Value <= TimeSpan.FromSeconds(RefreshReuseGraceSeconds))
+                {
+                    var head = await RefreshTokenRepository.AsQueryable()
+                                                           .SingleOrDefaultAsync(x => x.TokenHash == storedToken.ReplacedByTokenHash, cancellationToken);
+
+                    if (head is not null && head.RevokedAtUtc is null && head.ExpiresAtUtc > now)
+                        return await CatchUpRotationAsync(storedToken, head, now, requestContext, cancellationToken);
+                }
+
+                // 2. Токен погашен ЯВНО (logout, смена пароля, отзыв сессии, флаш при
+                //    impersonation) — преемника у него нет. Это не компрометация, а
+                //    намеренно закрытая сессия, поэтому семью НЕ гасим: иначе «выйти на
+                //    других устройствах» убивало бы и ту сессию, ради которой всё делалось.
+                if (storedToken.ReplacedByTokenHash is null)
+                    throw RefreshTokenInvalid();
+
+                // 3. Всё остальное — настоящий reuse (ротированный токен вне окна или с уже
+                //    мёртвой головой цепочки): прежнее консервативное поведение.
+                await RevokeAllRefreshTokensAsync(storedToken.UserId, now, null, null, cancellationToken);
                 await RefreshTokenRepository.SaveChangesAsync(cancellationToken);
                 throw RefreshTokenInvalid();
             }
@@ -379,6 +469,7 @@ namespace ATTours.BusinessServices.Services.AuthServices
                 ExpiresAtUtc = rotatedToken.ExpiresAtUtc,
                 CreatedAtUtc = now,
                 CreatedByIp = requestContext.IpAddress,
+                CreatedByUserAgent = requestContext.UserAgent,
                 // Оба поля — свойства СЕССИИ, а не отдельного токена: без переноса
                 // «запомнить меня» схлопнулось бы до часа, а баннер impersonation
                 // пропал бы на первой же ротации (spec 014 §3.3, §4.3).
@@ -393,6 +484,7 @@ namespace ATTours.BusinessServices.Services.AuthServices
             // пользователей — максимум через один TTL access-токена.
             var accessToken = jwtTokenService.CreateAccessToken(user,
                 await ResolvePermissionsAsync(user, cancellationToken),
+                rotatedToken.TokenHash,
                 storedToken.ImpersonatedByUserId);
 
             return new RefreshOutcome(accessToken,
@@ -481,7 +573,7 @@ namespace ATTours.BusinessServices.Services.AuthServices
             using (var transaction = TransactionsHelper.CreateAsyncTransactionScope())
             {
                 // Сессия админа перестаёт существовать на сервере.
-                await RevokeAllRefreshTokensAsync(actingUserId, now, null, cancellationToken);
+                await RevokeAllRefreshTokensAsync(actingUserId, now, null, null, cancellationToken);
 
                 await RefreshTokenRepository.AddAsync(new RefreshToken
                 {
@@ -490,6 +582,7 @@ namespace ATTours.BusinessServices.Services.AuthServices
                     ExpiresAtUtc = refreshToken.ExpiresAtUtc,
                     CreatedAtUtc = now,
                     CreatedByIp = requestContext.IpAddress,
+                    CreatedByUserAgent = requestContext.UserAgent,
                     RememberMe = false,
                     ImpersonatedByUserId = actingUserId
                 }, cancellationToken);
@@ -517,6 +610,7 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
             var accessToken = jwtTokenService.CreateAccessToken(targetUser,
                 await ResolvePermissionsAsync(targetUser, cancellationToken),
+                refreshToken.TokenHash,
                 impersonatedByUserId: actingUserId);
 
             var result = new LoginResultModel
@@ -529,6 +623,129 @@ namespace ATTours.BusinessServices.Services.AuthServices
             };
 
             return new LoginOutcome(result, new IssuedRefreshToken(refreshToken.Token, refreshToken.ExpiresAtUtc, false));
+        }
+
+        #endregion
+
+        #region Session management (spec 017 §4)
+
+        // И чтение, и отзыв сессий живут здесь, а не в отдельном Info-сервисе (spec 017 §4.3):
+        // любая запись по RefreshToken — домен AuthService (ADR 005/028), и именно здесь уже
+        // есть и репозиторий, и хеширование токена, и geo-lookup. LoginHistory вынесен в
+        // Info-сервис только потому, что это read-only сущность без auth-мутаций.
+
+        public async Task<List<SessionInfoModel>> GetMySessionsAsync(int userId, string? currentRefreshToken, CancellationToken cancellationToken = default)
+        {
+            // Текущая сессия помечается сравнением ХЕШЕЙ: plaintext из cookie наружу не
+            // возвращается и с БД не сопоставляется никак иначе.
+            var currentTokenHash = string.IsNullOrWhiteSpace(currentRefreshToken)
+                ? null
+                : jwtTokenService.HashRefreshToken(currentRefreshToken);
+
+            return await BuildSessionListAsync(userId, currentTokenHash, cancellationToken);
+        }
+
+        public async Task RevokeMySessionAsync(int userId, int sessionId, CancellationToken cancellationToken = default)
+            => await RevokeSessionAsync(userId, sessionId, cancellationToken);
+
+        public async Task RevokeMyOtherSessionsAsync(int userId, string? currentRefreshToken, CancellationToken cancellationToken = default)
+        {
+            // Тот же приём, что в ChangePasswordAsync: сессия вызывающего переживает отзыв.
+            // Пустой cookie означает «не сохранять ничего» — но у вызывающего он всегда есть,
+            // иначе он бы сюда не дошёл ([Authorize] + refresh-cookie ставятся вместе.)
+            var keptTokenHash = string.IsNullOrWhiteSpace(currentRefreshToken)
+                ? null
+                : jwtTokenService.HashRefreshToken(currentRefreshToken);
+
+            await RevokeAllRefreshTokensAsync(userId, DateTime.UtcNow, keptTokenHash, null, cancellationToken);
+            await RefreshTokenRepository.SaveChangesAsync(cancellationToken);
+        }
+
+        // Админская вьюха: IsCurrent тут всегда false — админ смотрит чужие сессии, своего
+        // cookie цели у него нет и быть не может.
+        public async Task<List<SessionInfoModel>> GetUserSessionsAsync(int targetUserId, CancellationToken cancellationToken = default)
+            => await BuildSessionListAsync(targetUserId, null, cancellationToken);
+
+        public async Task RevokeUserSessionAsync(int targetUserId, int sessionId, CancellationToken cancellationToken = default)
+            => await RevokeSessionAsync(targetUserId, sessionId, cancellationToken);
+
+        public async Task RevokeAllUserSessionsAsync(int targetUserId, int actingUserId, CancellationToken cancellationToken = default)
+        {
+            // keptTokenHash = null намеренно: админ не залогинен как цель, поэтому «текущая»
+            // сессия цели тоже должна погаснуть — иначе смысл кнопки теряется.
+            //
+            // Но собственную impersonation-сессию ЭТОГО админа над этой же целью щадим
+            // (David, 2026-08-29): иначе «завершить все сессии» на карточке пользователя,
+            // которого сам админ сейчас изображает (другая вкладка/устройство — в этой же
+            // вкладке isSelf уже увёл бы на самообслуживающую ветку), выбивает и его
+            // собственный рабочий сеанс. Отзыв ОДНОЙ конкретной сессии по id по-прежнему
+            // может погасить и эту — это явный выбор конкретной строки, не бланковый.
+            await RevokeAllRefreshTokensAsync(targetUserId, DateTime.UtcNow, null, actingUserId, cancellationToken);
+            await RefreshTokenRepository.SaveChangesAsync(cancellationToken);
+        }
+
+        // Живые сессии пользователя: непогашенные и непросроченные, свежие сверху.
+        private async Task<List<SessionInfoModel>> BuildSessionListAsync(int userId, string? currentTokenHash, CancellationToken cancellationToken)
+        {
+            var now = DateTime.UtcNow;
+
+            var sessions = await RefreshTokenRepository.AsQueryable()
+                                                       .Where(x => x.UserId == userId && x.RevokedAtUtc == null && x.ExpiresAtUtc > now)
+                                                       .OrderByDescending(x => x.CreatedAtUtc)
+                                                       .ToListAsync(cancellationToken);
+
+            var result = mapper.Map<List<SessionInfoModel>>(sessions);
+
+            for (var index = 0; index < sessions.Count; index++)
+            {
+                // Гео на строке сессии не хранится (в отличие от LoginHistory) — резолвится
+                // на чтении: lookup локальный и дешёвый, а без базы просто вернёт null.
+                var location = geoIpLookup.Lookup(sessions[index].CreatedByIp);
+                result[index].CountryCode = location?.CountryCode;
+                result[index].CountryName = location?.CountryName;
+                result[index].City = location?.City;
+
+                result[index].IsCurrent = currentTokenHash is not null && sessions[index].TokenHash == currentTokenHash;
+            }
+
+            return result;
+        }
+
+        // Общий путь отзыва одной сессии для самообслуживания и админки: различие только в
+        // том, чей id считается владельцем.
+        private async Task RevokeSessionAsync(int userId, int sessionId, CancellationToken cancellationToken)
+        {
+            var session = await RefreshTokenRepository.AsQueryable()
+                                                      .SingleOrDefaultAsync(x => x.Id == sessionId, cancellationToken);
+
+            // Гард владения: чужая строка отвечает тем же 404, что и несуществующая. Именно
+            // он не даёт обычному пользователю погасить сессию постороннего по её id, и по
+            // коду ответа такие id не перебираются.
+            if (session is null || session.UserId != userId)
+                throw new ErrorModelException(GlobalErrorCode.RelationalEntityNotFound, HttpStatusCode.NotFound,
+                    $"Session with id {sessionId} not found.");
+
+            // Идемпотентность, как у LogoutAsync: уже отозванная сессия — не ошибка,
+            // конечное состояние и так достигнуто.
+            if (session.RevokedAtUtc.HasValue)
+                return;
+
+            // ReplacedByTokenHash остаётся пустым — это явное гашение, а не ротация. Именно
+            // по нему reuse-detection (ADR 033) отличает такую сессию от гонки и НЕ гасит
+            // из-за неё остальные.
+            var now = DateTime.UtcNow;
+            session.RevokedAtUtc = now;
+
+            // Мгновенный отзыв уже выданного access-токена ЭТОЙ сессии (David, 2026-08-31):
+            // отзыва refresh-токена мало — access-токен ещё до 15 минут (AccessTokenMinutes)
+            // прожил бы на устройстве, которое отозвали, никак этого не заметив (та же
+            // причина, что у accessTokenRevocationRegistry.Revoke в ImpersonateAsync, ADR 030,
+            // только точечно по сессии, а не по всем токенам пользователя — иначе завершение
+            // ЧУЖОЙ сессии выбило бы и ту, с которой его вызвали).
+            sessionRevocationRegistry.Revoke(session.TokenHash, now,
+                now.AddMinutes(JwtSettings.Instance.AccessTokenMinutes));
+
+            await RefreshTokenRepository.SaveChangesAsync(cancellationToken);
         }
 
         #endregion
@@ -616,7 +833,7 @@ namespace ATTours.BusinessServices.Services.AuthServices
             token.UsedAtUtc = now;
 
             // Смена пароля обесценивает все выданные сессии — вынужденный ре-логин везде.
-            await RevokeAllRefreshTokensAsync(user.Id, now, null, cancellationToken);
+            await RevokeAllRefreshTokensAsync(user.Id, now, null, null, cancellationToken);
 
             await UserRepository.SaveChangesAsync(cancellationToken);
             transaction.Complete();
@@ -645,7 +862,7 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
             // Текущая сессия остаётся живой: пользователь только что подтвердил старый
             // пароль, выкидывать его из собственного браузера незачем.
-            await RevokeAllRefreshTokensAsync(user.Id, now, keptTokenHash, cancellationToken);
+            await RevokeAllRefreshTokensAsync(user.Id, now, keptTokenHash, null, cancellationToken);
 
             await UserRepository.SaveChangesAsync(cancellationToken);
             transaction.Complete();
@@ -691,7 +908,12 @@ namespace ATTours.BusinessServices.Services.AuthServices
             request.UsedAtUtc = null;
 
             await EmailChangeRequestRepository.SaveChangesAsync(cancellationToken);
-            await emailSender.SendEmailChangeOldEmailCodeAsync(user.Email, user.FirstName, code, cancellationToken);
+            await SendAuthEmailAsync(NotificationTemplateTrigger.EmailChangeCode, user.Email, user.FirstName,
+                new Dictionary<string, string>
+                {
+                    [NotificationAuthPlaceholders.UserName] = user.FirstName,
+                    [NotificationAuthPlaceholders.Code] = code
+                }, cancellationToken);
 
             return new MessageResultModel
             {
@@ -760,7 +982,12 @@ namespace ATTours.BusinessServices.Services.AuthServices
             request.UserAgent = requestContext.UserAgent;
 
             await EmailChangeRequestRepository.SaveChangesAsync(cancellationToken);
-            await emailSender.SendEmailChangeConfirmationAsync(model.NewEmail, user.FirstName, token, cancellationToken);
+            await SendAuthEmailAsync(NotificationTemplateTrigger.EmailChangeConfirm, model.NewEmail, user.FirstName,
+                new Dictionary<string, string>
+                {
+                    [NotificationAuthPlaceholders.UserName] = user.FirstName,
+                    [NotificationAuthPlaceholders.ConfirmUrl] = EmailMessageFactory.BuildEmailChangeConfirmUrl(emailSettings, token)
+                }, cancellationToken);
 
             return new MessageResultModel
             {
@@ -799,7 +1026,7 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
             // Форс ре-логин на всех устройствах (решение Давида, 2026-08-06) — тот же приём,
             // что уже использует ResetPasswordAsync.
-            await RevokeAllRefreshTokensAsync(request.UserId, now, null, cancellationToken);
+            await RevokeAllRefreshTokensAsync(request.UserId, now, null, null, cancellationToken);
 
             await UserRepository.SaveChangesAsync(cancellationToken);
             transaction.Complete();
@@ -874,7 +1101,12 @@ namespace ATTours.BusinessServices.Services.AuthServices
                 return GenericEmailSent(null);
 
             var verificationToken = await UpsertUserTokenAsync(user, UserTokenType.EmailVerification, requestContext, cancellationToken);
-            await emailSender.SendEmailVerificationAsync(user.Email, user.FirstName, verificationToken, cancellationToken);
+            await SendAuthEmailAsync(NotificationTemplateTrigger.VerifyEmail, user.Email, user.FirstName,
+                new Dictionary<string, string>
+                {
+                    [NotificationAuthPlaceholders.UserName] = user.FirstName,
+                    [NotificationAuthPlaceholders.VerifyUrl] = EmailMessageFactory.BuildVerifyUrl(emailSettings, verificationToken)
+                }, cancellationToken);
 
             return GenericEmailSent(verificationToken);
         }
@@ -885,7 +1117,12 @@ namespace ATTours.BusinessServices.Services.AuthServices
         private async Task<string> IssuePasswordResetTokenAsync(User user, RequestContextModel requestContext, CancellationToken cancellationToken)
         {
             var resetToken = await UpsertUserTokenAsync(user, UserTokenType.PasswordReset, requestContext, cancellationToken);
-            await emailSender.SendPasswordResetAsync(user.Email, user.FirstName, resetToken, cancellationToken);
+            await SendAuthEmailAsync(NotificationTemplateTrigger.ResetPassword, user.Email, user.FirstName,
+                new Dictionary<string, string>
+                {
+                    [NotificationAuthPlaceholders.UserName] = user.FirstName,
+                    [NotificationAuthPlaceholders.ResetUrl] = EmailMessageFactory.BuildResetUrl(emailSettings, resetToken)
+                }, cancellationToken);
 
             return resetToken;
         }
@@ -929,7 +1166,11 @@ namespace ATTours.BusinessServices.Services.AuthServices
 
         // Помечает отозванными все живые refresh-токены пользователя, кроме keptTokenHash.
         // SaveChanges вызывает вызывающий — операция всегда часть большей транзакции.
-        private async Task RevokeAllRefreshTokensAsync(int userId, DateTime revokedAtUtc, string? keptTokenHash, CancellationToken cancellationToken)
+        // spareImpersonationByUserId: щадит РОВНО ту строку, что сама является impersonation-
+        // сессией ЭТОГО актёра над userId (см. RevokeAllUserSessionsAsync). Null везде, кроме
+        // того единственного вызова — остальные вызовы этого параметра не знают и не должны.
+        private async Task RevokeAllRefreshTokensAsync(int userId, DateTime revokedAtUtc, string? keptTokenHash,
+            int? spareImpersonationByUserId, CancellationToken cancellationToken)
         {
             var activeTokens = await RefreshTokenRepository.AsQueryable()
                                                            .Where(x => x.UserId == userId && x.RevokedAtUtc == null)
@@ -940,7 +1181,18 @@ namespace ATTours.BusinessServices.Services.AuthServices
                 if (keptTokenHash is not null && activeToken.TokenHash == keptTokenHash)
                     continue;
 
+                if (spareImpersonationByUserId is not null && activeToken.ImpersonatedByUserId == spareImpersonationByUserId)
+                    continue;
+
                 activeToken.RevokedAtUtc = revokedAtUtc;
+
+                // Тот же мгновенный отзыв access-токена, что и в RevokeSessionAsync (David,
+                // 2026-08-31), — по TokenHash ИМЕННО ЭТОЙ строки, не по userId. Покрывает разом
+                // все вызовы этого метода: «Завершить остальные сеансы», смену пароля,
+                // принудительный логаут админом. keptTokenHash уже исключил сессию вызывающего
+                // выше — под отзыв идут только реально гашенные токены.
+                sessionRevocationRegistry.Revoke(activeToken.TokenHash, revokedAtUtc,
+                    revokedAtUtc.AddMinutes(JwtSettings.Instance.AccessTokenMinutes));
             }
         }
 
@@ -968,6 +1220,67 @@ namespace ATTours.BusinessServices.Services.AuthServices
             };
 
             return tokenValue;
+        }
+
+        // Догоняющая ротация для прощённой гонки (ADR 033, случай 1). Отдать вызывающему тот
+        // самый токен-преемник нельзя — в БД лежит только его ХЕШ, а plaintext был выдан
+        // устройству, которое выиграло гонку, и здесь неизвестен. Поэтому живую голову
+        // цепочки продвигаем ещё на один шаг и отдаём вызывающему уже новый токен: оба
+        // устройства остаются в сессии, а цепочка при этом не ветвится.
+        //
+        // Свойства сессии (RememberMe, ImpersonatedByUserId) переносятся с ГОЛОВЫ, а не с
+        // предъявленного токена: актуальное состояние цепочки — именно у неё.
+        private async Task<RefreshOutcome> CatchUpRotationAsync(RefreshToken storedToken, RefreshToken head,
+            DateTime now, RequestContextModel requestContext, CancellationToken cancellationToken)
+        {
+            // Те же три проверки, что и в обычной ротации, и в том же порядке — прощённая
+            // гонка не должна быть лазейкой: без этого блокировка/удаление/деверификация
+            // аккаунта ровно в 10-секундное окно после ротации давали бы устройству ещё
+            // один access-токен в обход только что принятого решения. Гасим ГОЛОВУ (живой
+            // конец цепочки) — predъявленный storedToken уже отозван ротацией.
+            var user = storedToken.User;
+
+            if (user.IsDeleted)
+                throw await RevokeAndRejectAsync(head, now, GlobalErrorCode.AccountDeleted,
+                    "Account has been deleted.", cancellationToken);
+
+            if (user.LockedUntil.HasValue && user.LockedUntil.Value > now)
+                throw await RevokeAndRejectAsync(head, now, GlobalErrorCode.AccountLocked,
+                    "Account is temporarily locked.", cancellationToken);
+
+            if (!user.IsEmailVerified)
+                throw await RevokeAndRejectAsync(head, now, GlobalErrorCode.EmailNotVerified,
+                    "Email is not verified.", cancellationToken);
+
+            var minted = jwtTokenService.CreateRefreshToken(head.RememberMe);
+
+            head.RevokedAtUtc = now;
+            head.ReplacedByTokenHash = minted.TokenHash;
+
+            await RefreshTokenRepository.AddAsync(new RefreshToken
+            {
+                UserId = head.UserId,
+                TokenHash = minted.TokenHash,
+                ExpiresAtUtc = minted.ExpiresAtUtc,
+                CreatedAtUtc = now,
+                CreatedByIp = requestContext.IpAddress,
+                CreatedByUserAgent = requestContext.UserAgent,
+                RememberMe = head.RememberMe,
+                ImpersonatedByUserId = head.ImpersonatedByUserId
+            }, cancellationToken);
+
+            await RefreshTokenRepository.SaveChangesAsync(cancellationToken);
+
+            // Пользователь у предъявленного токена и у головы один и тот же (голова — его
+            // прямой преемник), но Include(User) есть только у storedToken — по нему и
+            // резолвим права, как в обычной ротации.
+            var accessToken = jwtTokenService.CreateAccessToken(storedToken.User,
+                await ResolvePermissionsAsync(storedToken.User, cancellationToken),
+                minted.TokenHash,
+                head.ImpersonatedByUserId);
+
+            return new RefreshOutcome(accessToken,
+                new IssuedRefreshToken(minted.Token, minted.ExpiresAtUtc, head.RememberMe));
         }
 
         // Гасит ТОЛЬКО предъявленный токен: блокировка и снятие верификации — легитимное

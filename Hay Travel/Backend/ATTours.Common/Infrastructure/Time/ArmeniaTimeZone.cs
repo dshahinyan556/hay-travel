@@ -37,19 +37,28 @@ namespace ATTours.Common.Infrastructure.Time
         // Момент начала календарного дня date по армянскому времени, выраженный в UTC.
         // Для 2026-08-28 это 2026-08-27T20:00:00Z. Возвращается DateTime с Kind = Utc —
         // сравнивать с DateTime.UtcNow можно напрямую.
-        public static DateTime DayStartUtc(DateOnly date)
+        public static DateTime DayStartUtc(DateOnly date) => MomentUtc(date, TimeOnly.MinValue);
+
+        // Произвольный момент внутри календарного дня по армянскому времени, выраженный
+        // в UTC. Нужен там, где точка отсчёта — не полночь, а конкретное время из
+        // расписания продукта (TourStartTime.Time хранится как местное ереванское время
+        // без даты, и превращать его в момент можно только вместе с датой выезда).
+        //
+        // DayStartUtc — частный случай этого метода, а не его копия: две реализации одного
+        // перевода местного времени в UTC разъехались бы на первой же правке.
+        public static DateTime MomentUtc(DateOnly date, TimeOnly time)
         {
             // Kind = Unspecified (так отдаёт DateOnly.ToDateTime) — обязательное условие
             // ConvertTimeToUtc: с Kind = Utc он бы бросил исключение вместо конвертации.
-            var localMidnight = date.ToDateTime(TimeOnly.MinValue);
+            var localMoment = date.ToDateTime(time);
 
             // У фиксированного UTC+4 несуществующего времени не бывает; проверка нужна на
             // случай, если ОС когда-нибудь вернёт для Еревана зону с правилами перехода —
             // тогда лучше отдать корректную границу по офсету, чем уронить джобу.
-            if (TimeZone.IsInvalidTime(localMidnight))
-                return DateTime.SpecifyKind(localMidnight - TimeZone.BaseUtcOffset, DateTimeKind.Utc);
+            if (TimeZone.IsInvalidTime(localMoment))
+                return DateTime.SpecifyKind(localMoment - TimeZone.BaseUtcOffset, DateTimeKind.Utc);
 
-            return TimeZoneInfo.ConvertTimeToUtc(localMidnight, TimeZone);
+            return TimeZoneInfo.ConvertTimeToUtc(localMoment, TimeZone);
         }
 
         // Какое сегодня число в Армении на момент utcNow. Нужен там, где «сегодня» —

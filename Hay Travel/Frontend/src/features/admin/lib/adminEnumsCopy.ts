@@ -7,6 +7,10 @@ import {
   OrderLinkedRecipient,
 } from '@/features/admin/types/notifications'
 import {
+  NotificationTemplateEntity,
+  NotificationTemplateTrigger,
+} from '@/features/admin/types/notificationTemplates'
+import {
   EmployeeJobRole,
   LanguageCode,
   TagColor,
@@ -72,6 +76,9 @@ export const adminEnumsCopy = defineCopy(
       [EmailActionKey.OrderAssignEmployee]: 'Назначение исполнителя',
       [EmailActionKey.OrderUnassignEmployee]: 'Снятие исполнителя',
       [EmailActionKey.OrderSendToClient]: 'Отправка заказа клиенту',
+      // Добавлено вместе с Notification Templates (2026-08-31) — тот же пробел, что и в
+      // types/notifications.ts: 5-е событие существовало на бэке, но фронт про него не знал.
+      [EmailActionKey.OrderAutoCancelled]: 'Автоотмена неподтверждённой брони',
     } as Record<EmailActionKey, string>,
     notificationPlatform: {
       [NotificationPlatform.Email]: 'Email',
@@ -92,6 +99,21 @@ export const adminEnumsCopy = defineCopy(
       [OrderLinkedRecipient.Client]: 'Клиент заказа',
       [OrderLinkedRecipient.Employee]: 'Исполнитель заказа',
     } as Record<OrderLinkedRecipient, string>,
+    /** Сущность для мердж-полей шаблона (Notification Templates, 2026-08-31). */
+    notificationTemplateEntity: {
+      [NotificationTemplateEntity.None]: 'Нет (свободный шаблон)',
+      [NotificationTemplateEntity.Order]: 'Заказ',
+      [NotificationTemplateEntity.User]: 'Пользователь',
+      [NotificationTemplateEntity.Tour]: 'Тур',
+      [NotificationTemplateEntity.Employee]: 'Сотрудник',
+    } as Record<NotificationTemplateEntity, string>,
+    notificationTemplateTrigger: {
+      [NotificationTemplateTrigger.None]: 'Не привязан',
+      [NotificationTemplateTrigger.VerifyEmail]: 'Подтверждение регистрации',
+      [NotificationTemplateTrigger.ResetPassword]: 'Восстановление пароля',
+      [NotificationTemplateTrigger.EmailChangeCode]: 'Код смены почты',
+      [NotificationTemplateTrigger.EmailChangeConfirm]: 'Подтверждение новой почты',
+    } as Record<NotificationTemplateTrigger, string>,
   },
   {
     tourType: {
@@ -130,6 +152,7 @@ export const adminEnumsCopy = defineCopy(
       [EmailActionKey.OrderAssignEmployee]: 'Employee assigned',
       [EmailActionKey.OrderUnassignEmployee]: 'Employee unassigned',
       [EmailActionKey.OrderSendToClient]: 'Order sent to the client',
+      [EmailActionKey.OrderAutoCancelled]: 'Unconfirmed booking auto-cancelled',
     } as Record<EmailActionKey, string>,
     notificationPlatform: {
       [NotificationPlatform.Email]: 'Email',
@@ -150,5 +173,19 @@ export const adminEnumsCopy = defineCopy(
       [OrderLinkedRecipient.Client]: 'Order client',
       [OrderLinkedRecipient.Employee]: 'Order employee',
     } as Record<OrderLinkedRecipient, string>,
+    notificationTemplateEntity: {
+      [NotificationTemplateEntity.None]: 'None (free-form template)',
+      [NotificationTemplateEntity.Order]: 'Order',
+      [NotificationTemplateEntity.User]: 'User',
+      [NotificationTemplateEntity.Tour]: 'Tour',
+      [NotificationTemplateEntity.Employee]: 'Employee',
+    } as Record<NotificationTemplateEntity, string>,
+    notificationTemplateTrigger: {
+      [NotificationTemplateTrigger.None]: 'Not linked',
+      [NotificationTemplateTrigger.VerifyEmail]: 'Registration confirmation',
+      [NotificationTemplateTrigger.ResetPassword]: 'Password reset',
+      [NotificationTemplateTrigger.EmailChangeCode]: 'Email change code',
+      [NotificationTemplateTrigger.EmailChangeConfirm]: 'New email confirmation',
+    } as Record<NotificationTemplateTrigger, string>,
   },
 )

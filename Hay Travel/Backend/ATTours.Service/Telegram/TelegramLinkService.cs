@@ -1,5 +1,6 @@
 using ArmeniaTours.DataLayer;
 using ATTours.BusinessServices.Security;
+using ATTours.BusinessServices.Services.AuthServices;
 using ATTours.Common.DTO.Account;
 using ATTours.Common.DTO.Telegram;
 using ATTours.Common.Entities;
@@ -54,7 +55,8 @@ namespace ATTours.BusinessServices.Telegram
 
         #endregion
 
-        public async Task<TelegramLinkCodeModel> IssueLinkCodeAsync(int userId, CancellationToken cancellationToken = default)
+        public async Task<TelegramLinkCodeModel> IssueLinkCodeAsync(int userId, RequestContextModel requestContext,
+            CancellationToken cancellationToken = default)
         {
             // Без настроенного бота код бессмыслен: пользователь получил бы рабочую на вид
             // ссылку на молчащего бота и ждал бы ответа, которого не будет.
@@ -83,9 +85,12 @@ namespace ATTours.BusinessServices.Telegram
                     Type = UserTokenType.TelegramLink,
                     Token = code,
                     RequestedAtUtc = now,
-                    // RequestIp/UserAgent остаются пустыми: запрос кода приходит из личного
-                    // кабинета, RequestContextModel сюда не прокидывается (эти поля —
-                    // аудит auth-флоу, а не привязки).
+                    // RequestIp — NOT NULL в UserTokenConfiguration, общая колонка всех
+                    // одноразовых токенов. Пропуск этих полей ронял INSERT SqlException'ом,
+                    // который MsSqlContextExceptionHandlerChain отдавал наружу как 400, —
+                    // выдать код было нельзя вообще (баг найден на проде 2026-08-29).
+                    RequestIp = requestContext.IpAddress,
+                    UserAgent = requestContext.UserAgent,
                     ExpiresAtUtc = expiresAtUtc
                 }, cancellationToken);
             }
@@ -93,6 +98,8 @@ namespace ATTours.BusinessServices.Telegram
             {
                 existingToken.Token = code;
                 existingToken.RequestedAtUtc = now;
+                existingToken.RequestIp = requestContext.IpAddress;
+                existingToken.UserAgent = requestContext.UserAgent;
                 existingToken.ExpiresAtUtc = expiresAtUtc;
                 existingToken.UsedAtUtc = null;
             }

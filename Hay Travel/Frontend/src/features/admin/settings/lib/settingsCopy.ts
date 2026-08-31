@@ -30,11 +30,6 @@ const ru = {
   /** Shown when the role may read the settings but not save them (`settings.Update`). */
   readOnlyHint: 'У вашей роли нет права изменять настройки — доступен только просмотр.',
 
-  /** Полоса личности записи (шаблон C): экран НЕ список — вторую запись создать невозможно. */
-  identityBadge: 'единственная запись',
-  identitySections: (count: number) =>
-    `${count} ${pluralizeRu(count, ['раздел', 'раздела', 'разделов'])}`,
-
   emptyTitle: 'Настроек пока нет',
   emptyText:
     'Сервер не вернул ни одной настройки. Обновите страницу — если ничего не изменилось, ' +
@@ -199,10 +194,6 @@ const en: { [K in keyof typeof ru]: (typeof ru)[K] } = {
   title: 'Settings',
   subtitle: 'Home-screen content, contacts, social links, logo and SEO of the public site.',
   readOnlyHint: 'Your role cannot change the settings — view only.',
-
-  identityBadge: 'a single record',
-  identitySections: (count: number) =>
-    `${count} ${pluralizeEn(count, ['section', 'sections'])}`,
 
   emptyTitle: 'No settings yet',
   emptyText:

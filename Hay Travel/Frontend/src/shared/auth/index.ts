@@ -18,6 +18,7 @@ export type {
   MyPermissionsModel,
   MyScreenPermissionModel,
   RegisterRequest,
+  SessionModel,
   SetUserJobRoleModel,
   SetUserPreferredLanguageModel,
   UserDetailInfoModel,
@@ -51,6 +52,12 @@ export {
 } from './authStore'
 
 export { authFetch, SessionExpiredError } from './authFetch'
+
+// Self-service device management (spec 017 §4). Exported from the auth core rather than from a
+// feature because the DTO is the core's and both surfaces render it — the admin's counterpart
+// (`api/Users/{id}/Sessions…`) lives with the other admin endpoints.
+export { getMySessions, revokeMyOtherSessions, revokeMySession } from './sessionsApi'
+
 export { useAuth } from './useAuth'
 export { AuthErrorCode, authErrorCodeOf, authErrorMessageKey } from './authErrors'
 

@@ -12,17 +12,26 @@ namespace ATTours.BusinessServices.Services.Availability
     // дата-пикер сайта берёт, что гасить. Материализованное правило нужно не для запрета,
     // а для того чтобы админ-календарь мог показать причину.
     //
-    // Три будущих потребителя обязаны звать именно этот метод, а не пересчитывать порог
-    // у себя: разъехавшиеся копии одного порога — это дата, закрытая на бэке и открытая
-    // в календаре.
+    // Три потребителя (валидация заказа, публичный GetClosedDates, TourDateAutoClosureJob)
+    // обязаны звать именно этот метод — как правило, через AutoCloseLeadTimeResolver, который
+    // добавляет к нему потуровой порог, — а не пересчитывать окно у себя: разъехавшиеся копии
+    // одного порога это дата, закрытая на бэке и открытая в календаре.
     public static class AutoClosureWindow
     {
         // true = бронировать date уже нельзя.
         //
-        // Точка отсчёта — начало календарного дня date по времени Армении (не UTC-полночь
-        // и не время сервера): тур начинается утром на месте, и «за сутки до» означает
-        // сутки до ереванского утра.
-        public static bool IsWithinAutoCloseWindow(DateOnly date, int leadTimeHours, DateTime nowUtc)
+        // Точка отсчёта — САМЫЙ ПОЗДНИЙ слот дня (решение Р1 от 2026-08-29), а не начало дня
+        // и не самый ранний слот. Смысл правила: пока до последнего выезда дня остаётся
+        // больше порога, день продаётся целиком; как только осталось меньше — гаснет весь
+        // день, все слоты сразу. Послотового гашения нет намеренно: клиент видит день
+        // открытым или закрытым, а не «утренний выезд ещё можно, вечерний уже нет».
+        //
+        // Продукт без расписания (трансфер: время подачи вводит сам клиент, StartTimes пуст)
+        // считается от начала календарного дня по армянскому времени — прежнее поведение
+        // (решение Р5). Той же веткой пользуется запрос без продукта вообще (конструктор
+        // кастомного трансфера), у которого расписания нет по определению.
+        public static bool IsWithinAutoCloseWindow(DateOnly date, IReadOnlyCollection<TimeOnly>? startTimes,
+            int leadTimeHours, DateTime nowUtc)
         {
             // Порог выключен: 0 (или отрицательное значение как результат ручной правки
             // настройки) не должен закрывать вообще всё — это чинится в админке, а не
@@ -30,8 +39,7 @@ namespace ATTours.BusinessServices.Services.Availability
             if (leadTimeHours <= 0)
                 return false;
 
-            var dayStartUtc = ArmeniaTimeZone.DayStartUtc(date);
-            var closesAtUtc = dayStartUtc.AddHours(-leadTimeHours);
+            var closesAtUtc = ResolveReferenceUtc(date, startTimes).AddHours(-leadTimeHours);
 
             var normalizedNow = nowUtc.Kind == DateTimeKind.Local
                 ? nowUtc.ToUniversalTime()
@@ -40,6 +48,20 @@ namespace ATTours.BusinessServices.Services.Availability
             // Прошедшие даты тоже попадают под условие — и это правильно: они и так
             // недоступны, отдельной проверки «дата в прошлом» здесь не нужно.
             return normalizedNow >= closesAtUtc;
+        }
+
+        // Момент, от которого отсчитывается порог. Пустой (или неизвестный) список слотов —
+        // не ошибка, а легальное состояние трансфера, поэтому здесь фолбэк на начало дня,
+        // а не исключение.
+        private static DateTime ResolveReferenceUtc(DateOnly date, IReadOnlyCollection<TimeOnly>? startTimes)
+        {
+            if (startTimes is null || startTimes.Count == 0)
+                return ArmeniaTimeZone.DayStartUtc(date);
+
+            // Max по самому времени, а не по TourStartTime.SortOrder: порядок слотов задаёт
+            // админ для показа на сайте и он не обязан быть хронологическим, а нам нужен
+            // именно последний выезд дня.
+            return ArmeniaTimeZone.MomentUtc(date, startTimes.Max());
         }
     }
 }

@@ -9,7 +9,6 @@ import {
   useScreenPermission,
 } from '@/shared/auth'
 import { getAllSiteSettings } from '@/features/admin/api/adminSiteSettings'
-import { SingleRecordIdentity } from '@/features/admin/ui/SingleRecordIdentity'
 import { useSettingsForm } from './hooks/useSettingsForm'
 import { settingsCopy } from './lib/settingsCopy'
 import { SettingsForm } from './components/SettingsForm'
@@ -36,8 +35,11 @@ export async function settingsLoader() {
  *
  * Template C — «Форма настройки» (`SetupFormLayout`). This screen is the archetype's own reference
  * example: exactly one record, forever — there is no list route and no `/:id`, the screen IS the
- * record. Hence no control zone at the top at all (Add/Delete do not exist here), the identity
- * strip instead, and the single Save pinned in the layout's `footer`.
+ * record. Hence no control zone at the top at all (Add/Delete do not exist here) and the single
+ * Save pinned in the layout's `footer`.
+ *
+ * The template's identity strip is deliberately NOT rendered (removed 2026-08-29): with the tabs
+ * right below it, "единственная запись · N разделов" restated what the screen already showed.
  *
  * State is seeded from the loader once, via the hook's lazy initializer, and lives locally
  * afterwards — saving replaces it with the server's own response, so the loader is never
@@ -68,13 +70,6 @@ export function SettingsPage() {
     <SetupFormLayout
       title={copy.title}
       subtitle={copy.subtitle}
-      identity={
-        <SingleRecordIdentity
-          name={copy.title}
-          badge={copy.identityBadge}
-          note={copy.identitySections(state.sections.length)}
-        />
-      }
       /* The fields stay editable-looking but «Сохранить» never enables — a read-only settings
          screen is still worth opening, and an explanation beats a mysteriously dead button. */
       message={

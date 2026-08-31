@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLoaderData, useRevalidator } from 'react-router'
 import { getClosedDates, getGroupSeats } from '@/shared/api/booking'
 import { getTourInfo } from '@/shared/api/tours'
@@ -7,6 +7,8 @@ import { getContentText, type ContentText } from '@/shared/api/siteSettings'
 import { getBookingWindow, type BookingWindow } from '@/shared/booking'
 import { getCartState, removeCartItem, updateCartItem, useCart } from '@/shared/cart'
 import { useAuth } from '@/shared/auth'
+import { isOrderContactsValid, OrderContactsPicker } from '@/shared/contacts'
+import type { OrderContactInput } from '@/shared/types/contact'
 import type { TourDetail } from '@/shared/types/tour'
 import type { TransferDetail } from '@/shared/types/transfer'
 import type { TourGroupSeatsModel } from '@/shared/types/booking'
@@ -134,6 +136,31 @@ export function CartPage() {
   const checkout = useCheckout()
   const { total, originalTotal, hasQuoteOnlyLines } = useCartTotal(items, tours, transfers)
 
+  /**
+   * С кем связаться по этому заказу (батч 2026-08-29). Живёт на СТРАНИЦЕ, а не внутри блока
+   * выбора: это часть тела запроса ровно так же, как позиции, и владеть им обязан тот, кто
+   * отправляет. Блок (`OrderContactsPicker`) — управляемый, он только предлагает и правит.
+   *
+   * В корзине набор НЕ переживает перезагрузку: контакт восстанавливается из «последнего
+   * использованного» или из справочника профиля, а незаконченный ввод — это не выбор.
+   */
+  const [contacts, setContacts] = useState<OrderContactInput[]>([])
+
+  /* Стабильная ссылка: `onChange` попадает в зависимости эффекта предзаполнения внутри блока,
+     и новая функция на каждый рендер корзины гоняла бы его вхолостую. Зависимость — сам
+     `clearContactError` (он `useCallback`), а не объект `checkout`: тот пересоздаётся каждый
+     рендер и обнулял бы всю выгоду. */
+  const { clearContactError } = checkout
+  const handleContactsChange = useCallback(
+    (next: OrderContactInput[]) => {
+      // Любая правка снимает отказ сервера по контактам — иначе он висел бы над уже исправленным
+      // набором, ровно как это запрещено строчным ошибкам позиций.
+      clearContactError()
+      setContacts(next)
+    },
+    [clearContactError],
+  )
+
   /** Есть ли у позиции её продукт — единственное место, где это решается: у брони это `tours`,
    * у трансфера `transfers`, и перепутать карты нельзя (`GetTourInfo` на трансфер отвечает 404). */
   const isResolved = (item: (typeof items)[number]) =>
@@ -210,6 +237,10 @@ export function CartPage() {
   // stale key could otherwise keep the button disabled with nothing visibly marked.
   const hasLineErrors = items.some((item) => checkout.lineErrors.has(item.id))
   const sessionUnknown = authStatus !== 'authenticated' && authStatus !== 'anonymous'
+  /* Контакт обязателен у КАЖДОГО заказа (спека 016): без него сервер отбивает заявку целиком
+     (2060), поэтому кнопка гасится заранее — и с объяснением, а не пустым отказом. Проверяется
+     тем же правилом, что и на сервере (`isOrderContactsValid`), включая «основной ровно один». */
+  const contactsReady = isOrderContactsValid(contacts)
 
   const blockedBy = hasUnavailableTour
     ? 'unavailableTour'
@@ -217,9 +248,11 @@ export function CartPage() {
       ? 'lineErrors'
       : hasLineIssues
         ? 'lineIssues'
-        : sessionUnknown
-          ? 'sessionUnknown'
-          : null
+        : !contactsReady
+          ? 'contacts'
+          : sessionUnknown
+            ? 'sessionUnknown'
+            : null
 
   /* Any edit clears that row's mark — otherwise the submit button would stay blocked forever. The
      old id is used deliberately: changing the date rebuilds the id, and the entry filed under the
@@ -241,7 +274,7 @@ export function CartPage() {
 
   const handleSubmit = () => {
     submittedTotalRef.current = total
-    void checkout.submit(items)
+    void checkout.submit(items, contacts)
   }
 
   return (
@@ -305,6 +338,18 @@ export function CartPage() {
                   onRemove={handleRemove}
                 />
               ))}
+            </div>
+
+            {/* Под списком, а не над ним: сначала человек проверяет, ЧТО заказывает, и только
+                потом говорит, как с ним связаться. На мобильном блок оказывается ровно между
+                позициями и итогом — там же, где на десктопе, и в том же порядке чтения. */}
+            <div className="mt-4">
+              <OrderContactsPicker
+                value={contacts}
+                onChange={handleContactsChange}
+                error={checkout.contactError}
+                disabled={checkout.running}
+              />
             </div>
           </div>
 

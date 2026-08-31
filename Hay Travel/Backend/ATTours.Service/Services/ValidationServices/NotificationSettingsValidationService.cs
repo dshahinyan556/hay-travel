@@ -55,8 +55,8 @@ namespace ATTours.BusinessServices.Services.ValidationServices
             if (!Enum.IsDefined(platform.Platform))
                 throw Invalid($"Notification platform '{(int)platform.Platform}' is unknown.");
 
-            if (platform.Platform == NotificationPlatform.Email)
-                ValidateTemplate(eventKey, platform);
+            if (platform.IsEnabled)
+                await ValidateTemplateReferenceAsync(eventKey, platform);
 
             var recipients = platform.Recipients ?? [];
 
@@ -66,29 +66,30 @@ namespace ATTours.BusinessServices.Services.ValidationServices
             EnsureNoDuplicates(recipients);
         }
 
-        // Правило существовавшего EmailTemplateValidationService сохраняется: пустая тема
-        // или пустое тело — ошибка, EN-версии могут быть пустыми (перевод не сделан).
-        private static void ValidateTemplate(EmailActionKey eventKey, NotificationPlatformUpdateModel platform)
+        // Раньше здесь проверялась встроенная Subject/BodyHtml (только у Email — у Telegram
+        // шаблона не было вовсе). Теперь у обеих платформ — ссылка на шаблон из открытой
+        // библиотеки Notification Templates: обязательна, когда платформа включена (пустой
+        // TemplateId у включённого канала означал бы «письмо уходит пустым», это баг, а не
+        // легальное состояние). Существование и корректность содержимого самого шаблона —
+        // забота NotificationTemplateValidationService на СОХРАНЕНИИ шаблона, здесь только
+        // проверяем ссылку.
+        private async Task ValidateTemplateReferenceAsync(EmailActionKey eventKey, NotificationPlatformUpdateModel platform)
         {
-            if (string.IsNullOrWhiteSpace(platform.Subject))
-                throw new ErrorModelException(GlobalErrorCode.EmailTemplateInvalid, HttpStatusCode.BadRequest,
-                    $"Email template '{eventKey}' has an empty subject.");
+            if (platform.TemplateId is null)
+                throw new ErrorModelException(GlobalErrorCode.NotificationTemplateInvalid, HttpStatusCode.BadRequest,
+                    $"Notification channel '{eventKey}'/{platform.Platform} is enabled but has no template assigned.");
 
-            // Пустое тело после санитизации — тоже ошибка: письмо из одних вырезанных
-            // тегов ушло бы клиенту пустым, и админ об этом не узнал бы.
-            if (string.IsNullOrWhiteSpace(platform.BodyHtml))
-                throw new ErrorModelException(GlobalErrorCode.EmailTemplateInvalid, HttpStatusCode.BadRequest,
-                    $"Email template '{eventKey}' has an empty body.");
+            var template = await context.Set<NotificationTemplate>()
+                                        .AsNoTracking()
+                                        .SingleOrDefaultAsync(x => x.Id == platform.TemplateId, cancellationToken);
 
-            EnsureBodyLength(eventKey, platform.BodyHtml);
-            EnsureBodyLength(eventKey, platform.BodyHtmlEn);
-        }
+            if (template is null)
+                throw new ErrorModelException(GlobalErrorCode.NotificationTemplateInvalid, HttpStatusCode.BadRequest,
+                    $"Template {platform.TemplateId} not found.");
 
-        private static void EnsureBodyLength(EmailActionKey eventKey, string? bodyHtml)
-        {
-            if (!string.IsNullOrEmpty(bodyHtml) && bodyHtml.Length > MaxBodyHtmlLength)
-                throw new ErrorModelException(GlobalErrorCode.EmailTemplateInvalid, HttpStatusCode.BadRequest,
-                    $"Email template '{eventKey}' body exceeds {MaxBodyHtmlLength} characters.");
+            if (template.Channel != platform.Platform)
+                throw new ErrorModelException(GlobalErrorCode.NotificationTemplateInvalid, HttpStatusCode.BadRequest,
+                    $"Template {platform.TemplateId} is a {template.Channel} template and cannot be used for {platform.Platform}.");
         }
 
         private async Task ValidateRecipientAsync(NotificationPlatform platform, NotificationRecipientUpdateModel recipient)

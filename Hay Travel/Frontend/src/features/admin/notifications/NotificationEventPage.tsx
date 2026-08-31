@@ -20,15 +20,20 @@ import {
 } from '@/shared/auth'
 import { getNotificationEvent } from '@/features/admin/api/adminNotifications'
 import { getUsers } from '@/features/admin/api/adminUsers'
+import { getNotificationTemplates } from '@/features/admin/api/adminNotificationTemplates'
 import { adminEnumsCopy } from '@/features/admin/lib/adminEnumsCopy'
 import {
   NotificationPlatform,
   isEmailActionKey,
   type NotificationEventInfoModel,
 } from '@/features/admin/types/notifications'
-import { EmailTemplateEditor } from './components/EmailTemplateEditor'
+import {
+  NotificationTemplateEntity,
+  type NotificationTemplateInfoModel,
+} from '@/features/admin/types/notificationTemplates'
 import { PlatformsTab } from './components/PlatformsTab'
 import { RecipientsGrid } from './components/RecipientsGrid'
+import { TemplatePicker } from './components/TemplatePicker'
 import { useNotificationEventForm } from './hooks/useNotificationEventForm'
 import { eventLabelOf } from './lib/notificationEventModel'
 import { notificationsCopy } from './lib/notificationsCopy'
@@ -57,28 +62,37 @@ export async function notificationEventLoader({ params }: LoaderFunctionArgs) {
   // Список пользователей нужен колонке «Получатель» источника User, но гейтится ЧУЖИМ ключом
   // (`users.View`) — поэтому деградирует до пустого списка, а не 403-ит весь экран: уже
   // сохранённые строки останутся читаемыми за счёт денормализованных userFullName/userEmail.
-  const [event, users] = await Promise.all([
+  //
+  // Шаблоны — тем же приёмом, чужим ключом `notification-templates.View`: пикер без доступа
+  // деградирует до "показать текущее имя, выбор недоступен" (см. TemplatePicker), карточку не
+  // 403-ит. Фильтр по BoundEntity=Order: событие только про заказы, шаблоны для других сущностей
+  // сюда не годятся вне зависимости от канала.
+  const [event, users, templates] = await Promise.all([
     getNotificationEvent(raw),
     canView(AdminScreen.Users) ? getUsers() : Promise.resolve<UserInfoModel[]>([]),
+    canView(AdminScreen.NotificationTemplates)
+      ? getNotificationTemplates({ boundEntity: NotificationTemplateEntity.Order })
+      : Promise.resolve<NotificationTemplateInfoModel[]>([]),
   ])
 
-  return { event, users }
+  return { event, users, templates }
 }
 
 export function NotificationEventPage() {
-  const { event, users } = useLoaderData<typeof notificationEventLoader>()
+  const { event, users, templates } = useLoaderData<typeof notificationEventLoader>()
 
   // Key-инг по ключу события: переход между событиями пересобирает форму, а не тащит черновик
   // предыдущего — то же, что делают `OrderDetailPage`/`UserDetailPage`.
-  return <NotificationEventView key={event.eventKey} event={event} users={users} />
+  return <NotificationEventView key={event.eventKey} event={event} users={users} templates={templates} />
 }
 
 interface NotificationEventViewProps {
   event: NotificationEventInfoModel
   users: UserInfoModel[]
+  templates: NotificationTemplateInfoModel[]
 }
 
-function NotificationEventView({ event, users }: NotificationEventViewProps) {
+function NotificationEventView({ event, users, templates }: NotificationEventViewProps) {
   const copy = useCopy(notificationsCopy)
   const enums = useCopy(adminEnumsCopy)
   const permission = useScreenPermission(AdminScreen.Notifications)
@@ -214,18 +228,15 @@ function NotificationEventView({ event, users }: NotificationEventViewProps) {
             onRemove={(rowKey) => form.removeRecipient(activePlatform.platform, rowKey)}
           />
 
-          {activePlatform.platform === NotificationPlatform.Email && (
-            <EmailTemplateEditor
-              subject={activePlatform.subject}
-              subjectEn={activePlatform.subjectEn}
-              bodyHtml={activePlatform.bodyHtml}
-              bodyHtmlEn={activePlatform.bodyHtmlEn}
-              availablePlaceholders={activePlatform.availablePlaceholders}
-              disabled={disabled}
-              error={form.templateError}
-              onChange={(patch) => form.patchTemplate(activePlatform.platform, patch)}
-            />
-          )}
+          <TemplatePicker
+            platform={activePlatform.platform}
+            templateId={activePlatform.templateId}
+            templateName={activePlatform.templateName}
+            templates={templates.filter((template) => template.channel === activePlatform.platform)}
+            disabled={disabled}
+            error={form.templateError}
+            onChange={(templateId) => form.setTemplateId(activePlatform.platform, templateId)}
+          />
         </div>
       )}
 

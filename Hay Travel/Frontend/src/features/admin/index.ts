@@ -19,6 +19,14 @@ export { UsersPage, usersLoader } from './users/UsersPage'
 export { UserDetailPage, userDetailLoader } from './users/UserDetailPage'
 export { NotificationsPage, notificationsLoader } from './notifications/NotificationsPage'
 export { NotificationEventPage, notificationEventLoader } from './notifications/NotificationEventPage'
+export {
+  NotificationTemplatesPage,
+  notificationTemplatesLoader,
+} from './notificationTemplates/NotificationTemplatesPage'
+export {
+  NotificationTemplateDetailPage,
+  notificationTemplateDetailLoader,
+} from './notificationTemplates/NotificationTemplateDetailPage'
 export { RolesPage, rolesLoader } from './roles/RolesPage'
 export { RoleDetailPage, roleDetailLoader } from './roles/RoleDetailPage'
 export { JobsPage, jobsLoader } from './jobs/JobsPage'

@@ -49,6 +49,12 @@ export const adminNavItems: readonly AdminNavItem[] = [
   { to: '/admin/users', labelKey: 'users', icon: '👤', screens: [AdminScreen.Users] },
   { to: '/admin/roles', labelKey: 'roles', icon: '🛡', screens: [AdminScreen.Roles] },
   { to: '/admin/notifications', labelKey: 'notifications', icon: '✉', screens: [AdminScreen.Notifications] },
+  {
+    to: '/admin/notification-templates',
+    labelKey: 'notificationTemplates',
+    icon: '📄',
+    screens: [AdminScreen.NotificationTemplates],
+  },
   { to: '/admin/jobs', labelKey: 'jobs', icon: '⏱', screens: [AdminScreen.Jobs] },
   { to: '/admin/settings', labelKey: 'settings', icon: '⚙', screens: [AdminScreen.Settings] },
 ]

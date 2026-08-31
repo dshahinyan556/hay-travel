@@ -265,41 +265,6 @@ namespace ATTours.DataLayer.Migrations
                     b.ToTable("EmailChangeRequest", (string)null);
                 });
 
-            modelBuilder.Entity("ATTours.Common.Entities.EmailTemplate", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("ActionKey")
-                        .HasColumnType("int");
-
-                    b.Property<string>("BodyHtml")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("BodyHtmlEn")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Subject")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("nvarchar(300)");
-
-                    b.Property<string>("SubjectEn")
-                        .HasMaxLength(300)
-                        .HasColumnType("nvarchar(300)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ActionKey")
-                        .IsUnique();
-
-                    b.ToTable("EmailTemplate", (string)null);
-                });
-
             modelBuilder.Entity("ATTours.Common.Entities.ExchangeRate", b =>
                 {
                     b.Property<int>("Id")
@@ -498,7 +463,12 @@ namespace ATTours.DataLayer.Migrations
                     b.Property<int>("Platform")
                         .HasColumnType("int");
 
+                    b.Property<int?>("TemplateId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("TemplateId");
 
                     b.HasIndex("EventKey", "Platform")
                         .IsUnique();
@@ -551,6 +521,61 @@ namespace ATTours.DataLayer.Migrations
                     b.ToTable("NotificationRecipient", (string)null);
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.NotificationTemplate", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BodyHtml")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("BodyHtmlEn")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("BoundEntity")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Channel")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CustomCss")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Subject")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("SubjectEn")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<int>("Trigger")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Trigger")
+                        .IsUnique()
+                        .HasFilter("[Trigger] <> 0");
+
+                    b.ToTable("NotificationTemplate", (string)null);
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.Order", b =>
                 {
                     b.Property<int>("Id")
@@ -595,6 +620,47 @@ namespace ATTours.DataLayer.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("Order", (string)null);
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.OrderContact", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LastName")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("nvarchar(254)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.ToTable("OrderContact", (string)null);
                 });
 
             modelBuilder.Entity("ATTours.Common.Entities.OrderEvent", b =>
@@ -892,6 +958,10 @@ namespace ATTours.DataLayer.Migrations
                     b.Property<string>("CreatedByIp")
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("CreatedByUserAgent")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)");
 
                     b.Property<DateTime>("ExpiresAtUtc")
                         .HasColumnType("datetime2");
@@ -1311,6 +1381,28 @@ namespace ATTours.DataLayer.Migrations
                     b.ToTable("Tour", (string)null);
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.TourAutoCloseOverride", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("LeadTimeHours")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TourId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TourId")
+                        .IsUnique();
+
+                    b.ToTable("TourAutoCloseOverride", (string)null);
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.TourDay", b =>
                 {
                     b.Property<int>("Id")
@@ -1727,6 +1819,9 @@ namespace ATTours.DataLayer.Migrations
                     b.Property<DateTime?>("LockedUntil")
                         .HasColumnType("datetime2");
 
+                    b.Property<int>("NotificationChannels")
+                        .HasColumnType("int");
+
                     b.Property<string>("Password")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -1736,8 +1831,21 @@ namespace ATTours.DataLayer.Migrations
                         .HasMaxLength(15)
                         .HasColumnType("nvarchar(15)");
 
+                    b.Property<string>("PreferredCurrency")
+                        .HasMaxLength(3)
+                        .HasColumnType("nchar(3)")
+                        .IsFixedLength();
+
                     b.Property<int>("PreferredLanguage")
                         .HasColumnType("int");
+
+                    b.Property<string>("PreferredPalette")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("PreferredTheme")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
 
                     b.Property<DateTime>("RegisteredAtUtc")
                         .ValueGeneratedOnAdd()
@@ -1780,6 +1888,44 @@ namespace ATTours.DataLayer.Migrations
                         .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("User", (string)null);
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.UserContactMethod", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LastName")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("nvarchar(254)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserContactMethod", (string)null);
                 });
 
             modelBuilder.Entity("ATTours.Common.Entities.UserPermissionOverride", b =>
@@ -2107,6 +2253,16 @@ namespace ATTours.DataLayer.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.NotificationChannel", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.NotificationTemplate", "Template")
+                        .WithMany()
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Template");
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.NotificationRecipient", b =>
                 {
                     b.HasOne("ATTours.Common.Entities.User", "User")
@@ -2126,6 +2282,17 @@ namespace ATTours.DataLayer.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ATTours.Common.Entities.OrderContact", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.Order", "Order")
+                        .WithMany("Contacts")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
                 });
 
             modelBuilder.Entity("ATTours.Common.Entities.OrderEvent", b =>
@@ -2311,6 +2478,17 @@ namespace ATTours.DataLayer.Migrations
                     b.Navigation("Tag");
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.TourAutoCloseOverride", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.Tour", "Tour")
+                        .WithMany()
+                        .HasForeignKey("TourId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tour");
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.TourDayInfoTranslation", b =>
                 {
                     b.HasOne("ATTours.Common.Entities.TourDay", "TourDay")
@@ -2493,6 +2671,17 @@ namespace ATTours.DataLayer.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("ATTours.Common.Entities.UserContactMethod", b =>
+                {
+                    b.HasOne("ATTours.Common.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("ATTours.Common.Entities.UserPermissionOverride", b =>
                 {
                     b.HasOne("ATTours.Common.Entities.User", "User")
@@ -2545,6 +2734,8 @@ namespace ATTours.DataLayer.Migrations
 
             modelBuilder.Entity("ATTours.Common.Entities.Order", b =>
                 {
+                    b.Navigation("Contacts");
+
                     b.Navigation("Lines");
                 });
 

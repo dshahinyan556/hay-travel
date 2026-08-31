@@ -74,6 +74,12 @@ namespace ATTours.BusinessServices.Services.CreateServices
             order.Status = OrderStatus.Request;
 
             order.Lines.Add(BuildLine());
+
+            // Контакты — снимок значений (ADR 032). Контракт контактов у заявки тот же, что
+            // у чекаута, поэтому и сборщик общий. Отказ при 0/>3/не-одном основном принимает
+            // OrderValidationService, здесь только сборка.
+            foreach (var contact in OrderContactBuilder.Build(request.Contacts))
+                order.Contacts.Add(contact);
         }
 
         private OrderLine BuildLine()

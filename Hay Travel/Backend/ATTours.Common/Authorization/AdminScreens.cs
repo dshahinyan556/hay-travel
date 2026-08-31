@@ -35,6 +35,10 @@ namespace ATTours.Common.Authorization
         public const string Users = "users";
         public const string Roles = "roles";
         public const string Notifications = "notifications";
+        // Библиотека шаблонов писем/Telegram-сообщений (2026-08-31) — отдельный от
+        // «Настроек уведомлений» экран: тот решает кому/когда слать, этот — открытый
+        // CRUD-справочник самого содержимого.
+        public const string NotificationTemplates = "notification-templates";
         public const string Settings = "settings";
         public const string Jobs = "jobs";
 
@@ -76,8 +80,10 @@ namespace ATTours.Common.Authorization
             // жёстко зашитый Admin-only мета-экран: любая роль может как получить, так и
             // потерять доступ к нему (никакой роли не гарантирован доступ навсегда).
             new(Roles, "Роли и права", FullCrud),
-            // Набор шаблонов писем фиксирован кодом (4 action-key) — Create/Delete не нужны.
+            // Набор событий фиксирован кодом (5 action-key) — Create/Delete не нужны.
             new(Notifications, "Настройки уведомлений", ViewUpdate),
+            // Открытый CRUD (2026-08-31): админ создаёт/удаляет свои шаблоны сам.
+            new(NotificationTemplates, "Шаблоны уведомлений", FullCrud),
             // Набор ключей настроек фиксирован каталогом в коде (ADR 002).
             new(Settings, "Настройки сайта", ViewUpdate),
             // Набор фоновых задач фиксирован BackgroundJobCatalog — Create/Delete не нужны.

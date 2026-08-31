@@ -53,7 +53,7 @@ namespace ATTours.ClientAPI.Controllers
         public async Task<OrderInfoModel> CreateAsync([FromBody] OrderCreateModel model, CancellationToken cancellationToken)
         {
             int orderId;
-            using (var creationService = new OrderCreationService(model.Lines, User.GetUserId(), cancellationToken))
+            using (var creationService = new OrderCreationService(model, User.GetUserId(), cancellationToken))
             {
                 await creationService.ExecuteEntityChangesAsync();
                 orderId = creationService.Entities.Single().Id;

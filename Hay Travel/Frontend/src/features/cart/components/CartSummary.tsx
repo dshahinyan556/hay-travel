@@ -27,8 +27,12 @@ export interface CartSummaryProps {
    * отправляема прямо сейчас (мест не хватает, формат не выбран — батч 2026-08-29), но ничего
    * ещё не отправлялось. Разные значения, потому что разная копия: во втором случае сказать
    * «заявка не создана» было бы неправдой.
+   *
+   * `contacts` — не выбран контакт для связи (батч 2026-08-29). Отдельная причина, а не «строки»:
+   * чинится она не в позициях, а в блоке контактов ниже списка, и общий текст «исправьте
+   * отмеченные позиции» отправил бы человека искать красное там, где его нет.
    */
-  blockedBy: 'unavailableTour' | 'lineErrors' | 'lineIssues' | 'sessionUnknown' | null
+  blockedBy: 'unavailableTour' | 'lineErrors' | 'lineIssues' | 'contacts' | 'sessionUnknown' | null
   running: boolean
   /** Не привязанная к строке ошибка последней попытки. */
   formError: string | null
@@ -55,7 +59,9 @@ export function CartSummary({
       ? t('cart.summary.blockedUnavailable')
       : blockedBy === 'lineErrors' || blockedBy === 'lineIssues'
         ? t('cart.summary.blockedLines')
-        : null
+        : blockedBy === 'contacts'
+          ? t('cart.summary.blockedContacts')
+          : null
 
   return (
     <aside className="rounded-2xl bg-panel p-4 ring-1 ring-edge lg:p-5">

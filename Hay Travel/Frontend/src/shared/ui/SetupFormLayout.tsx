@@ -4,14 +4,17 @@ export interface SetupFormLayoutProps {
   title: ReactNode
   subtitle?: ReactNode
   /**
-   * The record-identity strip (designer proposal `admin-page-templates.html` §C, pin 1 — the one
-   * genuinely NEW element the whole proposal introduces). Makes the "exactly one record, forever"
-   * rule visible instead of merely enforced by routing. Conventionally a name/label, a "единственная
-   * запись"-style badge and a last-modified note; this component owns only the card chrome and
-   * position, the caller owns the content — no business copy is baked into `shared/ui`, same rule
-   * `AdminSummaryPanel`'s plain `rows` prop already follows.
+   * The record-identity strip (designer proposal `admin-page-templates.html` §C, pin 1). Makes the
+   * "exactly one record, forever" rule visible instead of merely enforced by routing. Conventionally
+   * a name/label, a "единственная запись"-style badge and a last-modified note; this component owns
+   * only the card chrome and position, the caller owns the content — no business copy is baked into
+   * `shared/ui`, same rule `AdminSummaryPanel`'s plain `rows` prop already follows.
+   *
+   * Optional: the strip earns its place only when it says something the screen does not already
+   * show. `/admin/settings` — the archetype's own example — drops it, because the section tabs sit
+   * directly below and repeat the same count.
    */
-  identity: ReactNode
+  identity?: ReactNode
   /** Error / success banners for the save itself (e.g. "сервер не ответил"). */
   message?: ReactNode
   /** Tabs by field group + the field cards themselves. */
@@ -53,9 +56,11 @@ export function SetupFormLayout({
         {subtitle && <p className="mt-0.5 text-sm text-neutral-500">{subtitle}</p>}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-3">
-        {identity}
-      </div>
+      {identity && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-3">
+          {identity}
+        </div>
+      )}
 
       {message && <div className="flex flex-col gap-2">{message}</div>}
 

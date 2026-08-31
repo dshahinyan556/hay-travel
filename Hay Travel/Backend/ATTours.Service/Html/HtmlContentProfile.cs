@@ -9,10 +9,17 @@ namespace ATTours.BusinessServices.Html
     // идентичны, а копия allow-list'а «на будущее» — это второй источник правды.
     public enum HtmlContentProfile
     {
-        // Тело шаблона письма (раздел «Настройки уведомлений»).
+        // Тело шаблона письма (раздел «Настройки уведомлений» / Notification Templates,
+        // Channel.Email).
         EmailBody = 1,
 
         // Описания туров/мест на публичном сайте (фаза 2, пока не подключён ни к одному вызову).
-        RichContent = 2
+        RichContent = 2,
+
+        // Тело Telegram-шаблона (Notification Templates, 2026-08-31, Channel.Telegram).
+        // Отдельный, СИЛЬНО более узкий allow-list: Telegram Bot API (parse_mode=HTML)
+        // поддерживает буквально десяток тегов без атрибутов класса/style и без таблиц/
+        // картинок — этот профиль не «Email минус немного», а принципиально другой список.
+        TelegramBody = 3
     }
 }

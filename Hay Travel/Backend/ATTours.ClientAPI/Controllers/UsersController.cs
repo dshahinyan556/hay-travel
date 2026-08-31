@@ -70,6 +70,38 @@ namespace ATTours.ClientAPI.Controllers
             return mapper.Map<List<LoginHistoryModel>>(loginHistory);
         }
 
+        // Живые сессии/устройства пользователя (spec 017 §4) — админский двойник
+        // GET api/Auth/Sessions. Читает и пишет AuthService, а не Info-сервис: отзыв сессии
+        // это auth-мутация (ADR 005/028). IsCurrent в этом списке всегда false.
+        [HttpGet]
+        [Route("{id:int}/Sessions")]
+        [RequiresPermission(AdminScreens.Users, PermissionAction.View)]
+        public async Task<List<SessionInfoModel>> GetUserSessionsAsync(int id, CancellationToken cancellationToken)
+            => await authService.GetUserSessionsAsync(id, cancellationToken);
+
+        // Отзыв одной сессии пользователя. Владелец — ВСЕГДА из маршрута: сервис сверяет с
+        // ним UserId строки и отвечает 404 на чужую (IDOR-safe).
+        [HttpDelete]
+        [Route("{id:int}/Sessions/{sessionId:int}")]
+        [RequiresPermission(AdminScreens.Users, PermissionAction.Update)]
+        public async Task<IActionResult> RevokeUserSessionAsync(int id, int sessionId, CancellationToken cancellationToken)
+        {
+            await authService.RevokeUserSessionAsync(id, sessionId, cancellationToken);
+            return NoContent();
+        }
+
+        // Гасит ВСЕ сессии пользователя, включая его текущую — принудительный ре-логин
+        // на всех устройствах. Исключение — собственная impersonation-сессия ВЫЗЫВАЮЩЕГО
+        // админа над этой же целью (David, 2026-08-29): её щадит сам сервис.
+        [HttpPost]
+        [Route("{id:int}/Sessions/RevokeAll")]
+        [RequiresPermission(AdminScreens.Users, PermissionAction.Update)]
+        public async Task<IActionResult> RevokeAllUserSessionsAsync(int id, CancellationToken cancellationToken)
+        {
+            await authService.RevokeAllUserSessionsAsync(id, User.GetUserId(), cancellationToken);
+            return NoContent();
+        }
+
         // actingUserId (D3/D4, 2026-08-09) вернулся в сигнатуру: кто именно меняет роль,
         // теперь определяет исход — админские роли доступны только SuperAdmin'у, и свою
         // собственную он тоже менять не может.

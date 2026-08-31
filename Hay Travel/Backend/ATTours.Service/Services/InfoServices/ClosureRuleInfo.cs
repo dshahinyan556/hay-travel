@@ -1,6 +1,5 @@
 using ATTours.BusinessServices.Core.Info;
 using ATTours.BusinessServices.Services.Availability;
-using ATTours.Common.Constants;
 using ATTours.Common.Entities;
 using ATTours.Common.Enums;
 using ATTours.Common.Settings;
@@ -47,24 +46,39 @@ namespace ATTours.BusinessServices.Services.InfoServices
             if (to < from)
                 return closedDates;
 
-            var tourType = tourId is null
-                ? fallbackTourType
+            // Тип продукта и его расписание — одним чтением ДО цикла по дням, а не по
+            // запросу на день: слоты нужны каждому дню диапазона (порог отсчитывается от
+            // самого позднего старта), и 90 одинаковых запросов ради одного и того же
+            // расписания превратили бы дешёвое чтение в дорогое.
+            var product = tourId is null
+                ? null
                 : await Context.Set<Tour>()
                                .Where(tour => tour.Id == tourId.Value)
-                               .Select(tour => (TourType?)tour.Type)
+                               .Select(tour => new
+                               {
+                                   tour.Type,
+                                   StartTimes = tour.StartTimes.Select(startTime => startTime.Time).ToList()
+                               })
                                .FirstOrDefaultAsync(cancellationToken);
+
+            var tourType = tourId is null ? fallbackTourType : product?.Type;
+
+            // Пусто у трансфера (время подачи вводит клиент) и у запроса без продукта
+            // вообще — конструктора кастомного трансфера. Обе ветки означают одно и то же:
+            // отсчёт порога от начала дня, как было до потуровых порогов (решение Р5).
+            IReadOnlyCollection<TimeOnly> startTimes = product?.StartTimes ?? [];
 
             // Применимые правила = глобальные + правила типа продукта (у обоих TourId == null)
             // + правила этого тура. Отбор конкретных дней делает резолвер: precedence нельзя
             // выразить SQL-фильтром.
             var rules = await GetAllAsync(rule => rule.TourId == null || rule.TourId == tourId);
 
-            // Порог автозакрытия читается ОДИН раз до цикла, а не на каждый день диапазона:
-            // это публичный эндпоинт booking-card, и 90 походов в SiteSetting за одним и тем
-            // же числом превратили бы дешёвое чтение в дорогое. Тот же контекст — своё
-            // соединение info-сервису не нужно, а освобождать чужое ему нельзя.
-            var leadTimeHours = await new SiteSettingsInfo(Context, cancellationToken)
-                .GetNumberAsync(SiteSettingKeys.BookingAutoCloseLeadTimeHours);
+            // Пороги автозакрытия (глобальный + исключение этого продукта) читаются ОДИН раз
+            // до цикла, а не на каждый день диапазона: это публичный эндпоинт booking-card,
+            // и 90 походов в SiteSetting за одним и тем же числом превратили бы дешёвое
+            // чтение в дорогое. Тот же контекст — своё соединение снимку не нужно, а
+            // освобождать чужое ему нельзя.
+            var autoCloseLeadTime = await AutoCloseLeadTimeResolver.LoadAsync(Context, cancellationToken);
 
             var nowUtc = DateTime.UtcNow;
 
@@ -74,7 +88,7 @@ namespace ATTours.BusinessServices.Services.InfoServices
                 // задача материализует правило лишь раз в час, а дата-пикер обязан гасить
                 // день сразу, иначе клиент выберет дату, которую бэкенд тут же отвергнет.
                 if (ClosureRuleResolver.IsClosed(rules, day, tourId, tourType)
-                    || AutoClosureWindow.IsWithinAutoCloseWindow(day, leadTimeHours, nowUtc))
+                    || autoCloseLeadTime.IsWithinAutoCloseWindow(tourId, day, startTimes, nowUtc))
                 {
                     closedDates.Add(day);
                 }

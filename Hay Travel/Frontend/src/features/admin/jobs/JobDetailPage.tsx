@@ -10,42 +10,76 @@ import { AdminScreen, canView, ensurePermissionsReady, useScreenPermission } fro
 import { useCopy } from '@/shared/i18n/defineCopy'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { getStoredLocale, type Locale } from '@/shared/lib/locale'
-import { getJobRuns, getJobs, runJob, setJobCron, setJobEnabled, setJobParameters } from '@/features/admin/api/adminJobs'
+import {
+  getAutoCloseOverrides,
+  getJobRuns,
+  getJobs,
+  runJob,
+  setAutoCloseOverrides,
+  setJobCron,
+  setJobEnabled,
+  setJobParameters,
+} from '@/features/admin/api/adminJobs'
+import { getAllTours } from '@/features/admin/api/adminTours'
 import { SettingValueType } from '@/features/admin/lib/enums'
-import type { ScheduledJobInfoModel, ScheduledJobRunInfoModel } from '@/features/admin/types/jobs'
+import type { ScheduledJobInfoModel, ScheduledJobRunInfoModel, TourAutoCloseOverrideInfoModel } from '@/features/admin/types/jobs'
+import type { TourInfoModel } from '@/shared/types/attours'
 import { jobsCopy, jobsErrorMessage, type JobsCopy } from './lib/jobsCopy'
 import { jobPermissionHints } from './lib/jobsPermissionHints'
-import { capitalizeFirst, cronToPreset, isPlausibleCronExpression, isValidParameterNumber, scheduleFrequencyLabel } from './lib/jobsModel'
+import {
+  AUTO_CLOSURE_JOB_KEY,
+  capitalizeFirst,
+  cronToPreset,
+  isPlausibleCronExpression,
+  isValidLeadTimeHours,
+  isValidParameterNumber,
+  overrideRowsEqual,
+  scheduleFrequencyLabel,
+  type TourAutoCloseOverrideDraftRow,
+} from './lib/jobsModel'
 import { formatDurationSeconds, formatYerevanDateTime, formatYerevanUpcoming, minutesUntil } from './lib/jobsTime'
 import { JobScheduleCard } from './components/JobScheduleCard'
 import { JobParametersCard } from './components/JobParametersCard'
+import { AutoCloseOverridesCard } from './components/AutoCloseOverridesCard'
 import { JobRunsList } from './components/JobRunsList'
 import { JobStatusBadge } from './components/JobStatusBadge'
 
 /** No single-job GET exists on the backend (`JobsController.cs` only has `GetAll`/mutation
  * endpoints, each of which re-reads and returns its OWN job) — so the detail route fetches the
  * whole list, same as `JobsPage`, and picks its one row out of it. Paired with `getJobRuns` for
- * the "История" tab, same "two independent GETs, in parallel" shape as `orderDetailLoader`. */
+ * the "История" tab, same "two independent GETs, in parallel" shape as `orderDetailLoader`.
+ *
+ * `overrides`/`tours` are fetched ONLY for `tour-date-auto-closure` (checklist
+ * `checklist-autoclose-per-tour-2026-08-29.txt`, Р3): every other job's card has no use for a
+ * full product list, so no other job page pays for it. Both come back empty for any other job,
+ * never `undefined` — the view's own `job.key` check decides whether to render the card at all,
+ * the loader's shape stays uniform either way. */
 export async function jobDetailLoader({ params }: LoaderFunctionArgs) {
   await ensurePermissionsReady()
   if (!canView(AdminScreen.Jobs)) throw redirect('/admin')
 
   const key = params.key ?? ''
-  const [jobs, runs] = await Promise.all([getJobs(), getJobRuns(key)])
+  const isAutoClosureJob = key === AUTO_CLOSURE_JOB_KEY
+  const [jobs, runs, overrides, tours] = await Promise.all([
+    getJobs(),
+    getJobRuns(key),
+    isAutoClosureJob ? getAutoCloseOverrides() : Promise.resolve<TourAutoCloseOverrideInfoModel[]>([]),
+    isAutoClosureJob ? getAllTours() : Promise.resolve<TourInfoModel[]>([]),
+  ])
   const job = jobs.find((candidate) => candidate.key === key)
   if (!job) {
     // Same loader-time-locale rule as `orderDetailLoader`'s `invalidOrderId` (defineCopy.ts §3):
     // no `useCopy` exists yet, the module is called directly against the persisted locale.
     throw new Response(jobsCopy(getStoredLocale()).errors.notFound, { status: 404 })
   }
-  return { job, runs }
+  return { job, runs, overrides, tours }
 }
 
 export function JobDetailPage() {
-  const { job, runs } = useLoaderData<typeof jobDetailLoader>()
+  const { job, runs, overrides, tours } = useLoaderData<typeof jobDetailLoader>()
   // Keyed by job key: navigating between two job URLs remounts with a fresh draft/tab instead of
   // carrying the previous job's edits over — same reasoning as `OrderDetailPage`/`UserDetailPage`.
-  return <JobDetailView key={job.key} job={job} runs={runs} />
+  return <JobDetailView key={job.key} job={job} runs={runs} overrides={overrides} tours={tours} />
 }
 
 type JobDetailTabId = 'overview' | 'history'
@@ -54,11 +88,18 @@ type JobDetailTabId = 'overview' | 'history'
  * carries the RAW `PATCH .../Cron` payload semantics — `''` means "reset to the catalog default"
  * — so `JobDetailView` is the one place that translates between that wire shape and the plain
  * "effective cron string" `JobScheduleCard` renders/edits. `parameters` holds only touched keys,
- * same "absent = unchanged" convention `OrderDetailPage`'s `LineDraftPatch` uses. */
+ * same "absent = unchanged" convention `OrderDetailPage`'s `LineDraftPatch` uses.
+ *
+ * `overrides` — «Исключения по продуктам», `tour-date-auto-closure` only (checklist
+ * `checklist-autoclose-per-tour-2026-08-29.txt`, Р3/F2). `undefined` = untouched since load, same
+ * "absent = unchanged" rule as `parameters`; once touched it carries the FULL desired set (not a
+ * patch) — `PUT api/Jobs/AutoCloseOverrides` replaces the whole set (B8), there is no per-row
+ * mutation to send. */
 interface JobDraft {
   enabled?: boolean
   cron?: string
   parameters: Record<string, string>
+  overrides?: TourAutoCloseOverrideDraftRow[]
 }
 
 const EMPTY_DRAFT: JobDraft = { parameters: {} }
@@ -68,7 +109,14 @@ function effectiveCronOf(draftCron: string | undefined, job: ScheduledJobInfoMod
   return draftCron === '' ? job.defaultCronExpression : draftCron
 }
 
-function JobDetailView({ job, runs }: { job: ScheduledJobInfoModel; runs: ScheduledJobRunInfoModel[] }) {
+interface JobDetailViewProps {
+  job: ScheduledJobInfoModel
+  runs: ScheduledJobRunInfoModel[]
+  overrides: TourAutoCloseOverrideInfoModel[]
+  tours: TourInfoModel[]
+}
+
+function JobDetailView({ job, runs, overrides, tours }: JobDetailViewProps) {
   const copy = useCopy(jobsCopy)
   const { locale } = useLocale()
   const revalidator = useRevalidator()
@@ -97,7 +145,21 @@ function JobDetailView({ job, runs }: { job: ScheduledJobInfoModel; runs: Schedu
     const original = job.parameters.find((p) => p.key === key)?.value
     return draft.parameters[key] !== original
   })
-  const dirty = enabledDirty || cronDirty || dirtyParamKeys.length > 0
+
+  // «Исключения по продуктам» — `tour-date-auto-closure` only. Baseline is the loader's own
+  // list turned into draft-row shape (`leadTimeHours` as an editable string, `AddButton`'s Input
+  // convention), rebuilt every render from `overrides` (empty for every other job, cheap either way
+  // — no `useMemo` warranted for a handful of rows).
+  const isAutoClosureJob = job.key === AUTO_CLOSURE_JOB_KEY
+  const baselineOverrides: TourAutoCloseOverrideDraftRow[] = overrides.map((o) => ({
+    tourId: o.tourId,
+    tourName: o.tourName,
+    leadTimeHours: String(o.leadTimeHours),
+  }))
+  const effectiveOverrides = draft.overrides ?? baselineOverrides
+  const overridesDirty = draft.overrides !== undefined && !overrideRowsEqual(draft.overrides, baselineOverrides)
+
+  const dirty = enabledDirty || cronDirty || dirtyParamKeys.length > 0 || overridesDirty
 
   const cronValid = draft.cron === undefined || isPlausibleCronExpression(draft.cron)
   const parametersValid = dirtyParamKeys.every((key) => {
@@ -105,6 +167,7 @@ function JobDetailView({ job, runs }: { job: ScheduledJobInfoModel; runs: Schedu
     if (definition?.valueType !== SettingValueType.Number) return true
     return isValidParameterNumber(draft.parameters[key])
   })
+  const overridesValid = draft.overrides === undefined || draft.overrides.every((row) => isValidLeadTimeHours(row.leadTimeHours))
 
   const guard = useUnsavedChangesGuard(dirty && !pending)
 
@@ -112,7 +175,7 @@ function JobDetailView({ job, runs }: { job: ScheduledJobInfoModel; runs: Schedu
   const effectiveCron = effectiveCronOf(draft.cron, job)
 
   async function handleSave() {
-    if (pending || !dirty || !cronValid || !parametersValid || hints.update !== null) return
+    if (pending || !dirty || !cronValid || !parametersValid || !overridesValid || hints.update !== null) return
     setPending(true)
     setError(null)
     setNotice(null)
@@ -124,6 +187,13 @@ function JobDetailView({ job, runs }: { job: ScheduledJobInfoModel; runs: Schedu
         const values: Record<string, string> = {}
         for (const key of dirtyParamKeys) values[key] = draft.parameters[key]
         calls.push(setJobParameters(job.key, { values }))
+      }
+      if (overridesDirty) {
+        calls.push(
+          setAutoCloseOverrides({
+            overrides: draft.overrides!.map((row) => ({ tourId: row.tourId, leadTimeHours: Number(row.leadTimeHours) })),
+          }),
+        )
       }
       await Promise.all(calls)
       setDraft(EMPTY_DRAFT)
@@ -240,7 +310,7 @@ function JobDetailView({ job, runs }: { job: ScheduledJobInfoModel; runs: Schedu
           onSave={() => void handleSave()}
           cancelState={{ disabled: pending || !dirty }}
           saveState={{
-            disabled: pending || !dirty || !cronValid || !parametersValid || hints.update !== null,
+            disabled: pending || !dirty || !cronValid || !parametersValid || !overridesValid || hints.update !== null,
             pending,
             hint: hints.update,
           }}
@@ -342,6 +412,33 @@ function JobDetailView({ job, runs }: { job: ScheduledJobInfoModel; runs: Schedu
             }
             disabled={pending || hints.update !== null}
           />
+          {isAutoClosureJob && (
+            <AutoCloseOverridesCard
+              rows={effectiveOverrides}
+              tours={tours}
+              disabled={pending || hints.update !== null}
+              onAddRow={(tourId, tourName, leadTimeHours) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  overrides: [...(prev.overrides ?? baselineOverrides), { tourId, tourName, leadTimeHours }],
+                }))
+              }
+              onChangeHours={(tourId, value) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  overrides: (prev.overrides ?? baselineOverrides).map((row) =>
+                    row.tourId === tourId ? { ...row, leadTimeHours: value } : row,
+                  ),
+                }))
+              }
+              onRemoveRow={(tourId) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  overrides: (prev.overrides ?? baselineOverrides).filter((row) => row.tourId !== tourId),
+                }))
+              }
+            />
+          )}
         </div>
       )}
 

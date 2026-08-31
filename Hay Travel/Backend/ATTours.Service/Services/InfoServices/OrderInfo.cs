@@ -49,6 +49,10 @@ namespace ATTours.BusinessServices.Services.InfoServices
                            .ThenInclude(line => line.CustomTransferDetails)
                                .ThenInclude(details => details.DesiredVehicleClass)
                                    .ThenInclude((Expression<Func<VehicleClass, ICollection<VehicleClassTranslation>>>)(vehicleClass => vehicleClass.Translations))
+                       // Контакты для связи (батч 2026-08-29): нужны и админской карточке,
+                       // и письму, и Telegram — то есть на каждом чтении этого графа.
+                       // Приведение к ICollection<> обязательно: Contacts объявлен HashSet<>.
+                       .Include((Expression<Func<Order, ICollection<OrderContact>>>)(x => x.Contacts))
                        // Lines->Payments — коллекция внутри коллекции, тот же cartesian-explosion
                        // риск, что у Tour (см. tech-debt.md, TourInfo/TourClientInfo 2026-08-16).
                        .AsSplitQuery();

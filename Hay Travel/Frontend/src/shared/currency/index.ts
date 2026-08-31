@@ -11,6 +11,8 @@
 export type { CurrencyCode, CurrencyRate, CurrencyState, ExchangeRatesModel, RatesStatus } from './types'
 
 export {
+  BASE_CURRENCY_CODE,
+  clearCurrencyPreference,
   ensureRatesReady,
   getCurrencyState,
   refreshRatesIfStale,

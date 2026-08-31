@@ -16,6 +16,7 @@ namespace ATTours.Common.Infrastructure.Jobs
         public const string OrderAutoCancellationKey = "order-auto-cancellation";
         public const string LoginHistoryCleanupKey = "login-history-cleanup";
         public const string TourDateAutoClosureKey = "tour-date-auto-closure";
+        public const string ClosureRuleCleanupKey = "closure-rule-cleanup";
 
         // Cron считается планировщиком в UTC (см. HangfireJobDispatcher): расписание — это
         // операционная величина, а армянское время нужно только там, где речь о календарном
@@ -54,7 +55,35 @@ namespace ATTours.Common.Infrastructure.Jobs
                 defaultCronExpression: "0 * * * *",
                 enabledByDefault: true,
                 parameterKeys: [SiteSettingKeys.BookingAutoCloseLeadTimeHours]),
+
+            // Уборщик таблицы правил закрытия — пара к задаче выше: та строки создаёт
+            // (и с потуровыми правилами создаёт их «продукты × дни»), эта убирает те, чей
+            // срок прошёл.
+            //
+            // 04:00 UTC, а не 03:00 у истории входов: обе задачи — массовое удаление, и
+            // сводить их в один тик значит без нужды класть два долгих DELETE на базу
+            // одновременно. Раз в сутки достаточно: истёкшее правило ни на что не влияет,
+            // и лишние сутки его существования — вопрос размера таблицы, а не поведения.
+            //
+            // parameterKeys пуст сознательно: ретеншена у этой уборки нет («истёк =
+            // удалён»), и рисовать на её карточке пустую секцию параметров не нужно.
+            new(ClosureRuleCleanupKey,
+                "Удаление истёкших блокировок",
+                ResolveHandler("ATTours.BusinessServices.Jobs.ClosureRuleCleanupJob"),
+                defaultCronExpression: "0 4 * * *",
+                enabledByDefault: true),
         ];
+
+        // Параметры не задачи, а самого ЭКРАНА задач: их читает ядро (BackgroundJobRunner), а
+        // не какой-то один хендлер, поэтому положить их на карточку конкретной задачи значило
+        // бы соврать — глубина хранения истории общая для всех прогонов сразу.
+        //
+        // Живут здесь, а не на экране «Настройки сайта»: экран владеет своими параметрами, и
+        // ретеншен истории джоб — параметр экрана джоб (тот же ADR, по которому пороги задач
+        // правятся на их карточках). Каждый ключ обязан существовать в SiteSettingCatalog —
+        // это тот же инвариант, что у ParameterKeys задачи.
+        public static readonly IReadOnlyList<string> ScreenParameterKeys =
+            [SiteSettingKeys.RunHistoryRetentionDays];
 
         private const string HandlerAssemblyName = "ATTours.BusinessServices";
 

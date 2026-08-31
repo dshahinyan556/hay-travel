@@ -22,26 +22,57 @@ namespace ATTours.BusinessServices.Html
         private const int MinImageWidth = 1;
         private const int MaxImageWidth = 1200;
 
-        private const int MinFontSizePx = 1;
-        private const int MaxFontSizePx = 96;
+        private const decimal MinFontSizePx = 1;
+        private const decimal MaxFontSizePx = 96;
 
-        // Объём «Word Light» + картинки: цвет, размер, жирность, выравнивание, ссылки, <img>.
-        // Всё остальное (script/style/iframe/object/embed, on*-обработчики, javascript:-ссылки)
-        // вырезается вместе с содержимым — это и есть защита от XSS в письме.
+        // Курируемый диапазон тулбара — 8-72pt (Notification Templates, 2026-08-31). Верхняя
+        // граница чуть выше самого большого пункта списка (72pt) с тем же запасом, что у px.
+        private const decimal MinFontSizePt = 1;
+        private const decimal MaxFontSizePt = 96;
+
+        // Объём «Word Light» + картинки + таблицы: цвет/заливка/шрифт/размер, жирность,
+        // выравнивание, ссылки, <img>, <table>, <pre>/<code>. Всё остальное (script/style/
+        // iframe/object/embed, on*-обработчики, javascript:-ссылки) вырезается вместе с
+        // содержимым — это и есть защита от XSS в письме.
+        //
+        // h4-h6, table*, pre, code добавлены вместе с редактором Notification Templates
+        // (2026-08-31): раньше редактор их не показывал вовсе, теперь показывает — allow-list
+        // расширен ДО включения кнопок в тулбар, иначе сохранённая разметка тихо теряла бы
+        // контент (то самое правило из useRichTextEditorInstance.ts на фронте).
         private static readonly HtmlContentPolicyEntry DefaultEntry = new(
             Tags:
             [
                 "p", "br", "strong", "b", "em", "i", "u", "s", "span", "a",
-                "ul", "ol", "li", "h1", "h2", "h3", "blockquote", "img"
+                "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "img",
+                "table", "thead", "tbody", "tr", "th", "td", "pre", "code"
             ],
             // HtmlSanitizer ведёт allow-list атрибутов глобально, не по тегам. href/target/rel
             // на не-<a> и src/alt/width на не-<img> смысла не имеют, а теги, где они могли бы
             // навредить (script, iframe, input), в allow-list не входят и вырезаются целиком —
             // поэтому глобальное разрешение здесь безопасно.
             Attributes: ["href", "target", "rel", "style", "src", "alt", "width"],
-            CssProperties: ["color", "font-size", "font-weight", "text-decoration", "text-align"],
+            CssProperties: ["color", "background-color", "font-size", "font-family", "font-weight", "text-decoration", "text-align"],
             Schemes: ["http", "https", "mailto"],
             UriAttributes: ["href", "src"]);
+
+        // Telegram Bot API, parse_mode=HTML: реальный whitelist — b/strong/i/em/u/s/code/pre/a,
+        // без атрибутов класса/style/id (https://core.telegram.org/bots/api#html-style).
+        // CustomCss/таблицы/картинки/произвольные шрифты сюда не попадают в принципе.
+        //
+        // "p"/"br" ДОБАВЛЕНЫ сверх реального telegram-whitelist — не для отправки (Telegram их
+        // не поддерживает ни в каком виде), а для ХРАНЕНИЯ: TipTap оборачивает КАЖДЫЙ абзац в
+        // <p> безусловно (это не отключаемый инструмент тулбара, а сама модель документа), и
+        // без "p" в allow-list санитайзер вырезал бы <p> ВМЕСТЕ С СОДЕРЖИМЫМ на каждом
+        // сохранении — тело Telegram-шаблона стиралось бы целиком (нашли на живой проверке
+        // 2026-08-31/09-01). Перед реальной отправкой в Telegram
+        // (OrderNotificationService.Telegram.cs) "p"/"br" конвертируются в '\n' отдельным
+        // шагом — Bot API получает то же самое, что ожидал разработчик изначально.
+        private static readonly HtmlContentPolicyEntry TelegramEntry = new(
+            Tags: ["b", "strong", "i", "em", "u", "s", "code", "pre", "a", "p", "br"],
+            Attributes: ["href"],
+            CssProperties: [],
+            Schemes: ["http", "https"],
+            UriAttributes: ["href"]);
 
         private static readonly HashSet<string> FontWeightKeywords =
             new(["normal", "bold"], StringComparer.Ordinal);
@@ -52,12 +83,21 @@ namespace ATTours.BusinessServices.Html
         private static readonly HashSet<string> TextAlignKeywords =
             new(["left", "center", "right", "justify"], StringComparer.Ordinal);
 
-        // Оба профиля пока указывают на одну запись (ADR 026, решение 2): различий между
-        // «телом письма» и «описанием тура» сегодня нет, дублировать таблицу незачем.
+        // Ровно те шрифты, что предлагает Select в тулбаре редактора (web-safe, доживают до
+        // email-клиента) — font-family не белый список СИМВОЛОВ, а список ЦЕЛЫХ значений:
+        // произвольная строка (даже безобидная на вид) не проходит, только точное совпадение.
+        private static readonly HashSet<string> FontFamilyKeywords =
+            new(["arial", "georgia", "'times new roman'", "'courier new'", "verdana", "tahoma"],
+                StringComparer.Ordinal);
+
+        // RichContent пока указывает на ту же запись, что EmailBody (ADR 026, решение 2):
+        // различий между «телом письма» и «описанием тура» сегодня нет, дублировать
+        // таблицу незачем. TelegramBody — принципиально другой, узкий список (см. выше).
         internal static HtmlContentPolicyEntry For(HtmlContentProfile profile) => profile switch
         {
             HtmlContentProfile.EmailBody => DefaultEntry,
             HtmlContentProfile.RichContent => DefaultEntry,
+            HtmlContentProfile.TelegramBody => TelegramEntry,
             _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, "Unknown HTML content profile.")
         };
 
@@ -106,7 +146,9 @@ namespace ATTours.BusinessServices.Html
             return property switch
             {
                 "color" => NormalizeColor(trimmed),
+                "background-color" => NormalizeColor(trimmed),
                 "font-size" => NormalizeFontSize(trimmed),
+                "font-family" => NormalizeFontFamily(trimmed),
                 "font-weight" => NormalizeFontWeight(trimmed),
                 "text-decoration" => NormalizeKeyword(trimmed, TextDecorationKeywords),
                 "text-align" => NormalizeKeyword(trimmed, TextAlignKeywords),
@@ -152,18 +194,34 @@ namespace ATTours.BusinessServices.Html
             return string.Create(CultureInfo.InvariantCulture, $"#{r:x2}{g:x2}{b:x2}");
         }
 
+        // Принимает и px (историческое значение), и pt (курируемый диапазон тулбара
+        // 8-72pt, Notification Templates 2026-08-31, десятичные — 10.5pt). Единица
+        // сохраняется как есть, не конвертируется: конвертация px<->pt изменила бы визуальный
+        // размер уже сохранённых писем.
         private static string? NormalizeFontSize(string value)
         {
             var match = FontSizeRegex().Match(value);
             if (!match.Success)
                 return null;
 
-            if (!int.TryParse(match.Groups["size"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var size))
+            if (!decimal.TryParse(match.Groups["size"].Value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var size))
                 return null;
 
-            return size is >= MinFontSizePx and <= MaxFontSizePx
-                ? string.Create(CultureInfo.InvariantCulture, $"{size}px")
+            var unit = match.Groups["unit"].Value.ToLowerInvariant();
+            var (min, max) = unit == "pt" ? (MinFontSizePt, MaxFontSizePt) : (MinFontSizePx, MaxFontSizePx);
+
+            return size >= min && size <= max
+                ? string.Create(CultureInfo.InvariantCulture, $"{size}{unit}")
                 : null;
+        }
+
+        // Точное совпадение со списком тулбара (без учёта регистра) — предотвращает и
+        // произвольные строки, и попытку протащить несколько шрифтов через запятую с
+        // подставным первым именем.
+        private static string? NormalizeFontFamily(string value)
+        {
+            var lowered = value.ToLowerInvariant();
+            return FontFamilyKeywords.Contains(lowered) ? lowered : null;
         }
 
         private static string? NormalizeFontWeight(string value)
@@ -224,7 +282,8 @@ namespace ATTours.BusinessServices.Html
         [GeneratedRegex(@"^(?:1(?:\.0+)?|100%)$", RegexOptions.CultureInvariant)]
         private static partial Regex OpaqueAlphaRegex();
 
-        [GeneratedRegex(@"^(?<size>[0-9]{1,3})px$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+        // Целое или с одним десятичным знаком (10.5pt из курируемого списка тулбара).
+        [GeneratedRegex(@"^(?<size>[0-9]{1,3}(?:\.[0-9])?)(?<unit>px|pt)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
         private static partial Regex FontSizeRegex();
     }
 

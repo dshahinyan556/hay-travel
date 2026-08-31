@@ -4,12 +4,14 @@ import { getBookingWindow, MAX_GUESTS, toWireTime } from '@/shared/booking'
 import { addCartItem } from '@/shared/cart'
 import { getAuthState } from '@/shared/auth'
 import { createTransferRequest } from '@/shared/api/transfers'
+import { isOrderContactsValid, OrderContactsPicker, rememberOrderContacts } from '@/shared/contacts'
 import { useMoney } from '@/shared/currency'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
+import { ContactLimits, type OrderContactInput } from '@/shared/types/contact'
 import type { TransferDetail } from '@/shared/types/transfer'
 import { DatePicker, GuestStepper, TimeField } from '@/shared/ui'
 import { AlertIcon, CheckIcon } from '@/shared/ui/icons'
-import { transferRequestMessage, isSessionFailure } from '../lib/transferRequestErrors'
+import { isContactFailure, isSessionFailure, transferRequestMessage } from '../lib/transferRequestErrors'
 import {
   clearTransferRequestDraft,
   readTransferRequestDraft,
@@ -96,6 +98,10 @@ export function TransferBookingPanel({ transfer, closedDates }: TransferBookingP
   const [luggageLarge, setLuggageLarge] = useState(draft?.luggageLarge ?? 0)
   const [luggageOther, setLuggageOther] = useState(draft?.luggageOther ?? '')
   const [comment, setComment] = useState(draft?.comment ?? '')
+  /* Контакты нужны только в режиме ЗАЯВКИ: бронь уезжает в корзину, и контакт у неё спрашивают
+     при оформлении корзины, а не здесь. Черновик их помнит по той же причине, что и остальное —
+     отправка заявки требует ухода на `/auth`. */
+  const [contacts, setContacts] = useState<readonly OrderContactInput[]>(draft?.contacts ?? [])
 
   const [showErrors, setShowErrors] = useState(false)
   const [added, setAdded] = useState<'added' | 'updated' | null>(null)
@@ -103,6 +109,8 @@ export function TransferBookingPanel({ transfer, closedDates }: TransferBookingP
   const [authNotice, setAuthNotice] = useState(false)
   const [sending, setSending] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  /** Отказ сервера ИМЕННО по контактам (2060-2063) — уезжает в блок контактов, а не под кнопку. */
+  const [serverContactsError, setServerContactsError] = useState<string | null>(null)
   const [orderNumber, setOrderNumber] = useState<string | null>(null)
 
   const maxCapacity = transfer.vehicles.reduce((max, vehicle) => Math.max(max, vehicle.capacity), 0)
@@ -134,6 +142,15 @@ export function TransferBookingPanel({ transfer, closedDates }: TransferBookingP
 
   const price = selectedVehicle === null ? null : isRoundTrip ? selectedVehicle.roundTripPrice : selectedVehicle.oneWayPrice
 
+  /* Контакты заявки: 1..3, ровно один основной (2060-2062). У брони их нет — см. состояние выше. */
+  const contactsBlocker = isOrderContactsValid(contacts)
+    ? null
+    : contacts.length < ContactLimits.minOrderContacts
+      ? t('orderContacts.error.required')
+      : contacts.length > ContactLimits.maxOrderContacts
+        ? t('orderContacts.error.tooMany', { max: ContactLimits.maxOrderContacts })
+        : t('orderContacts.error.primary')
+
   /** Первая незакрытая причина: сообщений на экране всегда ровно одно, и порядок задаёт
    * приоритет — сначала то, что выше по форме. */
   const blocker =
@@ -146,7 +163,7 @@ export function TransferBookingPanel({ transfer, closedDates }: TransferBookingP
           : returnLegInvalid
             ? t('transfers.detail.returnInvalid')
             : isRequestMode
-              ? null
+              ? contactsBlocker
               : selectedVehicle === null
                 ? t('transfers.detail.vehicleMissing')
                 : passengers > Math.min(selectedVehicle.capacity, MAX_GUESTS)
@@ -158,6 +175,7 @@ export function TransferBookingPanel({ transfer, closedDates }: TransferBookingP
     setAdded(null)
     setCartFull(false)
     setFormError(null)
+    setServerContactsError(null)
     setShowErrors(false)
   }
 
@@ -221,6 +239,7 @@ export function TransferBookingPanel({ transfer, closedDates }: TransferBookingP
       luggageOther,
       vehicleClassId: null,
       comment,
+      contacts,
     }
 
     const { status } = getAuthState()
@@ -260,15 +279,22 @@ export function TransferBookingPanel({ transfer, closedDates }: TransferBookingP
             text: point.text,
           })),
         ],
+        contacts: [...contacts],
       })
       clearTransferRequestDraft()
+      // Набор запоминается ПОСЛЕ успеха: это тот контакт, по которому реально договорились.
+      rememberOrderContacts(contacts)
       setOrderNumber(order.number)
     } catch (err) {
       if (isSessionFailure(err)) {
         writeTransferRequestDraft(currentDraft)
         setAuthNotice(true)
       }
-      setFormError(transferRequestMessage(err, t))
+      const message = transferRequestMessage(err, t)
+      /* Отказ по контактам показывается ВНУТРИ блока контактов: под кнопкой он выглядел бы
+         претензией к дате или классу, а исправлять его надо в другом месте панели. */
+      if (isContactFailure(err)) setServerContactsError(message)
+      else setFormError(message)
     } finally {
       setSending(false)
     }
@@ -452,6 +478,20 @@ export function TransferBookingPanel({ transfer, closedDates }: TransferBookingP
             }}
             onOtherChange={setLuggageOther}
             showUnits={false}
+          />
+
+          <div className="my-4 h-px bg-edge" />
+
+          {/* Тот же общий блок, что в корзине и в конструкторе: заявка без контакта сервером не
+              принимается (2060), а менеджеру, называющему цену голосом, звонить некуда. */}
+          <OrderContactsPicker
+            value={contacts}
+            onChange={(next) => {
+              setContacts(next)
+              touch()
+            }}
+            error={serverContactsError ?? (showErrors ? contactsBlocker : null)}
+            disabled={sending}
           />
 
           <div className="mt-3">

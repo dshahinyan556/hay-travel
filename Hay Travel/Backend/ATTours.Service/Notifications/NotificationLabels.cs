@@ -3,9 +3,10 @@ using System.Globalization;
 
 namespace ATTours.BusinessServices.Notifications
 {
-    // Подписи полей в блоках, которые бэкенд строит сам ({{AssignmentDetails}} и
-    // {{OrderLines}}). Раз разметку собирает код, то и её подписи обязаны быть на языке
-    // письма — иначе англоязычный получатель увидит «Тур:» посреди английского текста.
+    // Подписи полей в блоках, которые бэкенд строит сам ({{AssignmentDetails}},
+    // {{OrderLines}} и {{ClientContact}}). Раз разметку собирает код, то и её подписи
+    // обязаны быть на языке письма — иначе англоязычный получатель увидит «Тур:» посреди
+    // английского текста.
     //
     // Статический словарь по образцу EmployeeJobRoleExtensions: набор закрыт, DI не нужен,
     // полноценная ресурсная локализация ради семи слов была бы избыточна.
@@ -24,7 +25,8 @@ namespace ATTours.BusinessServices.Notifications
                 [Navigator] = "Навигатор",
                 [Comment] = "Комментарий",
                 [Role] = "Роль",
-                [Order] = "Заказ"
+                [Order] = "Заказ",
+                [PrimaryContact] = "основной"
             };
 
         // Заголовок Telegram-уведомления по событию (ADR 031 §2): у Telegram шаблона в
@@ -63,7 +65,8 @@ namespace ATTours.BusinessServices.Notifications
                 [Navigator] = "Navigator",
                 [Comment] = "Comment",
                 [Role] = "Role",
-                [Order] = "Order"
+                [Order] = "Order",
+                [PrimaryContact] = "primary"
             };
 
         public const string Tour = nameof(Tour);
@@ -74,6 +77,12 @@ namespace ATTours.BusinessServices.Notifications
         public const string Comment = nameof(Comment);
         public const string Role = nameof(Role);
         public const string Order = nameof(Order);
+
+        // Пометка основного контакта в блоке {{ClientContact}} и в его Telegram-зеркале
+        // (батч 2026-08-29). Подписи САМИХ способов связи сюда не дублируются — они живут
+        // в ContactMethodTypeExtensions.ToLabel: здесь подписи ПОЛЕЙ блока, а не значений
+        // enum'ов.
+        public const string PrimaryContact = nameof(PrimaryContact);
 
         // Неизвестный токен — пустая строка, а не имя токена: литерал в письме выглядел бы
         // как баг (тот же принцип, что у неизвестного плейсхолдера в рендерере).

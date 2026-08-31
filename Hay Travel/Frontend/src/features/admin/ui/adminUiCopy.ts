@@ -69,21 +69,20 @@ export const adminUiCopy = defineCopy(
       alignCenterTitle: 'По центру',
       alignRightTitle: 'По правому краю',
 
+      codeTitle: 'Преформатированный текст',
+
       fontSizeLabel: 'Размер текста',
       fontSizeNormal: 'Обычный',
-      fontSizeSmall: 'Мелкий',
-      fontSizeLarge: 'Крупный',
-      fontSizeXLarge: 'Очень крупный',
+
+      fontFamilyLabel: 'Шрифт',
+      fontFamilyNormal: 'По умолчанию',
 
       colorTitle: 'Цвет текста',
+      colorFillTitle: 'Заливка текста',
       colorDefault: 'По умолчанию',
-      colorBlack: 'Чёрный',
-      colorRed: 'Красный',
-      colorGreen: 'Зелёный',
-      colorBlue: 'Синий',
-      colorGold: 'Золотой',
-      colorHexLabel: 'Свой цвет (hex)',
       colorHexInvalid: 'Введите цвет в формате #rrggbb.',
+
+      tableTitle: 'Вставить таблицу',
 
       linkTitle: 'Вставить ссылку',
       linkRemove: 'Удалить ссылку',
@@ -163,21 +162,20 @@ export const adminUiCopy = defineCopy(
       alignCenterTitle: 'Align center',
       alignRightTitle: 'Align right',
 
+      codeTitle: 'Preformatted text',
+
       fontSizeLabel: 'Text size',
       fontSizeNormal: 'Normal',
-      fontSizeSmall: 'Small',
-      fontSizeLarge: 'Large',
-      fontSizeXLarge: 'Very large',
+
+      fontFamilyLabel: 'Font',
+      fontFamilyNormal: 'Default',
 
       colorTitle: 'Text colour',
+      colorFillTitle: 'Text highlight',
       colorDefault: 'Default',
-      colorBlack: 'Black',
-      colorRed: 'Red',
-      colorGreen: 'Green',
-      colorBlue: 'Blue',
-      colorGold: 'Gold',
-      colorHexLabel: 'Custom colour (hex)',
       colorHexInvalid: 'Enter a colour as #rrggbb.',
+
+      tableTitle: 'Insert table',
 
       linkTitle: 'Insert a link',
       linkRemove: 'Remove link',

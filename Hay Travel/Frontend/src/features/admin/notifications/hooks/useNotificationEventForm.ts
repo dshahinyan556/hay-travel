@@ -26,7 +26,6 @@ import {
   type EventDraft,
   type PlatformDraft,
   type RecipientDraft,
-  type TemplatePatch,
 } from '../lib/notificationEventModel'
 import { notificationsCopy, notificationsErrorMessage } from '../lib/notificationsCopy'
 
@@ -40,8 +39,8 @@ export interface UseNotificationEventFormResult {
   draft: EventDraft
   /** Рубильник платформы (вкладка «Платформы»). */
   setPlatformEnabled: (platform: NotificationPlatform, isEnabled: boolean) => void
-  /** Патч шаблона Email (subject/subjectEn/bodyHtml/bodyHtmlEn). */
-  patchTemplate: (platform: NotificationPlatform, patch: TemplatePatch) => void
+  /** Выбор шаблона из библиотеки Notification Templates для этой платформы. */
+  setTemplateId: (platform: NotificationPlatform, templateId: number | null) => void
   addRecipient: (platform: NotificationPlatform) => void
   removeRecipient: (platform: NotificationPlatform, rowKey: string) => void
   patchRecipient: (
@@ -118,9 +117,9 @@ export function useNotificationEventForm({
     [patchPlatform],
   )
 
-  const patchTemplate = useCallback(
-    (platform: NotificationPlatform, patch: TemplatePatch) => {
-      patchPlatform(platform, (current) => ({ ...current, ...patch }))
+  const setTemplateId = useCallback(
+    (platform: NotificationPlatform, templateId: number | null) => {
+      patchPlatform(platform, (current) => ({ ...current, templateId }))
     },
     [patchPlatform],
   )
@@ -203,7 +202,7 @@ export function useNotificationEventForm({
   return {
     draft,
     setPlatformEnabled,
-    patchTemplate,
+    setTemplateId,
     addRecipient,
     removeRecipient,
     patchRecipient,

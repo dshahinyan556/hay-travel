@@ -21,6 +21,7 @@ import {
   type LoginHistoryEntryModel,
   type LoginResultModel,
   type MessageResultModel,
+  type SessionModel,
   type SetUserJobRoleModel,
   type SetUserPreferredLanguageModel,
   type UserDetailInfoModel,
@@ -55,6 +56,47 @@ export function getUserDetail(id: number): Promise<UserDetailInfoModel> {
  */
 export function getUserLoginHistory(id: number): Promise<LoginHistoryEntryModel[]> {
   return authFetch<LoginHistoryEntryModel[]>(`api/Users/${id}/LoginHistory`)
+}
+
+/**
+ * GET one account's LIVE sessions (spec 017 §4) — unrevoked, unexpired refresh tokens, newest first.
+ *
+ * A different question from the login history right above it: that one is an immutable record of
+ * sign-ins that already happened, this one is the set of devices that can still act as this user
+ * right now. Which is why the admin gets a revoke button here and none there.
+ *
+ * `isCurrent` is always `false` on these rows — the admin is not that user, so there is no cookie to
+ * compare against (the self-service list in `shared/auth/sessionsApi.ts` is where that flag means
+ * something). `users.View`, same gate as the rest of the reads; the caller catches failures so a
+ * broken endpoint cannot take the profile card down.
+ */
+export function getUserSessions(id: number): Promise<SessionModel[]> {
+  return authFetch<SessionModel[]>(`api/Users/${id}/Sessions`)
+}
+
+/**
+ * End ONE of that account's sessions (204). `users.Update`.
+ *
+ * Idempotent — an already-revoked row is a no-op, so acting on a stale list is not an error. 404
+ * `RelationalEntityNotFound` (2003) when `sessionId` does not belong to `id`: the server checks
+ * ownership rather than trusting the pair, so a mismatched id cannot be used to revoke a stranger's
+ * session.
+ */
+export function revokeUserSession(id: number, sessionId: number): Promise<void> {
+  return authFetch<void>(`api/Users/${id}/Sessions/${sessionId}`, { method: 'DELETE' })
+}
+
+/**
+ * End EVERY session of that account (204) — including the one they are using right now, which is
+ * the point: this is the "log this person out everywhere" button.
+ *
+ * Deliberately not the same call as self-service `RevokeOthers`, which spares the caller's own
+ * session: here the caller is somebody else entirely and has nothing in that list to spare. On the
+ * admin's OWN profile the UI calls the self-service endpoint instead, so an admin cannot sign
+ * themselves out with it by accident. `users.Update`.
+ */
+export function revokeUserSessions(id: number): Promise<void> {
+  return authFetch<void>(`api/Users/${id}/Sessions/RevokeAll`, { method: 'POST' })
 }
 
 /**

@@ -48,6 +48,25 @@ namespace ATTours.BusinessServices.Services.ValidationServices
             }
         }
 
+        // То же самое для параметров ЭКРАНА задач (BackgroundJobCatalog.ScreenParameterKeys):
+        // граница ровно та же и по той же причине — без сверки со списком роль с jobs:Update
+        // правила бы через этот эндпоинт любые настройки сайта. Отдельный метод, а не
+        // ValidateParameterKeys с null-задачей: у параметра экрана нет задачи-владельца, и
+        // подсовывать сюда фиктивное определение означало бы врать в тексте ошибки.
+        public static void ValidateScreenParameterKeys(IDictionary<string, string> values)
+        {
+            if (values is null || values.Count == 0)
+                throw new ErrorModelException(GlobalErrorCode.InvalidRequestParam, HttpStatusCode.BadRequest,
+                    "No screen parameter values supplied for the background jobs screen.");
+
+            foreach (var key in values.Keys)
+            {
+                if (!BackgroundJobCatalog.ScreenParameterKeys.Contains(key, StringComparer.Ordinal))
+                    throw new ErrorModelException(GlobalErrorCode.UnknownJobParameter, HttpStatusCode.BadRequest,
+                        $"Site setting '{key}' is not a parameter of the background jobs screen.");
+            }
+        }
+
         // Разбор cron-строки ДО сохранения. Иначе битое расписание уехало бы в БД, а
         // планировщик отверг бы его уже при RescheduleAsync — задача молча осталась бы без
         // триггера, и узнали бы об этом по неотменённым заказам.

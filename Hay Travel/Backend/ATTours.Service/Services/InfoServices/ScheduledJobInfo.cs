@@ -69,11 +69,21 @@ namespace ATTours.BusinessServices.Services.InfoServices
                     State = state,
                     LastRun = lastRun,
                     IsRunning = runningKeys.Contains(definition.Key),
-                    Parameters = BuildParameters(definition, parameterValues)
+                    Parameters = BuildParameters(definition.ParameterKeys, parameterValues)
                 });
             }
 
             return views;
+        }
+
+        // Параметры самого экрана задач (BackgroundJobCatalog.ScreenParameterKeys) — то, что
+        // читает ядро, а не отдельный хендлер. Отдельный эндпоинт, а не поле в GetViewsAsync:
+        // это параметры экрана, и подмешивать их в строку какой-то одной задачи означало бы
+        // приписать их той задаче.
+        public async Task<List<ScheduledJobParameterView>> GetScreenParameterViewsAsync()
+        {
+            var values = await GetRawSettingValuesAsync(BackgroundJobCatalog.ScreenParameterKeys.ToList());
+            return BuildParameters(BackgroundJobCatalog.ScreenParameterKeys, values);
         }
 
         // Один прогон по id — источник страницы отчёта. Ключ задачи в условии не
@@ -138,31 +148,39 @@ namespace ATTours.BusinessServices.Services.InfoServices
         // Значения приходят из того же SiteSettingsInfo, которым читают свои пороги сами
         // джобы (GetNumberAsync) — правило «сохранённое, иначе дефолт каталога» живёт
         // там в единственном экземпляре, здесь оно не повторяется.
-        private async Task<Dictionary<string, string>> GetParameterValuesAsync()
+        private Task<Dictionary<string, string>> GetParameterValuesAsync()
         {
             var parameterKeys = BackgroundJobCatalog.All
                                                     .SelectMany(definition => definition.ParameterKeys)
                                                     .Distinct(StringComparer.Ordinal)
                                                     .ToList();
 
-            if (parameterKeys.Count == 0)
+            return GetRawSettingValuesAsync(parameterKeys);
+        }
+
+        // Сырые значения набора ключей настроек. Общее место для параметров задач и
+        // параметров экрана: правило «сохранённое, иначе дефолт каталога» живёт в
+        // SiteSettingsInfo в единственном экземпляре, здесь только вызов.
+        private async Task<Dictionary<string, string>> GetRawSettingValuesAsync(List<string> keys)
+        {
+            if (keys.Count == 0)
                 return new Dictionary<string, string>(StringComparer.Ordinal);
 
             // Info настроек работает на том же контексте; сознательно не оборачиваем в
             // using — владелец контекста здесь, и его Dispose закрыл бы соединение раньше
             // времени (тот же приём, что в SiteSettingsUpdateService.UpsertAsync).
             var settingsInfo = new SiteSettingsInfo(Context, cancellationToken);
-            return await settingsInfo.GetRawValuesAsync(parameterKeys);
+            return await settingsInfo.GetRawValuesAsync(keys);
         }
 
-        // Параметры одной задачи в порядке, объявленном каталогом задач (он же порядок
-        // полей на карточке).
-        private static List<ScheduledJobParameterView> BuildParameters(BackgroundJobDefinition definition,
+        // Параметры в порядке, объявленном каталогом (он же порядок полей на карточке) —
+        // и для одной задачи, и для экрана целиком.
+        private static List<ScheduledJobParameterView> BuildParameters(IReadOnlyList<string> parameterKeys,
             Dictionary<string, string> parameterValues)
         {
-            var parameters = new List<ScheduledJobParameterView>(definition.ParameterKeys.Count);
+            var parameters = new List<ScheduledJobParameterView>(parameterKeys.Count);
 
-            foreach (var key in definition.ParameterKeys)
+            foreach (var key in parameterKeys)
             {
                 var settingDefinition = SiteSettingCatalog.ByKey(key);
 

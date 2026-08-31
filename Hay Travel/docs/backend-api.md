@@ -432,6 +432,43 @@ ADR 027-030. Продукт-решение Давида: 4 независимы�
   блокировка impersonation для юзеров с истёкшим email-verification токеном сверх уже описанной
   проверки.
 
+## Session/device management + grace-период ротации refresh-токена — 2026-08-29
+
+Причина: «активная сессия сбрасывается сама по себе» без Remember Me — race двух вкладок/
+устройств за один истекающий access-токен. Reuse-detection в `AuthService.RefreshAsync` гасила
+ВСЮ семью refresh-токенов на любое повторное предъявление уже ротированного токена. Спека —
+`docs/specs/017-session-management-and-refresh-grace.md`, обоснование — ADR
+[033](adr/033-refresh-token-rotation-grace-period.md).
+
+- **`RefreshToken.CreatedByUserAgent`** (nullable, 512, миграция `AddRefreshTokenCreatedByUserAgent`)
+  — заполняется на `Login`/`DevLogin`/`RefreshToken`/`Impersonate` из уже захваченного
+  `RequestContextModel.UserAgent` (раньше просто не сохранялся).
+- **Grace-период на reuse-detection** (`AuthService.RefreshAsync`, `RefreshReuseGraceSeconds = 10`)
+  — предъявленный токен различается по `ReplacedByTokenHash`: `null` = явно погашен (logout/
+  revoke/смена пароля) → 401 без гашения семьи; заполнен = умер РОТАЦИЕЙ → в течение 10с и если
+  непосредственный преемник (один хоп) ещё жив, вызывающего «догоняют» новой ротацией от головы
+  цепочки вместо кражи-реакции. Вне окна или с мёртвой головой — прежнее поведение (гасит всё).
+  Прощённая ветка **перепроверяет** `IsDeleted`/`LockedUntil`/`IsEmailVerified` тем же порядком,
+  что обычная ротация (решение 2026-08-29, не в исходной спеке) — иначе блокировка/удаление
+  аккаунта внутри окна могла бы не сработать немедленно.
+- **Session management** — `AuthService`, без отдельного Info-сервиса (это auth-мутация, ADR
+  005/028, а не read-only сущность как `LoginHistory`):
+  - Свои сессии: `GET/DELETE api/Auth/Sessions`, `POST api/Auth/Sessions/RevokeOthers`
+    (`[Authorize]`, текущая сессия при revoke-others не трогается — сверка по хешу cookie).
+  - Чужие сессии (админ): `GET api/Users/{id}/Sessions` (`Users`/`View`),
+    `DELETE api/Users/{id}/Sessions/{sessionId}`, `POST api/Users/{id}/Sessions/RevokeAll`
+    (`Users`/`Update`). Владение сессией по id проверяется на сервере — чужая/несуществующая
+    строка отвечает 404 `RelationalEntityNotFound`, как и в самообслуживании.
+  - `RevokeAllUserSessionsAsync` щадит **собственную impersonation-сессию вызывающего админа**
+    над этой же целью (`actingUserId` + новый параметр `spareImpersonationByUserId` на
+    `RevokeAllRefreshTokensAsync`) — решение 2026-08-29 по прямому запросу Давида: иначе кнопка
+    «завершить все сессии» на карточке пользователя, которого сам админ сейчас имперсонирует
+    (в другой вкладке/устройстве), сносила бы и его собственный рабочий сеанс. Точечный отзыв
+    одной сессии по id этому правилу не подчиняется — явный выбор конкретной строки, не бланковый.
+  - Новый DTO `SessionInfoModel` (`ATTours.Common/DTO/Auth`) — устройство/IP/гео/даты/`IsCurrent`
+    (`IsCurrent` всегда `false` в админском списке — у админа нет cookie цели для сравнения).
+- **Фронтенд** (Web Locks + новые экраны) — `client-site.md`/`admin-panel.md`.
+
 ## Трансферы, формат продукта и время старта — 2026-08-29
 
 Батч «Трансферы + формат продукта + время старта» (`docs/checklists/checklist-transfers-format-2026-08-29.txt`).
@@ -588,6 +625,76 @@ LuggageMediumCount, LuggageLargeCount, LuggageOther, DesiredVehicleClassId, Comm
 у заявки «пассажиров больше, чем вмещает любая машина» это штатный путь в заявку без цены, а не
 ошибка.
 
+## Контакты для связи с клиентом (`api/Account/Contacts`) — 2026-08-29
+
+Спека `specs/016-client-contacts-backend.md`, решения — `adr/032-order-contact-as-value-snapshot.md`.
+
+**Две сущности, а не одна.** `UserContactMethod` — справочник в профиле. `OrderContact` — снимок
+значений В ЗАКАЗЕ, **без FK на справочник**: правка или удаление контакта в профиле не должны
+менять уже созданный заказ, там обязан остаться номер, по которому договаривались. Вариант
+«копия + необязательная ссылка на оригинал» отклонён: живую ссылку рано или поздно прочитают как
+актуальное значение.
+
+Поля обеих: `Type` (`ContactMethodType`: 1 Phone, 2 WhatsApp, 3 Telegram, 4 Viber, 5 Email),
+`Value`, `FirstName` (обязательно), `LastName` (**nullable**, с 2026-08-29), `IsPrimary`.
+У `OrderContact` дополнительно `SortOrder`; у `UserContactMethod` — индекс по `UserId`.
+
+### Эндпоинты справочника (self-service, userId только из токена)
+| Метод | Маршрут | Что делает |
+| --- | --- | --- |
+| GET | `api/Account/Contacts` | Весь справочник, **основной первым** — порядок задаёт сервер, фронт не пересортировывает |
+| POST | `api/Account/Contacts` | Создаёт; первый контакт становится основным всегда |
+| PUT | `api/Account/Contacts` | Правит. Снять флаг «основной» этим вызовом НЕЛЬЗЯ (обрабатывается только `false → true`), иначе в справочнике не осталось бы основного |
+| DELETE | `api/Account/Contacts?id=` | Физическое удаление — безопасно, в заказах лежит снимок |
+| PATCH | `api/Account/Contacts/SetPrimary?id=` | Возвращает справочник **целиком**: смена основного меняет флаг у двух записей и порядок списка |
+
+### В заказах
+Новых эндпоинтов нет: контакты приезжают в существующих телах `Order/Create` и
+`Order/CreateTransferRequest` (поле `Contacts`) и возвращаются в `OrderInfoModel.Contacts`
+(основной первым) в `{id}`, `GetAll`, `GetMine`, `GetAssignedToMe`.
+
+Правило «минимум 1, максимум 3, ровно один основной» живёт в `OrderValidationService`, а не в
+сервисах создания: так его получит и будущий админский сервис создания заказа. Применяется
+только к собираемому заказу (`Id == 0`) — на пути правки (`OrderUpdateService`) коллекция
+контактов не выгружена, и проверка там валила бы любую правку любой брони.
+
+Валидация значения (`ContactMethodValidator`, зеркалится на фронте): телефон/WhatsApp/Viber —
+`^\+\d{8,15}$`; Email — адрес; Telegram — `@username` или номер. Ведущий `+` обязателен и
+сервером НЕ дописывается: `89261234567` — российский трунк, а не `+8…`.
+
+### Токен письма
+`{{ClientContact}}` — HTML-токен (третий после `OrderLines` и `AssignmentDetails`), выдаётся
+событиям `OrderCreated`, `OrderAssignEmployee`, `OrderAutoCancelled`. `OrderSendToClient` его НЕ
+получает: письмо адресовано самому клиенту. В Telegram — plaintext-зеркало, стоит ПЕРЕД составом
+заказа, потому что сообщение режется по лимиту с конца.
+
+### Коды ошибок
+`2060 OrderContactRequired`, `2061 OrderTooManyContacts`, `2062 OrderPrimaryContactInvalid`,
+`2063 InvalidContactValue`, `2064 ContactMethodNotFound`, `2065 TooManyContactMethods`.
+
+## Личные предпочтения (`api/Account/Preferences`) — 2026-08-29
+
+`GET` / `PUT`, self-service. Четыре новых поля на `User` + существовавший `PreferredLanguage`.
+
+**`null` = «личного выбора нет, следуй дефолту сайта», а не «пусто».** Сервер сознательно не
+подмешивает дефолты: фронт и так получает `theme.defaultMode` / `theme.activePalette` из
+публичных настроек, а различать «выбрано dark» и «выбора нет» обязательно — иначе смена
+админского дефолта перестанет действовать на тех, кто ничего не выбирал.
+
+**`PUT` — полная перезапись, а не патч.** `null` в поле означает «сбросить к дефолту сайта».
+Семантику «не менять» здесь заводить нельзя: тогда сброс темы к дефолту станет невыразимым.
+
+| Поле | Значения |
+| --- | --- |
+| `PreferredTheme` | `"dark"` / `"light"` / `null` |
+| `PreferredPalette` | id пресета из `ThemePaletteCatalog` / `null` |
+| `PreferredCurrency` | ISO-4217 из каталога валют / `null` |
+| `PreferredLanguage` | не nullable; он же — язык уведомлений |
+| `NotificationChannels` | флаги `Email = 1`, `Telegram = 2`; ноль запрещён |
+
+Отказы: `2068` — пустая маска каналов, `2069` — Telegram без привязанного чата, `2070` —
+неизвестная тема/палитра/валюта.
+
 ## Миграции
 Актуальные (в `ATTours.DataLayer/Migrations`): `InitialCreate`, `AddRoutePoint`, `AddOrganizationalDetailAndRestriction`, `ChangeTourDayChildrenToCascade`, `AddTourIsArchived`, `AddSiteSettings`, `AddRegionAndTourRegion`, `SeedArmenianRegions`, `MergeRestrictionAndOrganizationalDetailIntoTourNote`, `AddReferenceCatalogs`, `AddTourFeatured`, `SeedRegionBlurbs`, `AddExchangeRate`, `AddOrdersAndClosureRules`, `AddTourRequiresPrepayment` (2026-08-13 — `Tour.RequiresPrepayment`, `bit NOT NULL DEFAULT 1`; см. `product-model.md`), `AddClosureRuleBatchId` (2026-08-14 — `ClosureRule.BatchId`, `uniqueidentifier NULL`; см. выше), `AddTagsAndOrderDiscount` (2026-08-15), `TourDiscountFields` (2026-08-16), `AddTourDiscountStartDate` (2026-08-18 — см. «Скидка тура» выше), `AddFlexibleRolesAndPermissions` (2026-08-22 — отредактирована на месте 2026-08-23, чтобы сразу эмитить `AccessLevel Level` вместо 4 bool-флагов; права никогда не были задеплоены, редактирование существующей миграции безопасно), `RemoveRoleSystemLockAddCanManageAdmins` (2026-08-22), `AddImpersonationAndRememberMe` (2026-08-22 — `UserRole.CanImpersonate`, `RefreshToken.RememberMe`/`ImpersonatedByUserId`, таблица `ImpersonationEvent`, ретроактивный флаш существующих refresh-токенов). Миграции применяются автоматически при старте backend (с retry, с 2026-08-10) — отдельного ручного шага `dotnet ef database update` в проде не требуется.
 
@@ -603,5 +710,21 @@ LuggageMediumCount, LuggageLargeCount, LuggageOther, DesiredVehicleClassId, Comm
   `DELETE FROM [TourStartTime] WHERE [Time] = '09:00:00'` (решение 0.28: время старта строго
   обязательно, посеянное значение убирается, реальное расписание админ заводит руками). Продукты и
   заказы не тронуты, `Down` пустой.
+
+Батч контактов и предпочтений (2026-08-29, вечер), четыре миграции:
+- `20260829144713_AddClientContacts` — таблицы `UserContactMethod` и `OrderContact`
+  (обе с каскадом от владельца), индексы по `UserId` / `OrderId`.
+- `20260829152927_AddUserPreferences` — четыре колонки на `User`; `NotificationChannels`
+  не nullable с `defaultValue: 1` (бэкфилл существующих строк = Email). Дефолт задан в
+  миграции, а не в `UserConfiguration`: `HasDefaultValue` пометил бы колонку
+  `ValueGeneratedOnAdd`, а CLR-дефолт этого enum — запрещённое значение `None`.
+- `20260829161407_MakeContactLastNameOptional` — два `AlterColumn`, фамилия стала
+  необязательной. Отдельной миграцией, а не правкой `AddClientContacts`: та уже могла
+  примениться к локальной базе, и правка файла там просто не сработала бы.
+- `20260829173505_AddClientContactToOrderTemplates` — только `migrationBuilder.Sql`:
+  дописывает блок «Связь с клиентом» с токеном `{{ClientContact}}` в боевые шаблоны событий
+  1, 2 и 5, идемпотентно (`NOT LIKE`). `BodyHtmlEn` — только если перевод непустой: пустой EN
+  означает «письмо уйдёт русской версией» (ADR 026), и один английский абзац превратил бы
+  «перевода нет» в «перевод есть».
 
 **Известный пробел в этом списке**: миграции переделки B14/multi-line заказов (`checklist-orders-redesign.txt`, между 08-16 и 08-16) в список не занесены — Фаза 12 (docs) той работы была осознанно пропущена по просьбе пользователя. Список неполный между `AddOrdersAndClosureRules` и `AddTagsAndOrderDiscount`.

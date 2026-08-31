@@ -1,5 +1,7 @@
 /**
- * Calendar-date helpers, in LOCAL time throughout.
+ * Calendar-date helpers, in LOCAL time throughout — with one clearly fenced exception at the bottom
+ * of the file (`parseUtcTimestamp`/`formatUtcDateTime`, which turn the API's UTC instants into
+ * something a visitor can read).
  *
  * Extracted from `shared/ui/DatePicker` when `BookingCard` needed the same "today + 3 months"
  * arithmetic for the picker's `max` bound. Two of these carry a trap that is easy to reproduce
@@ -132,6 +134,50 @@ export const WEEKDAYS_SHORT: Record<Locale, string[]> = {
 export const WEEKDAYS_FULL: Record<Locale, string[]> = {
   ru: ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'],
   en: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+}
+
+/* ── UTC instants from the API ──────────────────────────────────────────────────────────────── */
+
+/*
+ * The exception to this module's "local time throughout" rule, and the reason it is fenced off in
+ * its own section: everything above works with a CALENDAR DAY the visitor picked, while the two
+ * helpers below work with an INSTANT the server recorded (`*AtUtc` columns — login history, session
+ * creation/expiry). Those are different kinds of value and must not be mixed up.
+ */
+
+/**
+ * Parse an `*AtUtc` string from the API into a `Date`, or `null` when it is unparseable.
+ *
+ * The column is UTC but the value may arrive WITHOUT a zone designator, in which case `new Date()`
+ * reads it as LOCAL time and silently shifts the moment by the visitor's offset — three hours for
+ * Yerevan, and the wrong day either side of midnight. Appending `Z` when there is neither a `Z` nor
+ * an explicit offset is what keeps that honest.
+ *
+ * Shared rather than re-derived per call site: the check is easy to write ALMOST right (a bare
+ * `endsWith('Z')` misses `+04:00`), and three lists now depend on it.
+ */
+export function parseUtcTimestamp(value: string): Date | null {
+  const normalised = /(?:[Zz]|[+-]\d{2}:?\d{2})$/.test(value) ? value : `${value}Z`
+  const date = new Date(normalised)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+/** One formatter per interface locale, built once — `Intl.DateTimeFormat` is expensive to
+ * construct and these lists format a row each. `en-GB` per Spec 009 §5 (day-month-year). */
+const UTC_DATE_TIME: Record<Locale, Intl.DateTimeFormat> = {
+  ru: new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }),
+  en: new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }),
+}
+
+/**
+ * An `*AtUtc` instant rendered in the VISITOR's timezone and locale ("29 авг. 2026 г., 18:42").
+ *
+ * Unparseable input degrades to the raw string: a list row showing an odd timestamp is better than
+ * one showing «Invalid Date», and better than a crash inside a list.
+ */
+export function formatUtcDateTime(value: string, locale: Locale): string {
+  const date = parseUtcTimestamp(value)
+  return date === null ? value : UTC_DATE_TIME[locale].format(date)
 }
 
 /** Every day of the inclusive range, ascending. `from > to` yields `[]` rather than throwing —

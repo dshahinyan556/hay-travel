@@ -206,6 +206,8 @@ function blankDraftOrder(currency: string, copy: OrdersCopy): OrderInfoModel {
     approvedAtUtc: null,
     currency,
     lines: [],
+    // Контакты у черновика взяться неоткуда — их приносит клиент вместе с заказом (ADR 032).
+    contacts: [],
     discountTotal: 0,
     total: 0,
   }

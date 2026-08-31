@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import { ensureAuthReady } from '@/shared/auth'
 import { ensureRatesReady } from '@/shared/currency'
+import { startAccountPreferencesSync } from '@/shared/lib/accountPreferences'
 import App from './app/App.tsx'
 
 /**
@@ -32,6 +33,16 @@ void ensureAuthReady()
  * second copy of the route table that would silently rot.
  */
 void ensureRatesReady()
+
+/**
+ * Мост «предпочтения аккаунта ⇄ переключатели сайта».
+ *
+ * Здесь, а не в `RootLayout`: слушать надо и `/admin` (язык уведомлений человек может сменить и
+ * там), и подписка на сессию должна существовать раньше, чем смонтируется хоть один экран, иначе
+ * вход в аккаунт на странице без шапки остался бы незамеченным. Идемпотентно, синхронно и не
+ * ходит в сеть, пока сессии нет.
+ */
+startAccountPreferencesSync()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

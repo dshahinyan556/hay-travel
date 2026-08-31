@@ -94,6 +94,71 @@ namespace ATTours.ClientAPI.Controllers
             return await ReadAsync(key, cancellationToken);
         }
 
+        // Параметры самого экрана, а не отдельной задачи: сегодня это глубина хранения истории
+        // прогонов, которую читает ядро (BackgroundJobRunner) для всех задач сразу. Собственный
+        // маршрут, а не поле в GetAll: список задач — это строки каталога, и параметр экрана,
+        // приписанный первой из них, читался бы как её собственный.
+        [HttpGet]
+        [Route("ScreenParameters")]
+        [RequiresPermission(AdminScreens.Jobs, PermissionAction.View)]
+        public async Task<List<JobParameterInfoModel>> GetScreenParametersAsync(CancellationToken cancellationToken)
+        {
+            using var info = new ScheduledJobInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
+            return mapper.Map<List<JobParameterInfoModel>>(await info.GetScreenParameterViewsAsync());
+        }
+
+        // Правка параметров экрана. Тот же вход под jobs:Update и по той же причине, что у
+        // «{key}/Parameters»: значения физически лежат в SiteSetting, но правом settings:Update
+        // этот экран не гейтится. Ключ обязан быть в BackgroundJobCatalog.ScreenParameterKeys,
+        // иначе 400 UnknownJobParameter — правкой настроек сайта эндпоинт не становится.
+        [HttpPatch]
+        [Route("ScreenParameters")]
+        [RequiresPermission(AdminScreens.Jobs, PermissionAction.Update)]
+        public async Task<List<JobParameterInfoModel>> SetScreenParametersAsync([FromBody] UpdateJobParametersModel model,
+            CancellationToken cancellationToken)
+        {
+            using (var updateService = new ScheduledJobUpdateService(jobDispatcher, cancellationToken))
+                await updateService.SetScreenParametersAsync(model.Values);
+
+            return await GetScreenParametersAsync(cancellationToken);
+        }
+
+        // Исключения из порога автозакрытия по продуктам — таблица на карточке задачи
+        // «Автозакрытие дат» (решение Р3 от 2026-08-29). Отдельный маршрут, а не поле в
+        // GetAll: это данные ОДНОЙ задачи, и таскать их в каждом ответе списка задач незачем.
+        //
+        // Право то же и по той же причине, что у «{key}/Parameters»: физически исключение
+        // лежит в собственной таблице, а не в SiteSetting, но правится оно на экране задач,
+        // и роль, которой доверили задачи, обязана уметь его сохранить, не имея
+        // settings:Update. Расширением прав на настройки сайта эндпоинт не становится —
+        // писать он умеет ровно в TourAutoCloseOverride.
+        [HttpGet]
+        [Route("AutoCloseOverrides")]
+        [RequiresPermission(AdminScreens.Jobs, PermissionAction.View)]
+        public async Task<List<TourAutoCloseOverrideInfoModel>> GetAutoCloseOverridesAsync(CancellationToken cancellationToken)
+        {
+            using var info = new TourAutoCloseOverrideInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
+            return mapper.Map<List<TourAutoCloseOverrideInfoModel>>(await info.GetViewsAsync());
+        }
+
+        // Замена набора целиком (PUT, а не PATCH — это именно «пусть будет вот такой
+        // список»): экран сохраняется одной кнопкой, и удаление строки на нём это её
+        // отсутствие в теле запроса, а не отдельный DELETE.
+        //
+        // Ответ — перечитанный список, а не эхо запроса: клиенту нужны названия продуктов
+        // и серверный порядок строк, которых в теле PUT нет.
+        [HttpPut]
+        [Route("AutoCloseOverrides")]
+        [RequiresPermission(AdminScreens.Jobs, PermissionAction.Update)]
+        public async Task<List<TourAutoCloseOverrideInfoModel>> SetAutoCloseOverridesAsync(
+            [FromBody] UpdateAutoCloseOverridesModel model, CancellationToken cancellationToken)
+        {
+            using (var updateService = new TourAutoCloseOverrideUpdateService(cancellationToken))
+                await updateService.ReplaceAsync(model?.Overrides);
+
+            return await GetAutoCloseOverridesAsync(cancellationToken);
+        }
+
         // «Запустить сейчас». Отвечает 202, а не 200: задача уходит в очередь планировщика,
         // и её исход читается из истории (GET api/Jobs/{key}/Runs), а не из этого ответа.
         //

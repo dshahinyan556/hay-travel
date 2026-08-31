@@ -92,6 +92,37 @@ namespace ATTours.ClientAPI.Controllers
         public async Task<MyPermissionsModel> MyPermissionsAsync(CancellationToken cancellationToken)
             => await authService.GetMyPermissionsAsync(User.GetUserId(), cancellationToken);
 
+        // Управление своими сессиями/устройствами (spec 017 §4). [Authorize] пометодно, как
+        // у MyPermissions: сам контроллер [AllowAnonymous]. Пользователь всегда из токена,
+        // никогда из маршрута/тела — иначе это был бы прямой IDOR по чужим сессиям.
+        [HttpGet]
+        [Route("Sessions")]
+        [Authorize]
+        public async Task<List<SessionInfoModel>> GetMySessionsAsync(CancellationToken cancellationToken)
+            => await authService.GetMySessionsAsync(User.GetUserId(), Request.Cookies[RefreshTokenCookie.Name], cancellationToken);
+
+        // Отзыв одной своей сессии. Cookie здесь не трогаем: гасить можно и текущую строку —
+        // тогда браузер сам получит 401 на ближайшей ротации и разлогинится штатно.
+        [HttpDelete]
+        [Route("Sessions/{id:int}")]
+        [Authorize]
+        public async Task<IActionResult> RevokeMySessionAsync(int id, CancellationToken cancellationToken)
+        {
+            await authService.RevokeMySessionAsync(User.GetUserId(), id, cancellationToken);
+            return NoContent();
+        }
+
+        // «Выйти на других устройствах»: текущая сессия остаётся живой, поэтому cookie
+        // тоже не трогаем.
+        [HttpPost]
+        [Route("Sessions/RevokeOthers")]
+        [Authorize]
+        public async Task<IActionResult> RevokeMyOtherSessionsAsync(CancellationToken cancellationToken)
+        {
+            await authService.RevokeMyOtherSessionsAsync(User.GetUserId(), Request.Cookies[RefreshTokenCookie.Name], cancellationToken);
+            return NoContent();
+        }
+
         [HttpPost]
         [Route("ForgotPassword")]
         public async Task<MessageResultModel> ForgotPasswordAsync([FromBody] ForgotPasswordModel model, CancellationToken cancellationToken)

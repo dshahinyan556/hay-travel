@@ -152,7 +152,13 @@ namespace ATTours.Common.Infrastructure.SiteSettings
             // sortOrder 28-31 — следующие свободные номера в конце глобальной
             // последовательности (то же правило, что у seo.faviconUrl).
             //
-            // За сколько часов до начала дня (по времени Армении) день перестаёт продаваться.
+            // За сколько часов до САМОГО ПОЗДНЕГО старта дня (по времени Армении) день
+            // перестаёт продаваться целиком (решение Р1 от 2026-08-29; до этого отсчёт шёл
+            // от начала дня, и он же остался у трансферов — расписания у них нет, время
+            // подачи вводит клиент). Значение глобальное; отдельным продуктам его
+            // перекрывает TourAutoCloseOverride, редактируемый на карточке задачи
+            // «Автозакрытие дат». Резолв «исключение, иначе это число» — один на решение
+            // (AutoCloseLeadTimeResolver).
             // Читают трое: фоновое автозакрытие (материализует ClosureRule для админ-календаря),
             // валидация заказа (силовой чек, если джоба ещё не тикнула) и публичный
             // GetClosedDates (чтобы дата-пикер гасил дату сразу). Отдельного
@@ -198,5 +204,24 @@ namespace ATTours.Common.Infrastructure.SiteSettings
             => key is not null && definitionsByKey.TryGetValue(key, out var definition) ? definition : null;
 
         public static bool IsKnown(string key) => key is not null && definitionsByKey.ContainsKey(key);
+
+        // Группы, которыми экран «Настройки сайта» НЕ владеет: их ключи редактируются на экране
+        // собственной фичи — порог автозакрытия и параметры задач правятся на «Фоновых задачах»
+        // (PATCH api/Jobs/...). Каталог у них общий сознательно (ADR 002: одна таблица значений,
+        // один upsert, одна валидация) — расходится только ВХОД, а не хранилище.
+        //
+        // Без этого списка экран настроек показывал бы их вторым, рассинхронизированным входом:
+        // те же ключи под безымянной вкладкой «Прочее», числом в текстовом поле и без подписи,
+        // объясняющей, что этот порог значит.
+        private static readonly HashSet<SiteSettingGroup> groupsOwnedByOtherScreens =
+            [SiteSettingGroup.Booking, SiteSettingGroup.Jobs];
+
+        // Показывается ли ключ на экране «Настройки сайта». Неизвестный ключ — false: строка,
+        // которую убрали из каталога, наружу не отдаётся ни одним экраном.
+        public static bool BelongsToSettingsScreen(string key)
+        {
+            var definition = ByKey(key);
+            return definition is not null && !groupsOwnedByOtherScreens.Contains(definition.Group);
+        }
     }
 }

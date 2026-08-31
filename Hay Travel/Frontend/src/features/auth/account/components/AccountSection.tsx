@@ -15,6 +15,12 @@ interface AccountSectionProps {
   children: ReactNode
   /** Label for the toggle button, e.g. «Изменить email» — the visible chevron has no text. */
   toggleLabel: string
+  /**
+   * Visible caption of the toggle while COLLAPSED. Defaults to «Изменить», which is right for the
+   * four editors; the sessions section passes «Показать» — it opens a list of devices, and nothing
+   * in it is being "changed" until the visitor picks one. Additive: no existing caller changes.
+   */
+  actionLabel?: string
 }
 
 /**
@@ -39,6 +45,7 @@ export function AccountSection({
   onToggle,
   children,
   toggleLabel,
+  actionLabel,
 }: AccountSectionProps) {
   const { t } = useLocale()
   // Generated, not derived from `title`: the title is a translated string with spaces, which is not
@@ -63,7 +70,7 @@ export function AccountSection({
           aria-label={toggleLabel}
           className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm text-ink-dim ring-1 ring-edge-strong transition-colors hover:text-gold-ink focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
         >
-          {open ? t('account.close') : t('account.change')}
+          {open ? t('account.close') : (actionLabel ?? t('account.change'))}
           <ChevronDownIcon
             size={15}
             className={`transition-transform duration-[var(--dur-micro)] ${open ? 'rotate-180' : ''}`}

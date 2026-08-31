@@ -12,8 +12,13 @@ namespace ATTours.Common.DTO.Info
         // вкладку, бэкенд — не шлёт.
         public bool IsImplemented { get; set; }
 
-        // Только у Email; у Telegram null.
-        public NotificationTemplateInfoModel Template { get; set; }
+        // Ссылка на шаблон из библиотеки Notification Templates (2026-08-31). У обеих
+        // платформ теперь одинаково устроено — раньше Template был встроен целиком и был
+        // null у Telegram. TemplateName/TemplateSubject денормализованы для отображения
+        // без похода на второй эндпоинт; полное содержимое — на карточке самого шаблона.
+        public int? TemplateId { get; set; }
+        public string TemplateName { get; set; }
+        public string TemplateSubject { get; set; }
 
         public List<NotificationRecipientInfoModel> Recipients { get; set; } = [];
     }

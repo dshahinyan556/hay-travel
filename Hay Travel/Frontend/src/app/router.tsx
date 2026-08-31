@@ -269,6 +269,22 @@ export const router = createBrowserRouter([
           })),
       },
       {
+        path: 'notification-templates',
+        lazy: () =>
+          import('@/features/admin').then((m) => ({
+            Component: m.NotificationTemplatesPage,
+            loader: m.notificationTemplatesLoader,
+          })),
+      },
+      {
+        path: 'notification-templates/:id',
+        lazy: () =>
+          import('@/features/admin').then((m) => ({
+            Component: m.NotificationTemplateDetailPage,
+            loader: m.notificationTemplateDetailLoader,
+          })),
+      },
+      {
         path: 'jobs',
         lazy: () => import('@/features/admin').then((m) => ({ Component: m.JobsPage, loader: m.jobsLoader })),
       },

@@ -71,6 +71,22 @@ namespace ATTours.BusinessServices.Services.UpdateServices
             var definition = JobsValidationService.EnsureKnownJob(key);
             JobsValidationService.ValidateParameterKeys(definition, values);
 
+            await UpsertSettingValuesAsync(values);
+        }
+
+        // Параметры самого экрана задач (BackgroundJobCatalog.ScreenParameterKeys) — те, что
+        // читает ядро, а не отдельный хендлер (глубина хранения истории прогонов). Путь записи
+        // тот же, что у параметров задачи, отличается только список разрешённых ключей:
+        // задачи-владельца у них нет, поэтому и ключа задачи в сигнатуре нет.
+        public async Task SetScreenParametersAsync(IDictionary<string, string> values)
+        {
+            JobsValidationService.ValidateScreenParameterKeys(values);
+
+            await UpsertSettingValuesAsync(values);
+        }
+
+        private async Task UpsertSettingValuesAsync(IDictionary<string, string> values)
+        {
             var settings = values.Select(pair => new SiteSetting
             {
                 Key = pair.Key,

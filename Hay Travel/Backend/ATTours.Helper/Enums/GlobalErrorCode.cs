@@ -230,6 +230,79 @@ namespace ATTours.Helper.Enums
         [Description("Required field is empty.")]
         RequiredFieldMissing = 2059,
 
+        // Контакты для связи с клиентом (батч 2026-08-29), 2060-2065. Первые три —
+        // правила АГРЕГАТА заказа, приходят плоско (не в массиве lines), как
+        // OrderMustHaveAtLeastOneLine/OrderTooManyLines.
+        [Description("Order must have at least one client contact.")]
+        OrderContactRequired = 2060,
+        [Description("Order cannot have more than 3 client contacts.")]
+        OrderTooManyContacts = 2061,
+        // Ни одного основного либо больше одного. Сервер это проверяет, а не досчитывает:
+        // кому звонить первым — решение клиента (ADR 032 Р3).
+        [Description("Exactly one client contact must be marked as primary.")]
+        OrderPrimaryContactInvalid = 2062,
+        // Значение не соответствует выбранному способу связи: телефон/WhatsApp/Viber —
+        // «+» и 8..15 цифр, Email — адрес, Telegram — @username либо номер.
+        // Один код на все способы: сообщение называет конкретный способ, а разбирать их по
+        // отдельным кодам фронту незачем — он валидирует то же самое сам.
+        [Description("Contact value does not match the selected contact method.")]
+        InvalidContactValue = 2063,
+        [Description("Contact method not found.")]
+        ContactMethodNotFound = 2064,
+        [Description("Contact method limit reached for this profile.")]
+        TooManyContactMethods = 2065,
+
+        // Исключения из порога автозакрытия (батч 2026-08-29), 2066-2067. Оба приходят с
+        // PUT api/Jobs/AutoCloseOverrides — экрана «Автозакрытие дат». Несуществующий
+        // продукт своего кода не получает: там переиспользуется TourNotFound (2004), как и
+        // в остальных местах, где строка ссылается на продукт.
+        //
+        // Ноль и отрицательное число отвергаются, а не трактуются как «порог выключен»:
+        // выключенное исключение — это отсутствие строки в наборе, и два способа сказать
+        // одно и то же на экране означали бы строку, которая ничего не делает.
+        [Description("Auto-close lead time override must be a positive number of hours.")]
+        InvalidAutoCloseOverride = 2066,
+        // Два исключения на один продукт в одном запросе. Серверная проверка обязательна:
+        // фронт не даёт добавить дубль, но уникальный индекс упал бы 500-й, а не понятным
+        // отказом (и только на самом сохранении).
+        [Description("Auto-close lead time override is duplicated for the same product.")]
+        DuplicateAutoCloseOverride = 2067,
+
+        // Личные предпочтения пользователя (2026-08-29), 2068-2070. Диапазон начинался с
+        // 2066, но 2066-2067 к моменту реализации заняли исключения из порога автозакрытия
+        // (соседняя фича того же батча) — дублировать значение enum нельзя, коды уходят
+        // наружу числом. Все три отдаются с 400 на PUT api/Account/Preferences. Фронт
+        // валидирует ровно то же самое сам, поэтому эти коды адресованы прямому запросу к
+        // API в обход формы.
+        //
+        // Пустой набор каналов. Отдельный код, а не общий «значение неверно»: это
+        // единственное из трёх правил, которое фронт обязан объяснить словами — иначе
+        // человек снимет обе галочки и перестанет узнавать о собственном заказе.
+        [Description("At least one notification channel must be enabled.")]
+        NotificationChannelsRequired = 2068,
+        // Канал Telegram включён у пользователя без привязанного чата. Молча гасить бит
+        // нельзя: человек увидел бы включённую галочку, которая ничего не делает.
+        [Description("Telegram notifications require a linked Telegram account.")]
+        TelegramChannelNotLinked = 2069,
+        // Тема не из {dark, light}, неизвестный пресет палитры (ThemePaletteCatalog),
+        // неизвестный код валюты (CurrencyCatalog). Один код на все три: состав допустимых
+        // значений фронт и так получает из публичных настроек и каталогов, а сообщение
+        // называет конкретное поле — разбирать их по отдельным кодам ему незачем.
+        [Description("Preference value is not one of the allowed values.")]
+        InvalidPreferenceValue = 2070,
+
+        // Библиотека шаблонов уведомлений (Notification Templates, 2026-08-31), 2071-2073.
+        // Открытый CRUD (в отличие от закрытых 4/5 событий «Настроек уведомлений»), поэтому
+        // здесь есть NotFound — по чужому/несуществующему Id можно обратиться напрямую.
+        [Description("Notification template is invalid (empty required field, bad channel/entity/trigger, or body too large).")]
+        NotificationTemplateInvalid = 2071,
+        [Description("Notification template not found.")]
+        NotificationTemplateNotFound = 2072,
+        // Шаблон назначен каналу события ("Настройки уведомлений") или auth-триггеру —
+        // удаление тихо снесло бы работающую отправку (та же логика, что у AdminMailbox).
+        [Description("Notification template is in use and cannot be deleted.")]
+        NotificationTemplateInUse = 2073,
+
         #endregion
 
         #region DataErrors

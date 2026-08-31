@@ -118,7 +118,7 @@ namespace ATTours.BusinessServices.Notifications
                 await SendGroupAsync(template, key, context, group.Key, [.. group], cancellationToken);
         }
 
-        private Task SendPersonalAsync(EmailTemplate template, EmailActionKey key, OrderNotificationContext context,
+        private Task SendPersonalAsync(NotificationTemplate template, EmailActionKey key, OrderNotificationContext context,
             ResolvedRecipient recipient, CancellationToken cancellationToken)
         {
             var language = recipient.Language;
@@ -133,10 +133,10 @@ namespace ATTours.BusinessServices.Notifications
                 To = [new EmailAddress { Email = recipient.Address, Name = recipient.Name }]
             };
 
-            return SendAsync(template, recipients, language, values, attachment, cancellationToken);
+            return SendAsync(template, key, recipients, language, values, attachment, cancellationToken);
         }
 
-        private Task SendGroupAsync(EmailTemplate template, EmailActionKey key, OrderNotificationContext context,
+        private Task SendGroupAsync(NotificationTemplate template, EmailActionKey key, OrderNotificationContext context,
             LanguageCode language, List<ResolvedRecipient> group, CancellationToken cancellationToken)
         {
             var to = group.Where(x => x.Type == NotificationRecipientType.To).ToList();
@@ -163,18 +163,19 @@ namespace ATTours.BusinessServices.Notifications
             var values = BuildValues(key, context, language, employee: null);
             var attachment = BuildAttachment(key, context, employee: null);
 
-            return SendAsync(template, recipients, language, values, attachment, cancellationToken);
+            return SendAsync(template, key, recipients, language, values, attachment, cancellationToken);
         }
 
         private static EmailAddress ToAddress(ResolvedRecipient recipient)
             => new() { Email = recipient.Address, Name = recipient.Name };
 
-        // null — строки шаблона нет (теоретически, после сида все 4 есть). «Тихо не шлём»,
-        // а не ошибка операции.
-        private async Task<EmailTemplate?> LoadTemplateAsync(EmailActionKey key, CancellationToken cancellationToken)
+        // null — каналу не назначен шаблон (Notification Templates, 2026-08-31: ссылка по
+        // NotificationChannel.TemplateId, а не встроенная строка по ActionKey). «Тихо не
+        // шлём», а не ошибка операции.
+        private async Task<NotificationTemplate?> LoadTemplateAsync(EmailActionKey key, CancellationToken cancellationToken)
         {
-            using var info = new EmailTemplateInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
-            var template = await info.GetByKeyAsync(key);
+            using var info = new NotificationSettingsInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
+            var template = await info.GetTemplateAsync(key, NotificationPlatform.Email);
 
             if (template is null)
                 logger.LogWarning("Email template for action {ActionKey} is missing; notification skipped.", key);
@@ -261,6 +262,10 @@ namespace ATTours.BusinessServices.Notifications
                     case EmailPlaceholders.OrderLines:
                         values[token] = PlaceholderValue.Html(BuildOrderLinesHtml(order, language));
                         break;
+
+                    case EmailPlaceholders.ClientContact:
+                        values[token] = PlaceholderValue.Html(BuildClientContactHtml(order, language));
+                        break;
                     case EmailPlaceholders.ClientName:
                         values[token] = PlaceholderValue.Text(order?.UserFullName);
                         break;
@@ -275,6 +280,17 @@ namespace ATTours.BusinessServices.Notifications
                         break;
                     case EmailPlaceholders.AssignmentDetails:
                         values[token] = PlaceholderValue.Html(BuildAssignmentDetailsHtml(order, addressed, language));
+                        break;
+                    case EmailPlaceholders.OrderCreatedDate:
+                        values[token] = PlaceholderValue.Text(order is null
+                            ? null
+                            : NotificationLabels.FormatDate(DateOnly.FromDateTime(order.CreatedAtUtc), language));
+                        break;
+                    case EmailPlaceholders.OrderCurrency:
+                        values[token] = PlaceholderValue.Text(order?.Currency);
+                        break;
+                    case EmailPlaceholders.EventTitle:
+                        values[token] = PlaceholderValue.Text(NotificationLabels.EventTitle(key, language));
                         break;
                 }
             }
@@ -331,8 +347,8 @@ namespace ATTours.BusinessServices.Notifications
             return document is null || document.Length == 0 ? null : new EmailAttachment(fileName, document);
         }
 
-        private Task SendAsync(EmailTemplate template, EmailRecipients recipients, LanguageCode language,
-            IReadOnlyDictionary<string, PlaceholderValue> values, EmailAttachment? attachment,
+        private Task SendAsync(NotificationTemplate template, EmailActionKey key, EmailRecipients recipients,
+            LanguageCode language, IReadOnlyDictionary<string, PlaceholderValue> values, EmailAttachment? attachment,
             CancellationToken cancellationToken)
         {
             // Фолбэк на RU — по каждому полю независимо: тема может быть переведена, тело
@@ -349,8 +365,8 @@ namespace ATTours.BusinessServices.Notifications
             // Тема — plaintext-заголовок письма, поэтому значения в неё идут без HTML-кодирования
             // (иначе «Иванов & Co» превратился бы в «Иванов &amp; Co»). Тело — HTML, значения
             // кодируются; исключение — токены, построенные самим бэкендом.
-            var subject = Render(template, subjectSource, values, encodeText: false);
-            var bodyHtml = Render(template, bodySource, values, encodeText: true);
+            var subject = Render(key, subjectSource, values, encodeText: false);
+            var bodyHtml = Render(key, bodySource, values, encodeText: true);
 
             // В БД media-URL хранится относительным ("/uploads/..."), чтобы тот же контент
             // читали и админка, и письмо, и публичный сайт. Почтовый клиент базы не знает,
@@ -364,14 +380,18 @@ namespace ATTours.BusinessServices.Notifications
                 logger.LogWarning(
                     "Email template {ActionKey} contains relative URLs, but Email:PublicMediaBaseUrl is not configured " +
                     "and could not be derived from Email:VerifyUrlBase; images/links will be broken in the sent email.",
-                    template.ActionKey);
+                    key);
 
             return emailSender.SendTransactionalAsync(recipients, subject, bodyHtml, attachment, cancellationToken);
         }
 
         // Неизвестный/устаревший токен -> пустая строка + warning: литерал {{Foo}} в письме
-        // клиенту выглядит как баг, а warning показывает, что шаблон пора поправить.
-        private string Render(EmailTemplate template, string source,
+        // клиенту выглядит как баг, а warning показывает, что шаблон пора поправить. `key` —
+        // только для лога (какое событие рендерило); общий метод, используется и Email-, и
+        // Telegram-веткой (см. OrderNotificationService.Telegram.cs) — у обеих один и тот же
+        // формат {{Token}} и одна и та же логика подстановки, разница только в том, КАКИЕ
+        // значения (Telegram-safe vs HTML) собирает вызывающая сторона.
+        private string Render(EmailActionKey key, string source,
             IReadOnlyDictionary<string, PlaceholderValue> values, bool encodeText)
         {
             if (string.IsNullOrEmpty(source))
@@ -383,8 +403,8 @@ namespace ATTours.BusinessServices.Notifications
 
                 if (!values.TryGetValue(token, out var value))
                 {
-                    logger.LogWarning("Unknown placeholder '{Token}' in email template {ActionKey}; rendered as empty.",
-                        token, template.ActionKey);
+                    logger.LogWarning("Unknown placeholder '{Token}' in notification template for {ActionKey}; rendered as empty.",
+                        token, key);
                     return string.Empty;
                 }
 
@@ -481,6 +501,54 @@ namespace ATTours.BusinessServices.Notifications
                        .Append(NotificationLabels.FormatDate(line.TourDate, language))
                        .Append(", ").Append(NotificationLabels.For(NotificationLabels.Guests, language))
                        .Append(": ").Append(line.GuestCount)
+                       .Append("</p>");
+            }
+
+            return builder.ToString();
+        }
+
+        /// <summary>
+        /// Блок «с кем связаться по этому заказу» — значение токена {{ClientContact}}.
+        /// </summary>
+        /// <remarks>
+        /// Ради этого блока вся затея и делалась (ADR 032): клиент регистрируется с одним номером,
+        /// приезжает в Армению с другим, и менеджер не должен гадать, куда звонить. Поэтому здесь
+        /// выводится не телефон аккаунта, а именно контакты ЗАКАЗА.
+        ///
+        /// Порядок задаёт сервер (основной первым) — сортировки тут нет намеренно: тот же порядок
+        /// человек видел в форме заказа и увидит в админке, и третий вариант порядка в письме
+        /// читался бы как другие данные.
+        ///
+        /// Фамилия НЕОБЯЗАТЕЛЬНА (решение Давида, 2026-08-29), поэтому имя собирается отбором
+        /// непустых: иначе в письме оказалось бы «Ани&#160;&#160;·» с дырой вместо фамилии.
+        ///
+        /// Заказы, созданные до этого батча, контактов не имеют и не бэкфиллились — у них блок
+        /// пустой. Пустая строка здесь честнее выдуманного «не указано»: в шаблоне админ сам
+        /// решает, что писать вокруг токена.
+        /// </remarks>
+        private static string BuildClientContactHtml(OrderInfoModel? order, LanguageCode language)
+        {
+            if (order is null || order.Contacts.Count == 0)
+                return string.Empty;
+
+            var builder = new StringBuilder();
+
+            foreach (var contact in order.Contacts)
+            {
+                var name = string.Join(' ', new[] { contact.FirstName, contact.LastName }
+                    .Where(part => !string.IsNullOrWhiteSpace(part)));
+
+                builder.Append("<p>")
+                       .Append(WebUtility.HtmlEncode(name));
+
+                if (contact.IsPrimary)
+                    builder.Append(" (")
+                           .Append(NotificationLabels.For(NotificationLabels.PrimaryContact, language))
+                           .Append(')');
+
+                builder.Append("<br>")
+                       .Append(WebUtility.HtmlEncode(contact.Type.ToLabel(language))).Append(": ")
+                       .Append(WebUtility.HtmlEncode(contact.Value))
                        .Append("</p>");
             }
 

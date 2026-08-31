@@ -3,6 +3,9 @@ import { useEditor, type Editor, type Extensions } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { TextStyle } from '@tiptap/extension-text-style'
 import TextAlign from '@tiptap/extension-text-align'
+import FontFamily from '@tiptap/extension-font-family'
+import Highlight from '@tiptap/extension-highlight'
+import { Table, TableRow, TableHeader, TableCell } from '@tiptap/extension-table'
 import { TextStyleAttributes } from './extensions/TextStyleAttributes'
 import { PlaceholderHighlight } from './extensions/PlaceholderHighlight'
 import { RichImage } from './extensions/RichImage'
@@ -23,19 +26,22 @@ interface UseRichTextEditorInstanceArgs {
  * Assembles the extension list for a given `toolset` — pure, so the mapping between "instrument
  * present" and "node/mark enabled" is readable in one place and unit-testable without a DOM.
  *
- * `code`/`codeBlock`/`horizontalRule` are disabled unconditionally: `<pre>`/`<code>`/`<hr>` are not
- * in the sanitizer allow-list (`docs/architecture-role-notifications.md` §E.5), and critically
- * `<pre>` is removed WITH its content on save — a silent text loss, not just a stripped tag. This
- * is the frontend's copy of that allow-list; the two must be kept in sync by hand (ADR 023).
+ * `codeBlock`/`horizontalRule` stay disabled unconditionally (no toolbar button asks for a
+ * fenced ``` block or `<hr>`). `code` (inline `<code>`, the "Preformatted" instrument) used to
+ * be disabled here too because `<pre>`/`<code>` weren't in the sanitizer allow-list and were
+ * stripped WITH their content on save — that allow-list is fixed now (`HtmlContentPolicy.cs`,
+ * Notification Templates 2026-08-31), so `code` is wired through the ordinary `has('code')` gate
+ * like every other tool. This file is the frontend's copy of that allow-list; the two must be
+ * kept in sync by hand (ADR 023).
  */
 function buildExtensions(toolset: readonly RichTextTool[], hasPlaceholders: boolean): Extensions {
   const has = (tool: RichTextTool) => toolset.includes(tool)
 
   const extensions: Extensions = [
     StarterKit.configure({
-      code: false,
       codeBlock: false,
       horizontalRule: false,
+      code: has('code') && {},
       bold: has('bold') && {},
       italic: has('italic') && {},
       underline: has('underline') && {},
@@ -43,7 +49,8 @@ function buildExtensions(toolset: readonly RichTextTool[], hasPlaceholders: bool
       blockquote: has('blockquote') && {},
       bulletList: has('bulletList') && {},
       orderedList: has('orderedList') && {},
-      heading: has('heading') ? { levels: [1, 2, 3] } : false,
+      // H1-H6 (Notification Templates, 2026-08-31) — HTML-потолок, выше H6 не бывает.
+      heading: has('heading') ? { levels: [1, 2, 3, 4, 5, 6] } : false,
       link: has('link')
         ? {
             openOnClick: false,
@@ -56,14 +63,24 @@ function buildExtensions(toolset: readonly RichTextTool[], hasPlaceholders: bool
     }),
   ]
 
-  if (has('color') || has('fontSize')) {
+  if (has('color') || has('fontSize') || has('fontFamily')) {
     extensions.push(TextStyle, TextStyleAttributes)
+  }
+  if (has('fontFamily')) {
+    extensions.push(FontFamily)
+  }
+  if (has('highlight')) {
+    // multicolor: своя палитра заливки, независимая от TextStyle/color.
+    extensions.push(Highlight.configure({ multicolor: true }))
   }
   if (has('align')) {
     extensions.push(TextAlign.configure({ types: ['heading', 'paragraph'] }))
   }
   if (has('image')) {
     extensions.push(RichImage)
+  }
+  if (has('table')) {
+    extensions.push(Table.configure({ resizable: false }), TableRow, TableHeader, TableCell)
   }
   if (hasPlaceholders) {
     extensions.push(PlaceholderHighlight)

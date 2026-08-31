@@ -11,9 +11,11 @@ import {
   canView,
   ensurePermissionsReady,
   getAuthState,
+  getMySessions,
   refreshPermissions,
   useScreenPermission,
   type LoginHistoryEntryModel,
+  type SessionModel,
   type UserDetailInfoModel,
 } from '@/shared/auth'
 import { AdminActionButton, DataEntryScreenLayout } from '@/shared/ui'
@@ -32,6 +34,7 @@ import {
   getUserDetail,
   getUserLoginHistory,
   getUserPermissionOverrides,
+  getUserSessions,
   impersonateUser,
   sendPasswordResetEmail,
   setUserJobRole,
@@ -48,6 +51,7 @@ import { UserDetailInfo } from './components/UserDetailInfo'
 import { UserImpersonateModal } from './components/UserImpersonateModal'
 import { UserPermissionsCard } from './components/UserPermissionsCard'
 import { LoginHistoryList } from './components/LoginHistoryList'
+import { UserSessionsList } from './components/UserSessionsList'
 import { UserDangerZone, type DangerConfirmKind } from './components/UserDangerZone'
 import { getStoredLocale } from '@/shared/lib/locale'
 import { useCopy } from '@/shared/i18n/defineCopy'
@@ -85,10 +89,19 @@ export async function userDetailLoader({ params }: LoaderFunctionArgs) {
   // would see the delete button unlocked for an account it cannot actually touch).
   const canReadRoles = canEditPermissions || canView(AdminScreen.Roles)
 
+  /**
+   * Живые сессии (spec 017 §4). На СВОЕЙ карточке читаются самообслуживающей ручкой, а не админской:
+   * только она умеет пометить строку `isCurrent` (сравнивая хеш refresh-cookie вызывающего), а без
+   * этой пометки экран предложил бы администратору отозвать тот самый сеанс, в котором он сейчас
+   * работает. На чужой карточке `isCurrent` вычислить нечем — там всегда админская ручка.
+   */
+  const isSelf = getAuthState().user?.id === id
+
   // Parallel, but NOT equally critical: everything except the profile itself is caught and degrades
   // to `null`. The profile request is deliberately left uncaught — without it there is no page.
-  const [user, loginHistory, overrides, screens, roles] = await Promise.all([
+  const [user, sessions, loginHistory, overrides, screens, roles] = await Promise.all([
     getUserDetail(id),
+    (isSelf ? getMySessions() : getUserSessions(id)).catch(() => null),
     getUserLoginHistory(id).catch(() => null),
     canEditPermissions
       ? getUserPermissionOverrides(id).catch(() => null)
@@ -98,7 +111,7 @@ export async function userDetailLoader({ params }: LoaderFunctionArgs) {
     // разрешено" a three-state control is unreadable.
     canReadRoles ? getRoles().catch(() => null) : Promise.resolve(null),
   ])
-  return { user, loginHistory, overrides, screens, roles, canEditPermissions }
+  return { user, sessions, loginHistory, overrides, screens, roles, canEditPermissions }
 }
 
 export function UserDetailPage() {
@@ -109,6 +122,7 @@ export function UserDetailPage() {
     <UserDetailView
       key={data.user.id}
       user={data.user}
+      sessions={data.sessions}
       loginHistory={data.loginHistory}
       overrides={data.overrides}
       screens={data.screens}
@@ -120,6 +134,7 @@ export function UserDetailPage() {
 
 function UserDetailView({
   user,
+  sessions,
   loginHistory,
   overrides,
   screens,
@@ -127,6 +142,7 @@ function UserDetailView({
   canEditPermissions,
 }: {
   user: UserDetailInfoModel
+  sessions: SessionModel[] | null
   loginHistory: LoginHistoryEntryModel[] | null
   overrides: ScreenOverrideModel[] | null
   screens: ScreenDefinitionModel[] | null
@@ -496,6 +512,20 @@ function UserDetailView({
           onSaved={() => void revalidator.revalidate()}
         />
       )}
+
+      {/* Живые сессии — ВЫШЕ истории входов: это текущее состояние, с которым можно что-то сделать
+          прямо сейчас, а история — только справка. То, зачем админ сюда пришёл действовать, стоит
+          выше того, зачем он пришёл читать. */}
+      <UserSessionsList
+        userId={user.id}
+        sessions={sessions}
+        // `|| isSelf`: на своей карточке компонент дёргает самообслуживающие ручки
+        // (`api/Auth/Sessions…`), которым право `users.Update` не нужно вовсе — свои устройства
+        // человек отключает и без него, ровно как на `/account`.
+        canRevoke={canEditUser || isSelf}
+        isSelf={isSelf}
+        onRevoked={() => void revalidator.revalidate()}
+      />
 
       {/* Between the read-only data and the destructive actions: it is context for the decisions
           below it, not an action of its own. */}

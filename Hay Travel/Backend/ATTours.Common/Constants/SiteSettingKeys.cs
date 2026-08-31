@@ -25,5 +25,11 @@ namespace ATTours.Common.Constants
 
         // Глубина хранения истории прогонов самих задач (ScheduledJobRun).
         public const string RunHistoryRetentionDays = "jobs.runHistory.retentionDays";
+
+        // Режим темы по умолчанию. Раньше читал только фронт, с 2026-08-29 читает и код:
+        // options этого ключа — единственный список допустимых значений
+        // User.PreferredTheme (UserPreferencesValidationService), чтобы {dark, light}
+        // не оказалось захардкожено вторым местом.
+        public const string ThemeDefaultMode = "theme.defaultMode";
     }
 }

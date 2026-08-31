@@ -1,3 +1,4 @@
+using ATTours.BusinessServices.Services.AuthServices;
 using ATTours.Common.DTO.Account;
 using ATTours.Common.DTO.Telegram;
 
@@ -9,7 +10,11 @@ namespace ATTours.BusinessServices.Telegram
     {
         // Профиль: выдать (или перевыпустить) одноразовый код привязки текущего пользователя.
         // Бросает TelegramNotConfigured, если TelegramSettings.IsConfigured == false.
-        Task<TelegramLinkCodeModel> IssueLinkCodeAsync(int userId, CancellationToken cancellationToken = default);
+        //
+        // requestContext обязателен: код живёт в UserToken, где RequestIp — NOT NULL
+        // (UserTokenConfiguration), общий для всех одноразовых токенов аудит-контракт.
+        Task<TelegramLinkCodeModel> IssueLinkCodeAsync(int userId, RequestContextModel requestContext,
+            CancellationToken cancellationToken = default);
 
         // Профиль: статус привязки текущего пользователя.
         Task<TelegramLinkStatusModel> GetStatusAsync(int userId, CancellationToken cancellationToken = default);

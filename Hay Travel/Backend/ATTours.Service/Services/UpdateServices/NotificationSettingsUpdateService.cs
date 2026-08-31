@@ -32,41 +32,22 @@ namespace ATTours.BusinessServices.Services.UpdateServices
 
         public async Task SaveEventAsync(NotificationEventUpdateModel? model)
         {
-            // Дешёвая предпроверка сырого входа ДО санитизации: разбирать многомегабайтную
-            // строку AngleSharp'ом только чтобы потом отвергнуть её по длине — незачем.
-            // Запас 4x покрывает разметку, которую санитайзер вырежет.
-            foreach (var platform in model?.Platforms ?? [])
-            {
-                EnsureRawBodyIsSane(platform.BodyHtml);
-                EnsureRawBodyIsSane(platform.BodyHtmlEn);
-            }
-
             // Пустое тело запроса отбивает валидация — дальше model заведомо не null.
             await new NotificationSettingsValidationService(model, Context, cancellationToken).ValidateAsync();
 
             foreach (var platform in model!.Platforms ?? [])
             {
                 await UpsertChannelAsync(model.EventKey, platform);
-
-                if (platform.Platform == NotificationPlatform.Email)
-                    await UpsertTemplateAsync(model.EventKey, platform);
-
                 await SyncRecipientsAsync(model.EventKey, platform);
             }
 
             await EntityRepository.SaveChangesAsync(cancellationToken);
         }
 
-        private static void EnsureRawBodyIsSane(string? bodyHtml)
-        {
-            if (!string.IsNullOrEmpty(bodyHtml)
-                && bodyHtml.Length > NotificationSettingsValidationService.MaxBodyHtmlLength * 4)
-                throw new ErrorModelException(GlobalErrorCode.EmailTemplateInvalid, HttpStatusCode.BadRequest,
-                    "Email template body is too large.");
-        }
-
         // Идентичность строки — пара (событие, платформа), а не Id: админка редактирует
         // «канал», а не строку таблицы (тот же приём, что в SiteSettingsUpdateService).
+        // Шаблон (Subject/BodyHtml и его санитизация) больше не живёт здесь — это отдельная
+        // сущность NotificationTemplate со своим сервисом сохранения; здесь только ссылка.
         private async Task UpsertChannelAsync(EmailActionKey eventKey, NotificationPlatformUpdateModel model)
         {
             var channel = await Context.Set<NotificationChannel>()
@@ -80,34 +61,7 @@ namespace ATTours.BusinessServices.Services.UpdateServices
             }
 
             channel.IsEnabled = model.IsEnabled;
-        }
-
-        // Идентичность записи — ActionKey. Санитизация ДО записи: в БД должно лечь ровно то,
-        // что уйдёт в письмо. Обе языковые версии чистятся одинаково (ADR 026).
-        private async Task UpsertTemplateAsync(EmailActionKey eventKey, NotificationPlatformUpdateModel model)
-        {
-            var template = await Context.Set<EmailTemplate>()
-                                        .SingleOrDefaultAsync(x => x.ActionKey == eventKey, cancellationToken);
-
-            if (template is null)
-            {
-                template = new EmailTemplate { ActionKey = eventKey };
-                Context.Set<EmailTemplate>().Add(template);
-            }
-
-            template.Subject = RichHtmlSanitizer.ToPlainText(model.Subject);
-            template.BodyHtml = RichHtmlSanitizer.Sanitize(model.BodyHtml, HtmlContentProfile.EmailBody);
-
-            // Пустой перевод остаётся пустым, а не превращается в "" после санитайзера:
-            // «перевода нет» и «перевод — пустая строка» для фолбэка одно и то же, но
-            // хранить в БД мусор незачем.
-            template.SubjectEn = string.IsNullOrWhiteSpace(model.SubjectEn)
-                ? null
-                : RichHtmlSanitizer.ToPlainText(model.SubjectEn);
-
-            template.BodyHtmlEn = string.IsNullOrWhiteSpace(model.BodyHtmlEn)
-                ? null
-                : RichHtmlSanitizer.Sanitize(model.BodyHtmlEn, HtmlContentProfile.EmailBody);
+            channel.TemplateId = model.TemplateId;
         }
 
         // Полная замена набора: строки с Id, которых нет во входном списке, удаляются;

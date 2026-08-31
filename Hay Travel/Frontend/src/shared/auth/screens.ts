@@ -26,6 +26,7 @@ export const AdminScreen = {
   Users: 'users',
   Roles: 'roles',
   Notifications: 'notifications',
+  NotificationTemplates: 'notification-templates',
   Settings: 'settings',
   Jobs: 'jobs',
 } as const
@@ -54,6 +55,7 @@ export const ALL_SCREEN_KEYS: readonly KnownScreenKey[] = [
   AdminScreen.Users,
   AdminScreen.Roles,
   AdminScreen.Notifications,
+  AdminScreen.NotificationTemplates,
   AdminScreen.Settings,
   AdminScreen.Jobs,
 ]
