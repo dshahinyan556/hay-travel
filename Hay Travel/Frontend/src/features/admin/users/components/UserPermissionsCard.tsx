@@ -1,39 +1,28 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Accordion, Button, Card } from '@/shared/ui'
-import { refreshPermissions, type AccessLevel } from '@/shared/auth'
+import type { AccessLevel } from '@/shared/auth'
 import { useCopy } from '@/shared/i18n/defineCopy'
-import { adminScreensCopy } from '@/features/admin/lib/adminScreensCopy'
-import { putUserPermissionOverrides } from '@/features/admin/api/adminUsers'
 import { PermissionMatrix, type PermissionMatrixRow } from '@/features/admin/ui/PermissionMatrix'
-import type {
-  ScreenDefinitionModel,
-  ScreenOverrideModel,
-  ScreenPermissionModel,
-} from '@/features/admin/types/roles'
-import {
-  applyLevelChange,
-  areOverridesDirty,
-  buildOverrideMatrixRows,
-  clearAllOverrides,
-  countOverrides,
-  rowsToOverrides,
-} from '@/features/admin/roles/lib/roleModel'
-import { rolesCopy, rolesErrorMessage } from '@/features/admin/roles/lib/rolesCopy'
+import { rolesCopy } from '@/features/admin/roles/lib/rolesCopy'
 
 export interface UserPermissionsCardProps {
-  userId: number
   /** Role name — for the "inherits from «X»" summary. */
   roleName: string
-  /** The user's ROLE matrix, or `null` when it could not be loaded. */
-  rolePermissions: ScreenPermissionModel[] | null
-  overrides: ScreenOverrideModel[] | null
-  screens: ScreenDefinitionModel[] | null
+  /** Rows to render — the page's draft when the matrix was touched, the saved state otherwise.
+   * `null` when the screens registry, the role matrix or the overrides could not be loaded. */
+  rows: PermissionMatrixRow[] | null
+  /** How many overrides are SAVED — the collapsed header's summary speaks about the account as it
+   * is, not about the unsaved draft. */
+  savedOverrideCount: number
   /** `users.Update`, already narrowed by the page's SuperAdmin lock (`canEditUser`, 2026-08-27) —
    * without it the block is readable but not editable, which is exactly what the backend's
    * `PermissionOverrides` PUT enforces for a SuperAdmin target. */
   canEdit: boolean
-  /** Re-run the page's loader after a successful save. */
-  onSaved: () => void
+  /** The page's save is in flight. */
+  pending: boolean
+  onChange: (screenKey: string, value: AccessLevel | null) => void
+  /** Stage "every row back to inherit" — the page's Save is what applies it. */
+  onResetAll: () => void
 }
 
 /**
@@ -53,64 +42,24 @@ export interface UserPermissionsCardProps {
  *
  * Rendered only for someone with `users.Update` (`UserDetailPage` decides): editing overrides is
  * administering the permission system, and the screen registry it is built from is gated too.
+ *
+ * Presentational since 2026-10-11: the rows are part of the page's draft and are saved by the
+ * page's `AdminToolbar` together with the other fields; the error / "applied with a lag" banners
+ * live in the page's `message` slot. No Save button down here any more.
  */
 export function UserPermissionsCard({
-  userId,
   roleName,
-  rolePermissions,
-  overrides,
-  screens,
+  rows,
+  savedOverrideCount,
   canEdit,
-  onSaved,
+  pending,
+  onChange,
+  onResetAll,
 }: UserPermissionsCardProps) {
   const copy = useCopy(rolesCopy)
-  const screensCopy = useCopy(adminScreensCopy)
   const [expanded, setExpanded] = useState(false)
-  const failed = screens === null || rolePermissions === null || overrides === null
 
-  const baseline = useMemo(() => overrides ?? [], [overrides])
-  const initialRows = useMemo(
-    () =>
-      screens === null || rolePermissions === null
-        ? []
-        : buildOverrideMatrixRows(screens, rolePermissions, baseline, screensCopy),
-    [screens, rolePermissions, baseline, screensCopy],
-  )
-
-  const [rows, setRows] = useState<PermissionMatrixRow[]>(initialRows)
-  const [isSubmitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [showLagHint, setShowLagHint] = useState(false)
-
-  const draft = useMemo(() => rowsToOverrides(rows), [rows])
-  const isDirty = areOverridesDirty(draft, baseline)
-
-  function setLevel(screenKey: string, value: AccessLevel | null) {
-    setShowLagHint(false)
-    setRows((prev) => applyLevelChange(prev, screenKey, value))
-  }
-
-  async function save() {
-    if (isSubmitting) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      // Only the rows that actually deviate travel: the endpoint reads an absent key as "drop the
-      // override", so sending an inherited row would ask it to store nothing.
-      await putUserPermissionOverrides({ userId, overrides: draft })
-      setShowLagHint(true)
-      // The admin may have just overridden THEMSELVES — re-read before the panel keeps drawing
-      // controls their own new set no longer allows.
-      await refreshPermissions()
-      onSaved()
-    } catch (err) {
-      setError(rolesErrorMessage(copy, err, copy.errorActions.saveOverrides))
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  if (failed) {
+  if (rows === null) {
     return (
       <Card padding="sm" className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -130,7 +79,7 @@ export function UserPermissionsCard({
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-neutral-800">{copy.overrideTitle}</h3>
           <p className="text-xs text-neutral-500">
-            {copy.overrideSummary(countOverrides(baseline), roleName)}
+            {copy.overrideSummary(savedOverrideCount, roleName)}
           </p>
         </div>
         <Button
@@ -167,48 +116,18 @@ export function UserPermissionsCard({
         <p className="text-xs text-neutral-500">{copy.overrideExplain}</p>
         <p className="text-xs text-neutral-500">{copy.matrixLevelExplain}</p>
 
-        {error && (
-          <div
-            role="alert"
-            className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"
-          >
-            {error}
-          </div>
-        )}
-
-        {showLagHint && !error && (
-          <p
-            role="status"
-            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
-          >
-            {copy.permissionLag}
-          </p>
-        )}
-
         <PermissionMatrix
           mode="override"
           rows={rows}
           caption={copy.overrideCaption(roleName)}
-          disabled={!canEdit || isSubmitting}
-          onChange={setLevel}
+          disabled={!canEdit || pending}
+          onChange={onChange}
         />
 
         {canEdit && (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mr-auto"
-              disabled={isSubmitting}
-              onClick={() => {
-                setShowLagHint(false)
-                setRows((prev) => clearAllOverrides(prev))
-              }}
-            >
+          <div>
+            <Button variant="ghost" size="sm" disabled={pending} onClick={onResetAll}>
               {copy.overrideReset}
-            </Button>
-            <Button size="sm" disabled={!isDirty || isSubmitting} onClick={() => void save()}>
-              {isSubmitting ? copy.saving : copy.save}
             </Button>
           </div>
         )}

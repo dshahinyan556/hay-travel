@@ -1,99 +1,66 @@
-import { Button, Spinner } from '@/shared/ui'
+import { AdminToolbar } from '@/shared/ui'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
-import type { Locale } from '@/shared/lib/locale'
 import { formatSavedAt, settingsCopy } from '@/features/admin/settings/lib/settingsCopy'
-import type { SettingsCopy } from '@/features/admin/settings/lib/settingsCopy'
 
 interface SettingsActionsProps {
   /** How many settings differ from the last saved state. */
   dirtyCount: number
-  /** True only when nothing blocks saving (D4-1: both languages filled on every translatable key). */
-  isValid: boolean
-  /** True once the admin has tried to save at least once — gates the red "fix the form" note. */
-  hasAttemptedSubmit: boolean
+  /** False while saving or while nothing changed (the hook's `canSubmit`). */
   canSubmit: boolean
+  /** `settings.Update` — without it Save stays visible but disabled, with a tooltip. */
+  canUpdate: boolean
   isSubmitting: boolean
-  error: string | null
   savedAt: Date | null
   onSubmit: () => void
+  onCancel: () => void
 }
 
 /**
- * CONTENT of the pinned save bar — the note on the left, a single "Сохранить" on the right: one
- * button, one contract, "changed anything, pressed once, saved". Per-section buttons would leave
- * the admin guessing which half of their edits was actually stored.
+ * CONTENT of the pinned control zone (`SetupFormLayout.controlZone`) — `AdminToolbar` with
+ * Отмена/Сохранить plus one note next to it: "N несохранённых изменений" while anything is dirty,
+ * «Сохранено в HH:MM» right after a save. One button, one contract — "changed anything, pressed
+ * once, saved"; per-section buttons would leave the admin guessing which half was stored.
  *
- * The bar's own chrome (card, border, `sticky bottom-0`, shadow) is NOT here any more: since the
- * template-C retrofit this renders into `SetupFormLayout`'s `footer` slot, which owns the position
- * and the frame so both screens of that archetype cannot drift apart. This component returns a
- * fragment and stays purely about what the bar SAYS.
+ * Moved from the bottom-pinned `footer` bar to the top (решение Давида 2026-10-11, шаблон как у
+ * заказа). The save error and the "fix the form" warning are not here any more — they belong to
+ * the layout's `message` slot (`SettingsPage`), like on every other screen.
  *
- * The tour form's own action bar is not reused (it has since moved into `AdminToolbar` inside
- * `TourFormScreen`), but the submit/validation contract mirrors it: "Сохранить" stays
- * clickable even on an invalid form — `onSubmit` itself no-ops and reveals the field errors
- * instead, so a disabled button never hides *why* saving didn't happen.
+ * "Сохранить" stays clickable even on an invalid form — `onSubmit` itself no-ops and reveals the
+ * field errors instead, so a disabled button never hides *why* saving didn't happen.
  */
 export function SettingsActions({
   dirtyCount,
-  isValid,
-  hasAttemptedSubmit,
   canSubmit,
+  canUpdate,
   isSubmitting,
-  error,
   savedAt,
   onSubmit,
+  onCancel,
 }: SettingsActionsProps) {
   const copy = useCopy(settingsCopy)
   const { locale } = useLocale()
-  const showInvalidWarning = hasAttemptedSubmit && !isValid
-  const note = noteFor({ copy, locale, dirtyCount, showInvalidWarning, error, savedAt })
-  const isError = Boolean(error) || showInvalidWarning
+
+  const note =
+    dirtyCount > 0
+      ? copy.unsavedChanges(dirtyCount)
+      : savedAt
+        ? copy.savedAt(formatSavedAt(locale, savedAt))
+        : null
 
   return (
     <>
-      <p
-        className={`mr-auto text-xs ${isError ? 'font-semibold text-rose-700' : 'text-neutral-500'}`}
-        role={error ? 'alert' : undefined}
-      >
-        {note}
-      </p>
-      <Button type="button" onClick={onSubmit} disabled={!canSubmit} className="min-w-32">
-        {isSubmitting ? (
-          <span className="inline-flex items-center gap-2">
-            <Spinner size="sm" />
-            {copy.saving}
-          </span>
-        ) : (
-          copy.save
-        )}
-      </Button>
+      <AdminToolbar
+        onCancel={onCancel}
+        onSave={onSubmit}
+        cancelState={{ disabled: dirtyCount === 0 || isSubmitting }}
+        saveState={{
+          disabled: !canSubmit || !canUpdate,
+          pending: isSubmitting,
+          hint: canUpdate ? null : copy.noPermissionHint,
+        }}
+      />
+      {note && <p className="text-xs text-neutral-500">{note}</p>}
     </>
   )
-}
-
-interface NoteInput {
-  copy: SettingsCopy
-  locale: Locale
-  dirtyCount: number
-  showInvalidWarning: boolean
-  error: string | null
-  savedAt: Date | null
-}
-
-function noteFor({
-  copy,
-  locale,
-  dirtyCount,
-  showInvalidWarning,
-  error,
-  savedAt,
-}: NoteInput): string {
-  if (error) return error
-  if (showInvalidWarning) return copy.invalidForm
-  if (dirtyCount === 0) {
-    if (!savedAt) return ''
-    return copy.savedAt(formatSavedAt(locale, savedAt))
-  }
-  return copy.changedFields(dirtyCount)
 }

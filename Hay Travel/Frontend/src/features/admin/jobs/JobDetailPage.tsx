@@ -1,10 +1,20 @@
 import { useEffect, useState } from 'react'
 import { Link, redirect, useLoaderData, useRevalidator } from 'react-router'
 import type { LoaderFunctionArgs } from 'react-router'
-import { AdminActionButton, AdminSummaryPanel, AdminToolbar, Tabs, Tooltip, UnsavedChangesModal, type AdminSummaryRow, type TabItem } from '@/shared/ui'
+import {
+  AdminActionButton,
+  AdminSummaryPanel,
+  AdminToolbar,
+  DataEntryScreenLayout,
+  Tabs,
+  Tooltip,
+  UnsavedChangesModal,
+  type AdminSummaryRow,
+  type TabItem,
+} from '@/shared/ui'
 import { HelpButton } from '@/shared/ui/HelpButton'
 import { HelpRevealZone } from '@/shared/ui/HelpReveal'
-import { PlayIcon } from '@/shared/ui/icons'
+import { AlertIcon, CheckIcon, PlayIcon } from '@/shared/ui/icons'
 import { useUnsavedChangesGuard } from '@/shared/hooks'
 import { AdminScreen, canView, ensurePermissionsReady, useScreenPermission } from '@/shared/auth'
 import { useCopy } from '@/shared/i18n/defineCopy'
@@ -33,7 +43,9 @@ import {
   isPlausibleCronExpression,
   isValidLeadTimeHours,
   isValidParameterNumber,
+  canonicalCron,
   overrideRowsEqual,
+  parameterValuesEqual,
   scheduleFrequencyLabel,
   type TourAutoCloseOverrideDraftRow,
 } from './lib/jobsModel'
@@ -139,11 +151,16 @@ function JobDetailView({ job, runs, overrides, tours }: JobDetailViewProps) {
     return () => clearInterval(id)
   }, [job.isRunning, revalidator])
 
+  // Dirty — по отличию от сохранённого, а не по факту «поле трогали» (баг 2026-10-11): повторный
+  // выбор того же пункта в `Select` частоты переписывает cron заново (`presetToCron`), поэтому
+  // расписание сравнивается в канонической форме, числовые параметры — по числу.
   const enabledDirty = draft.enabled !== undefined && draft.enabled !== job.isEnabled
-  const cronDirty = draft.cron !== undefined && effectiveCronOf(draft.cron, job) !== job.cronExpression
+  const cronDirty =
+    draft.cron !== undefined && canonicalCron(effectiveCronOf(draft.cron, job)) !== canonicalCron(job.cronExpression)
   const dirtyParamKeys = Object.keys(draft.parameters).filter((key) => {
-    const original = job.parameters.find((p) => p.key === key)?.value
-    return draft.parameters[key] !== original
+    const definition = job.parameters.find((p) => p.key === key)
+    if (!definition) return false
+    return !parameterValuesEqual(draft.parameters[key], definition.value, definition.valueType === SettingValueType.Number)
   })
 
   // «Исключения по продуктам» — `tour-date-auto-closure` only. Baseline is the loader's own
@@ -208,6 +225,41 @@ function JobDetailView({ job, runs, overrides, tours }: JobDetailViewProps) {
 
   function handleCancel() {
     setDraft(EMPTY_DRAFT)
+  }
+
+  // Сеттеры черновика: значение, вернувшееся к сохранённому, из черновика выкидывается.
+  function handleChangeEnabled(next: boolean) {
+    setDraft((prev) => ({ ...prev, enabled: next === job.isEnabled ? undefined : next }))
+  }
+
+  function handleChangeCron(next: string) {
+    const unchanged = canonicalCron(next) === canonicalCron(job.cronExpression)
+    setDraft((prev) => ({
+      ...prev,
+      cron: unchanged ? undefined : next === job.defaultCronExpression ? '' : next,
+    }))
+  }
+
+  function handleChangeParameter(key: string, value: string) {
+    const saved = job.parameters.find((p) => p.key === key)?.value
+    setDraft((prev) => {
+      const parameters = { ...prev.parameters }
+      if (value === saved) delete parameters[key]
+      else parameters[key] = value
+      return { ...prev, parameters }
+    })
+  }
+
+  function updateOverrides(change: (rows: TourAutoCloseOverrideDraftRow[]) => TourAutoCloseOverrideDraftRow[]) {
+    setDraft((prev) => {
+      const next = change(prev.overrides ?? baselineOverrides)
+      // Выкидываем только побуквенно совпавший набор: «024» вместо «24» не грязный (см.
+      // `overridesDirty`), но и в инпуте не должен откатываться посреди ввода.
+      const identical =
+        overrideRowsEqual(next, baselineOverrides) &&
+        next.every((row) => baselineOverrides.find((b) => b.tourId === row.tourId)?.leadTimeHours === row.leadTimeHours)
+      return { ...prev, overrides: identical ? undefined : next }
+    })
   }
 
   async function handleRunNow() {
@@ -295,159 +347,152 @@ function JobDetailView({ job, runs, overrides, tours }: JobDetailViewProps) {
   const helpText = copy.jobHelpTextByKey[job.key]
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-      <nav className="text-xs text-neutral-500" aria-label={copy.breadcrumbsLabel}>
-        <Link to="/admin/jobs" className="transition-colors hover:text-neutral-800">
-          {copy.backToList}
-        </Link>
-        <span aria-hidden="true"> · </span>
-        <span className="font-semibold text-neutral-800">{job.displayName}</span>
-      </nav>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <AdminToolbar
-          onCancel={handleCancel}
-          onSave={() => void handleSave()}
-          cancelState={{ disabled: pending || !dirty }}
-          saveState={{
-            disabled: pending || !dirty || !cronValid || !parametersValid || !overridesValid || hints.update !== null,
-            pending,
-            hint: hints.update,
-          }}
-        />
-        <HelpRevealZone enabled={dirty} className="flex items-center gap-2">
-          <Tooltip enabled={Boolean(hints.update)} content={hints.update} cursor="not-allowed">
-            <AdminActionButton
-              label={copy.runNowButton}
-              pendingLabel={copy.runNowButtonPending}
-              icon={<PlayIcon size={17} />}
-              variant="secondary"
-              onClick={() => void handleRunNow()}
-              disabled={job.isRunning || hints.update !== null}
-              pending={runPending}
-            />
-          </Tooltip>
-          {dirty && (
-            <HelpButton surface="admin" title={copy.runNowButton}>
-              {copy.runNowHintWhenDirty}
+    <DataEntryScreenLayout
+      breadcrumbs={
+        <>
+          <Link to="/admin/jobs" className="transition-colors hover:text-neutral-800">
+            {copy.backToList}
+          </Link>
+          <span aria-hidden="true"> · </span>
+          <span className="font-semibold text-neutral-800">{job.displayName}</span>
+        </>
+      }
+      breadcrumbsLabel={copy.breadcrumbsLabel}
+      title={
+        <HelpRevealZone as="span" enabled={Boolean(helpText)} className="flex flex-wrap items-center gap-2">
+          {job.displayName}
+          {helpText && (
+            <HelpButton surface="admin" title={job.displayName}>
+              {helpText}
             </HelpButton>
           )}
+          {job.lastRun && <JobStatusBadge status={job.lastRun.status} />}
         </HelpRevealZone>
-      </div>
-
-      {hints.update && (
-        <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
-          {hints.update}
-        </div>
-      )}
-      {error && (
-        <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <span aria-hidden="true">⚠️</span>
-          <span>{error}</span>
-        </div>
-      )}
-      {notice && (
-        <div role="status" className="flex items-start gap-2 rounded-lg border border-neutral-300 bg-neutral-50 px-4 py-3 text-sm text-neutral-900">
-          <span aria-hidden="true">✓</span>
-          <span>{notice}</span>
-        </div>
-      )}
-
+      }
+      subtitle={
+        <>
+          {copy.keyLabel}: <span className="font-mono text-xs text-neutral-700">{job.key}</span>
+          {' · '}
+          {copy.nextRunPrefix}:{' '}
+          {job.nextRunAtUtc ? (
+            <>
+              <b className="font-semibold text-neutral-800">
+                {formatYerevanUpcoming(new Date(job.nextRunAtUtc), locale, copy.today, copy.tomorrow)}
+              </b>{' '}
+              ({copy.inMinutes(minutesUntil(job.nextRunAtUtc))})
+            </>
+          ) : (
+            copy.notScheduled
+          )}
+        </>
+      }
+      controlZone={
+        <>
+          <AdminToolbar
+            onCancel={handleCancel}
+            onSave={() => void handleSave()}
+            cancelState={{ disabled: pending || !dirty }}
+            saveState={{
+              disabled: pending || !dirty || !cronValid || !parametersValid || !overridesValid || hints.update !== null,
+              pending,
+              hint: hints.update,
+            }}
+          />
+          <HelpRevealZone enabled={dirty} className="flex items-center gap-2">
+            <Tooltip enabled={Boolean(hints.update)} content={hints.update} cursor="not-allowed">
+              <AdminActionButton
+                label={copy.runNowButton}
+                pendingLabel={copy.runNowButtonPending}
+                icon={<PlayIcon size={17} />}
+                variant="secondary"
+                onClick={() => void handleRunNow()}
+                disabled={job.isRunning || hints.update !== null}
+                pending={runPending}
+              />
+            </Tooltip>
+            {dirty && (
+              <HelpButton surface="admin" title={copy.runNowButton}>
+                {copy.runNowHintWhenDirty}
+              </HelpButton>
+            )}
+          </HelpRevealZone>
+        </>
+      }
+      message={
+        (hints.update || error || notice) && (
+          <>
+            {hints.update && (
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
+                {hints.update}
+              </div>
+            )}
+            {error && (
+              <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <AlertIcon size={16} className="mt-0.5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+            {notice && (
+              <div role="status" className="flex items-start gap-2 rounded-lg border border-neutral-300 bg-neutral-50 px-4 py-3 text-sm text-neutral-900">
+                <CheckIcon size={16} className="mt-0.5 shrink-0" />
+                <span>{notice}</span>
+              </div>
+            )}
+          </>
+        )
+      }
+    >
+      {/* Сводка — боковой колонкой справа на десктопе и первой на мобиле (`order`): шапку записи
+          (название, ключ, следующий запуск, статус) теперь несёт заголовок шаблона. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <HelpRevealZone
-                as="h1"
-                enabled={Boolean(helpText)}
-                className="flex flex-wrap items-center gap-2 text-lg font-bold text-neutral-900"
-              >
-                {job.displayName}
-                {helpText && (
-                  <HelpButton surface="admin" title={job.displayName}>
-                    {helpText}
-                  </HelpButton>
-                )}
-              </HelpRevealZone>
-              <p className="mt-0.5 text-sm text-neutral-500">
-                {copy.keyLabel}: <span className="font-mono text-xs text-neutral-700">{job.key}</span>
-                {job.nextRunAtUtc && (
-                  <>
-                    {' · '}
-                    {copy.nextRunPrefix}:{' '}
-                    <b className="font-semibold text-neutral-800">
-                      {formatYerevanUpcoming(new Date(job.nextRunAtUtc), locale, copy.today, copy.tomorrow)}
-                    </b>{' '}
-                    ({copy.inMinutes(minutesUntil(job.nextRunAtUtc))})
-                  </>
-                )}
-              </p>
+        <AdminSummaryPanel title={copy.summaryTitle} className="lg:order-2 lg:self-start" rows={summaryRows} />
+
+        <div className="flex min-w-0 flex-col gap-4 lg:order-1">
+          <Tabs tabs={tabs} activeId={tab} onChange={(id) => setTab(id as JobDetailTabId)} label={copy.tabsLabel} />
+
+          {tab === 'overview' && (
+            <div className="flex flex-col gap-4">
+              <JobScheduleCard
+                isEnabled={effectiveEnabled}
+                onChangeEnabled={handleChangeEnabled}
+                cron={effectiveCron}
+                onChangeCron={handleChangeCron}
+                scheduleDirty={cronDirty}
+                disabled={pending || hints.update !== null}
+              />
+              <JobParametersCard
+                parameters={job.parameters}
+                draftValues={draft.parameters}
+                onChange={handleChangeParameter}
+                disabled={pending || hints.update !== null}
+              />
+              {isAutoClosureJob && (
+                <AutoCloseOverridesCard
+                  rows={effectiveOverrides}
+                  tours={tours}
+                  disabled={pending || hints.update !== null}
+                  onAddRow={(tourId, tourName, leadTimeHours) =>
+                    updateOverrides((rows) => [...rows, { tourId, tourName, leadTimeHours }])
+                  }
+                  onChangeHours={(tourId, value) =>
+                    updateOverrides((rows) =>
+                      rows.map((row) => (row.tourId === tourId ? { ...row, leadTimeHours: value } : row)),
+                    )
+                  }
+                  onRemoveRow={(tourId) => updateOverrides((rows) => rows.filter((row) => row.tourId !== tourId))}
+                />
+              )}
             </div>
-            {job.lastRun && <JobStatusBadge status={job.lastRun.status} />}
-          </div>
-        </div>
+          )}
 
-        <AdminSummaryPanel title={copy.summaryTitle} className="lg:self-start" rows={summaryRows} />
-      </div>
-
-      <Tabs tabs={tabs} activeId={tab} onChange={(id) => setTab(id as JobDetailTabId)} label={copy.tabsLabel} />
-
-      {tab === 'overview' && (
-        <div className="flex flex-col gap-4">
-          <JobScheduleCard
-            isEnabled={effectiveEnabled}
-            onChangeEnabled={(next) => setDraft((prev) => ({ ...prev, enabled: next }))}
-            cron={effectiveCron}
-            onChangeCron={(next) =>
-              setDraft((prev) => ({ ...prev, cron: next === job.defaultCronExpression ? '' : next }))
-            }
-            scheduleDirty={cronDirty}
-            disabled={pending || hints.update !== null}
-          />
-          <JobParametersCard
-            parameters={job.parameters}
-            draftValues={draft.parameters}
-            onChange={(key, value) =>
-              setDraft((prev) => ({ ...prev, parameters: { ...prev.parameters, [key]: value } }))
-            }
-            disabled={pending || hints.update !== null}
-          />
-          {isAutoClosureJob && (
-            <AutoCloseOverridesCard
-              rows={effectiveOverrides}
-              tours={tours}
-              disabled={pending || hints.update !== null}
-              onAddRow={(tourId, tourName, leadTimeHours) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  overrides: [...(prev.overrides ?? baselineOverrides), { tourId, tourName, leadTimeHours }],
-                }))
-              }
-              onChangeHours={(tourId, value) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  overrides: (prev.overrides ?? baselineOverrides).map((row) =>
-                    row.tourId === tourId ? { ...row, leadTimeHours: value } : row,
-                  ),
-                }))
-              }
-              onRemoveRow={(tourId) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  overrides: (prev.overrides ?? baselineOverrides).filter((row) => row.tourId !== tourId),
-                }))
-              }
-            />
+          {tab === 'history' && (
+            <JobRunsList jobKey={job.key} runs={runs} emptySubtitle={historyEmptySubtitle(job, copy, locale)} />
           )}
         </div>
-      )}
-
-      {tab === 'history' && (
-        <JobRunsList jobKey={job.key} runs={runs} emptySubtitle={historyEmptySubtitle(job, copy, locale)} />
-      )}
+      </div>
 
       <UnsavedChangesModal open={guard.isBlocking} onCancel={guard.cancel} onConfirm={guard.confirm} />
-    </div>
+    </DataEntryScreenLayout>
   )
 }
 

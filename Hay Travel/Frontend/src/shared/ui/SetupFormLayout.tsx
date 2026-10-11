@@ -4,6 +4,16 @@ export interface SetupFormLayoutProps {
   title: ReactNode
   subtitle?: ReactNode
   /**
+   * The control zone — `AdminToolbar` (Отмена/Сохранить) plus whatever reads next to it (e.g. the
+   * "N несохранённых изменений" counter). Pinned while scrolling exactly like
+   * `DataEntryScreenLayout`'s control zone — same classes, so the two templates cannot drift apart.
+   *
+   * Replaced the bottom-pinned `footer` save bar (решение Давида 2026-10-11: Save на всех экранах
+   * админки — в тулбаре сверху, как у заказа). Optional: a screen with nothing to save (e.g. the
+   * server returned no settings at all) omits it rather than show a permanently dead toolbar.
+   */
+  controlZone?: ReactNode
+  /**
    * The record-identity strip (designer proposal `admin-page-templates.html` §C, pin 1). Makes the
    * "exactly one record, forever" rule visible instead of merely enforced by routing. Conventionally
    * a name/label, a "единственная запись"-style badge and a last-modified note; this component owns
@@ -19,14 +29,6 @@ export interface SetupFormLayoutProps {
   message?: ReactNode
   /** Tabs by field group + the field cards themselves. */
   children: ReactNode
-  /**
-   * The pinned save bar (proposal §C pin 2) — dirty-field count, which tabs hold the unsaved edits,
-   * "Отменить правки" / "Сохранить" (`AdminActionButton`). Optional so a caller that prefers to
-   * hide the whole bar while nothing is dirty can pass `undefined`; the proposal's own "Нечего
-   * сохранять" state instead keeps the bar always mounted with both buttons disabled — either
-   * behaviour is the calling page's call, this component only reserves the position and chrome.
-   */
-  footer?: ReactNode
   className?: string
 }
 
@@ -35,18 +37,18 @@ export interface SetupFormLayoutProps {
  * one special case of template B: exactly one record ever exists, and creating a second is
  * structurally impossible (no list route, no `/new`, no `/:id` — the screen itself IS the record).
  *
- * No control zone at the top at all (proposal: "Пусто сверху") — Add/Delete do not exist for this
- * archetype, and Save moves out of a toolbar into the pinned `footer` instead. No `breadcrumbs`
- * prop either: every existing example of this template (`/admin/settings`, `/admin/notifications`)
- * is a root screen, never opened "inside" another.
+ * Header order is the shared contract: title + subtitle → pinned control zone → identity strip →
+ * message slot → body. Add/Delete do not exist for this archetype, so its control zone carries
+ * only Cancel/Save. No `breadcrumbs` prop: every existing example of this template
+ * (`/admin/settings`) is a root screen, never opened "inside" another.
  */
 export function SetupFormLayout({
   title,
   subtitle,
+  controlZone,
   identity,
   message,
   children,
-  footer,
   className = '',
 }: SetupFormLayoutProps) {
   return (
@@ -55,6 +57,15 @@ export function SetupFormLayout({
         <h1 className="text-xl font-extrabold tracking-tight text-neutral-900">{title}</h1>
         {subtitle && <p className="mt-0.5 text-sm text-neutral-500">{subtitle}</p>}
       </div>
+
+      {/* Same pinning as `DataEntryScreenLayout`: below the mobile hamburger bar (60px) on phones,
+          flush to the viewport top on desktop; bleeds to `main`'s edges so content scrolling
+          underneath it is covered. */}
+      {controlZone && (
+        <div className="sticky top-[60px] z-10 -mx-4 flex flex-wrap items-center gap-3 bg-neutral-50 px-4 py-2 sm:-mx-6 sm:px-6 md:top-0">
+          {controlZone}
+        </div>
+      )}
 
       {identity && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-3">
@@ -65,12 +76,6 @@ export function SetupFormLayout({
       {message && <div className="flex flex-col gap-2">{message}</div>}
 
       {children}
-
-      {footer && (
-        <div className="sticky bottom-0 flex flex-wrap items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-3 shadow-[0_-4px_14px_rgba(10,10,10,.05)]">
-          {footer}
-        </div>
-      )}
     </div>
   )
 }

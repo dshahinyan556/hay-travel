@@ -134,16 +134,29 @@ export function toUpdateModel(draft: EventDraft): NotificationEventUpdateModel {
   }
 }
 
-function isRecipientEqual(a: RecipientDraft, b: RecipientDraft): boolean {
-  return (
-    a.id === b.id &&
-    a.isActive === b.isActive &&
-    a.type === b.type &&
-    a.sourceType === b.sourceType &&
-    a.userId === b.userId &&
-    a.orderLinkedRole === b.orderLinkedRole &&
-    a.customEmail === b.customEmail
-  )
+/** Равенство строк в том виде, в каком они уйдут на сервер (`toRecipientUpdate`): поля, не
+ * относящиеся к источнику строки, обнуляются при сохранении и в сравнении не участвуют, адрес —
+ * после `trim`, `type` у Telegram не существует. Иначе ввод+стирание пробела или хвост от
+ * прежнего источника считались бы правкой. */
+function isRecipientEqual(a: RecipientDraft, b: RecipientDraft, platform: NotificationPlatform): boolean {
+  if (
+    a.id !== b.id ||
+    a.isActive !== b.isActive ||
+    a.sourceType !== b.sourceType ||
+    (platform !== NotificationPlatform.Telegram && a.type !== b.type)
+  ) {
+    return false
+  }
+  switch (a.sourceType) {
+    case NotificationRecipientSource.User:
+      return a.userId === b.userId
+    case NotificationRecipientSource.OrderLinked:
+      return a.orderLinkedRole === b.orderLinkedRole
+    case NotificationRecipientSource.CustomEmail:
+      return a.customEmail.trim() === b.customEmail.trim()
+    case NotificationRecipientSource.AdminMailbox:
+      return true
+  }
 }
 
 function isPlatformEqual(a: PlatformDraft, b: PlatformDraft): boolean {
@@ -152,7 +165,7 @@ function isPlatformEqual(a: PlatformDraft, b: PlatformDraft): boolean {
     a.isEnabled === b.isEnabled &&
     a.templateId === b.templateId &&
     a.recipients.length === b.recipients.length &&
-    a.recipients.every((row, index) => isRecipientEqual(row, b.recipients[index]))
+    a.recipients.every((row, index) => isRecipientEqual(row, b.recipients[index], a.platform))
   )
 }
 

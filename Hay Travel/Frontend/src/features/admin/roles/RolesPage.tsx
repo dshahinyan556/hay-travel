@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, redirect, useLoaderData, useNavigate, useRevalidator } from 'react-router'
 import { MaintenanceFormLayout, buttonClassName } from '@/shared/ui'
+import { AlertIcon } from '@/shared/ui/icons'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import { AdminScreen, canCreate, canDelete, canView, ensurePermissionsReady, refreshPermissions } from '@/shared/auth'
 import { deleteRole, getRoles } from '@/features/admin/api/adminRoles'
@@ -80,7 +81,7 @@ export function RolesPage() {
             role="alert"
             className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
           >
-            <span aria-hidden="true">⚠️</span>
+            <AlertIcon size={16} className="mt-0.5 shrink-0" />
             <span>{actionError}</span>
           </div>
         )

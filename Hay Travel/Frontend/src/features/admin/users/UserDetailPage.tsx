@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, redirect, useLoaderData, useNavigate, useRevalidator } from 'react-router'
 import type { LoaderFunctionArgs } from 'react-router'
 import {
@@ -18,16 +18,32 @@ import {
   type SessionModel,
   type UserDetailInfoModel,
 } from '@/shared/auth'
-import { AdminActionButton, DataEntryScreenLayout } from '@/shared/ui'
+import {
+  AdminActionsMenu,
+  AdminToolbar,
+  DataEntryScreenLayout,
+  UnsavedChangesModal,
+  type AdminActionsMenuItem,
+} from '@/shared/ui'
 import { HelpButton } from '@/shared/ui/HelpButton'
 import { HelpRevealZone } from '@/shared/ui/HelpReveal'
-import { MailIcon, UserIcon } from '@/shared/ui/icons'
+import { AlertIcon, CheckIcon } from '@/shared/ui/icons'
+import { useUnsavedChangesGuard } from '@/shared/hooks'
 import type { EmployeeJobRole } from '@/shared/types/employeeRole'
 import type { LanguageCode } from '@/shared/types/language'
 import {
+  applyLevelChange,
+  areOverridesDirty,
+  buildOverrideMatrixRows,
+  clearAllOverrides,
+  countOverrides,
   roleHoldsCanImpersonate,
   roleHoldsCanManageAdmins,
+  rowsToOverrides,
 } from '@/features/admin/roles/lib/roleModel'
+import { rolesCopy, rolesErrorMessage } from '@/features/admin/roles/lib/rolesCopy'
+import { adminScreensCopy } from '@/features/admin/lib/adminScreensCopy'
+import type { PermissionMatrixRow } from '@/features/admin/ui/PermissionMatrix'
 import {
   deleteUser,
   forcePasswordReset,
@@ -36,6 +52,7 @@ import {
   getUserPermissionOverrides,
   getUserSessions,
   impersonateUser,
+  putUserPermissionOverrides,
   sendPasswordResetEmail,
   setUserJobRole,
   setUserPreferredLanguage,
@@ -132,6 +149,14 @@ export function UserDetailPage() {
   )
 }
 
+/** Несохранённые правки карточки. `undefined` у поля — «не трогали». */
+interface UserDraft {
+  jobRole?: EmployeeJobRole | null
+  preferredLanguage?: LanguageCode
+  /** Полный набор строк редактора персональных прав, если его трогали. */
+  overrideRows?: PermissionMatrixRow[]
+}
+
 function UserDetailView({
   user,
   sessions,
@@ -152,6 +177,8 @@ function UserDetailView({
   const navigate = useNavigate()
   const revalidator = useRevalidator()
   const copy = useCopy(userCopy)
+  const rolesC = useCopy(rolesCopy)
+  const screensCopy = useCopy(adminScreensCopy)
   const usersPermission = useScreenPermission(AdminScreen.Users)
 
   const [confirmKind, setConfirmKind] = useState<DangerConfirmKind | null>(null)
@@ -161,8 +188,10 @@ function UserDetailView({
    * on this screen proves itself by the value it leaves behind on the page (the new role, the new
    * language, the row that disappeared), while an email leaves no trace here at all. */
   const [actionNotice, setActionNotice] = useState<string | null>(null)
-  const [jobRolePending, setJobRolePending] = useState(false)
-  const [languagePending, setLanguagePending] = useState(false)
+  const [draft, setDraft] = useState<UserDraft>({})
+  const [savePending, setSavePending] = useState(false)
+  /** «Права сохранены, на сервере применятся в течение 15 минут» — после Save с правками прав. */
+  const [showLagHint, setShowLagHint] = useState(false)
   const [resetEmailPending, setResetEmailPending] = useState(false)
   const [impersonateOpen, setImpersonateOpen] = useState(false)
   const [impersonatePending, setImpersonatePending] = useState(false)
@@ -248,6 +277,42 @@ function UserDetailView({
     roleHoldsCanManageAdmins(user.roleId, roles) || roleHoldsCanImpersonate(user.roleId, roles)
   const impersonateBlocked = targetIsElevated && !canManageAdmins(actor)
 
+  /**
+   * Разовые действия над учётной записью — в «…» тулбара, как «Назначить»/«Отправить» у заказа:
+   * немедленные, с собственным подтверждением/результатом, в черновик не входят. Отдельными
+   * кнопками рядом с тулбаром они раздували закреплённую зону управления на мобиле до трёх строк.
+   *
+   * «Войти как пользователь» — только при `can_impersonate` у сессии и на чужой карточке
+   * (`showImpersonate`); для «повышенной» цели — видно, но заблокировано с причиной.
+   * «Ссылка на смену пароля» — скрыта без `users.Update` (кнопка, которая не сработает ни при
+   * каких условиях, ничего не объясняет), заблокирована с причиной для главного администратора.
+   */
+  const accountActions: AdminActionsMenuItem[] = [
+    ...(showImpersonate
+      ? [
+          {
+            label: copy.impersonate.button,
+            onClick: () => {
+              clearMessages()
+              setImpersonateOpen(true)
+            },
+            disabled: impersonateBlocked,
+            hint: impersonateBlocked ? copy.impersonate.elevatedHint : null,
+          },
+        ]
+      : []),
+    ...(usersPermission.canUpdate
+      ? [
+          {
+            label: copy.passwordResetEmail.button,
+            onClick: () => void handleSendPasswordResetEmail(),
+            disabled: isTargetSuperAdmin,
+            hint: isTargetSuperAdmin ? copy.passwordResetEmail.superAdminHint : null,
+          },
+        ]
+      : []),
+  ]
+
   function openConfirm(kind: DangerConfirmKind) {
     if (pending) return
     clearMessages()
@@ -259,37 +324,103 @@ function UserDetailView({
     setConfirmKind(null)
   }
 
-  /** Задача D — immediate `PATCH`, no separate Save (same UX as `RoleSelect`). Not folded into the
-   * page's `pending`/`confirm` flow above: it has no confirmation step and isn't a danger-zone
-   * action, so it gets its own tiny pending flag instead. */
-  async function handleChangeJobRole(jobRole: EmployeeJobRole | null) {
-    if (jobRolePending) return
-    setJobRolePending(true)
-    clearMessages()
-    try {
-      await setUserJobRole({ userId: user.id, jobRole })
-      await revalidator.revalidate()
-    } catch (err) {
-      setActionError(usersErrorMessage(copy, err, copy.errorActions.changeJobRole))
-    } finally {
-      setJobRolePending(false)
-    }
+  /**
+   * Черновик карточки (2026-10-11, шаблон A как у заказа): роль исполнителя по умолчанию, язык
+   * писем и персональные права больше не сохраняются мгновенно — копятся здесь и уходят одним
+   * Save тулбара. `undefined` = не трогали. Сеттеры выкидывают значение, вернувшееся к
+   * сохранённому, а dirty считается сравнением с baseline, а не фактом «трогали».
+   *
+   * Разовые действия над учётной записью (вход от имени, письмо со ссылкой, сброс пароля,
+   * удаление, завершение сеансов) в черновик НЕ входят — как Approve/Reject у заказа.
+   */
+  const jobRoleDirty = draft.jobRole !== undefined && draft.jobRole !== user.defaultJobRole
+  const languageDirty = draft.preferredLanguage !== undefined && draft.preferredLanguage !== user.preferredLanguage
+
+  const rolePermissions = roles?.find((role) => role.id === user.roleId)?.permissions ?? null
+  /** Сохранённые персональные права в виде строк редактора. Черновик сравнивается с ЭТИМ, а не с
+   * сырым ответом сервера: тот может содержать строки с `level: null`, ключи, которых уже нет в
+   * реестре экранов, и уровни без `capLevel` — тогда «ничего не меняли» уже давало разную
+   * длину/уровни (реальная причина ложного «есть изменения» в прежнем `UserPermissionsCard`). */
+  const baselineOverrideRows = useMemo<PermissionMatrixRow[] | null>(
+    () =>
+      screens === null || rolePermissions === null || overrides === null
+        ? null
+        : buildOverrideMatrixRows(screens, rolePermissions, overrides, screensCopy),
+    [screens, rolePermissions, overrides, screensCopy],
+  )
+  const baselineOverrides = useMemo(
+    () => (baselineOverrideRows === null ? [] : rowsToOverrides(baselineOverrideRows)),
+    [baselineOverrideRows],
+  )
+  const overridesDirty =
+    draft.overrideRows !== undefined && areOverridesDirty(rowsToOverrides(draft.overrideRows), baselineOverrides)
+
+  const dirty = jobRoleDirty || languageDirty || overridesDirty
+  const guard = useUnsavedChangesGuard(dirty && !savePending && !pending)
+
+  function setJobRole(jobRole: EmployeeJobRole | null) {
+    setDraft((prev) => ({ ...prev, jobRole: jobRole === user.defaultJobRole ? undefined : jobRole }))
   }
 
-  /** Язык писем (редизайн 2026-08-23) — same immediate-PATCH shape as `handleChangeJobRole`, with
-   * its own pending flag for the same reason: no confirmation step, not a danger-zone action. */
-  async function handleChangePreferredLanguage(preferredLanguage: LanguageCode) {
-    if (languagePending) return
-    setLanguagePending(true)
+  function setPreferredLanguage(language: LanguageCode) {
+    setDraft((prev) => ({
+      ...prev,
+      preferredLanguage: language === user.preferredLanguage ? undefined : language,
+    }))
+  }
+
+  function changeOverrideRows(change: (rows: PermissionMatrixRow[]) => PermissionMatrixRow[]) {
+    if (baselineOverrideRows === null) return
+    setShowLagHint(false)
+    setDraft((prev) => {
+      const next = change(prev.overrideRows ?? baselineOverrideRows)
+      const unchanged = !areOverridesDirty(rowsToOverrides(next), baselineOverrides)
+      return { ...prev, overrideRows: unchanged ? undefined : next }
+    })
+  }
+
+  function handleCancel() {
+    setDraft({})
     clearMessages()
+  }
+
+  /** Один Save на всю карточку. Поля пользователя и персональные права — разные ручки с разными
+   * разборами ошибок, поэтому два шага; при частичной неудаче черновик не сбрасывается, а
+   * ревалидация подтягивает то, что успело сохраниться, — dirty по сравнению это учтёт сам. */
+  async function handleSave() {
+    if (savePending || !dirty || !canEditUser) return
+    setSavePending(true)
+    clearMessages()
+    setShowLagHint(false)
+    let failed = false
     try {
-      await setUserPreferredLanguage({ userId: user.id, preferredLanguage })
-      await revalidator.revalidate()
+      const calls: Promise<unknown>[] = []
+      if (jobRoleDirty) calls.push(setUserJobRole({ userId: user.id, jobRole: draft.jobRole ?? null }))
+      if (languageDirty && draft.preferredLanguage !== undefined) {
+        calls.push(setUserPreferredLanguage({ userId: user.id, preferredLanguage: draft.preferredLanguage }))
+      }
+      await Promise.all(calls)
     } catch (err) {
-      setActionError(usersErrorMessage(copy, err, copy.errorActions.changePreferredLanguage))
-    } finally {
-      setLanguagePending(false)
+      failed = true
+      setActionError(usersErrorMessage(copy, err, copy.errorActions.saveChanges))
     }
+    if (!failed && overridesDirty && draft.overrideRows !== undefined) {
+      try {
+        // Only the rows that actually deviate travel: the endpoint reads an absent key as "drop
+        // the override", so sending an inherited row would ask it to store nothing.
+        await putUserPermissionOverrides({ userId: user.id, overrides: rowsToOverrides(draft.overrideRows) })
+        setShowLagHint(true)
+        // The admin may have just overridden THEMSELVES — re-read before the panel keeps drawing
+        // controls their own new set no longer allows.
+        await refreshPermissions()
+      } catch (err) {
+        failed = true
+        setActionError(rolesErrorMessage(rolesC, err, rolesC.errorActions.saveOverrides))
+      }
+    }
+    if (!failed) setDraft({})
+    await revalidator.revalidate()
+    setSavePending(false)
   }
 
   /**
@@ -395,9 +526,10 @@ function UserDetailView({
    * The breadcrumb, `<h1>` and `HelpButton` used to live inside `UserDetailHeader`; that component
    * is now only the record-identity card at the top of the body.
    *
-   * No `AdminToolbar` in the control zone: this screen has no page-level draft to save or cancel —
-   * every edit on it (job role, overrides, danger zone) commits on its own. What belongs there is
-   * the contextual action, which is impersonation.
+   * `AdminToolbar` in the control zone (2026-10-11): Отмена/Сохранить commit the page draft (job
+   * role, email language, personal overrides); Удалить opens the danger zone's delete confirmation.
+   * Impersonation and the reset-link email live in the toolbar's «…» (`accountActions`) — immediate
+   * actions, not part of the draft.
    */
   return (
     <DataEntryScreenLayout
@@ -414,74 +546,74 @@ function UserDetailView({
       title={userLabel}
       controlZone={
         <HelpRevealZone className="flex flex-wrap items-center gap-3">
-          {showImpersonate && (
-            <AdminActionButton
-              label={copy.impersonate.button}
-              pendingLabel={copy.impersonate.pending}
-              icon={<UserIcon size={17} />}
-              variant="secondary"
-              pending={impersonatePending}
-              disabled={impersonateBlocked}
-              title={impersonateBlocked ? copy.impersonate.elevatedHint : undefined}
-              onClick={() => {
-                clearMessages()
-                setImpersonateOpen(true)
-              }}
-            />
-          )}
-          {/* Здесь, а не в «опасной зоне»: письмо со ссылкой ничего не ломает и не отбирает у
-              пользователя доступ — в отличие от принудительного сброса, который стоит там. Это
-              такое же контекстное действие над учётной записью, как и вход от её имени, поэтому
-              живёт рядом с ним и в том же нейтральном `secondary`-стиле. Скрыто, а не заблокировано,
-              без `users.Update` — та же логика, что у `showImpersonate`: кнопка, которая не сработает
-              ни при каких условиях, не объясняет ничего, чего нет в «Ролях и правах». */}
-          {usersPermission.canUpdate && (
-            <AdminActionButton
-              label={copy.passwordResetEmail.button}
-              pendingLabel={copy.passwordResetEmail.pending}
-              icon={<MailIcon size={17} />}
-              variant="secondary"
-              pending={resetEmailPending}
-              // Disabled rather than hidden for a SuperAdmin target, the same split the impersonate
-              // button makes: missing permission hides the action, a rule about THIS account keeps
-              // it visible so the `title` can say what the rule is.
-              disabled={isTargetSuperAdmin}
-              title={isTargetSuperAdmin ? copy.passwordResetEmail.superAdminHint : undefined}
-              onClick={() => void handleSendPasswordResetEmail()}
-            />
-          )}
+          <AdminToolbar
+            onCancel={handleCancel}
+            onSave={() => void handleSave()}
+            onDelete={() => openConfirm('delete')}
+            cancelState={{ disabled: !dirty || savePending }}
+            saveState={{
+              disabled: !dirty || savePending || pending || !canEditUser,
+              pending: savePending,
+              hint: canEditUser
+                ? null
+                : usersPermission.canUpdate
+                  ? copy.detail.saveSuperAdminHint
+                  : copy.detail.resetNoPermissionHint,
+            }}
+            deleteState={{
+              disabled: !canDelete || pending || savePending,
+              pending: pending && confirmKind === 'delete',
+              hint: canDelete ? null : deleteDisabledHint,
+            }}
+            actionsMenu={
+              accountActions.length > 0 && (
+                <AdminActionsMenu
+                  groups={[{ title: copy.detail.actionsGroupAccount, items: accountActions }]}
+                  label={copy.detail.actionsLabel(userLabel)}
+                  disabled={impersonatePending || resetEmailPending || pending || savePending}
+                />
+              )
+            }
+          />
           <HelpButton surface="admin" title={copy.detail.helpTitle}>
             {copy.detail.helpBody}
           </HelpButton>
+          {dirty && <span className="text-xs text-neutral-500">{copy.detail.unsavedChanges}</span>}
         </HelpRevealZone>
       }
       message={
         // Guarded as a whole rather than per banner: the layout's message slot is a `flex` column
         // with a gap, so an always-truthy fragment would leave an empty row between the control
         // zone and the body even with both banners silent.
-        (actionError || actionNotice) && (
+        (actionError || actionNotice || showLagHint) && (
           <>
             {actionError && (
               <div
                 role="alert"
                 className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
               >
-                <span aria-hidden="true">⚠️</span>
+                <AlertIcon size={16} className="mt-0.5 shrink-0" />
                 <span>{actionError}</span>
               </div>
             )}
             {/* `status`, not `alert`: a confirmation is not urgent enough to interrupt a screen
-                reader mid-sentence. Same emerald banner `UserPermissionsCard` uses for its own
-                "saved" notice — the two never appear at once, but they should read as one language
-                when the admin meets them one after the other. */}
+                reader mid-sentence. */}
             {actionNotice && (
               <div
                 role="status"
                 className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
               >
-                <span aria-hidden="true">✓</span>
+                <CheckIcon size={16} className="mt-0.5 shrink-0" />
                 <span>{actionNotice}</span>
               </div>
+            )}
+            {showLagHint && !actionError && (
+              <p
+                role="status"
+                className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+              >
+                {rolesC.permissionLag}
+              </p>
             )}
           </>
         )
@@ -491,10 +623,11 @@ function UserDetailView({
 
       <UserDetailInfo
         user={user}
-        onChangeJobRole={(role) => void handleChangeJobRole(role)}
-        jobRolePending={jobRolePending}
-        onChangePreferredLanguage={(language) => void handleChangePreferredLanguage(language)}
-        languagePending={languagePending}
+        jobRole={draft.jobRole !== undefined ? draft.jobRole : user.defaultJobRole}
+        onChangeJobRole={setJobRole}
+        preferredLanguage={draft.preferredLanguage ?? user.preferredLanguage}
+        onChangePreferredLanguage={setPreferredLanguage}
+        pending={savePending}
         canUpdate={canEditUser}
       />
 
@@ -503,13 +636,13 @@ function UserDetailView({
           Admin-only — editing overrides is administering the permission system itself. */}
       {canEditPermissions && (
         <UserPermissionsCard
-          userId={user.id}
           roleName={user.roleName}
-          rolePermissions={roles?.find((role) => role.id === user.roleId)?.permissions ?? null}
-          overrides={overrides}
-          screens={screens}
+          rows={draft.overrideRows ?? baselineOverrideRows}
+          savedOverrideCount={countOverrides(overrides ?? [])}
           canEdit={canEditUser}
-          onSaved={() => void revalidator.revalidate()}
+          pending={savePending}
+          onChange={(screenKey, value) => changeOverrideRows((rows) => applyLevelChange(rows, screenKey, value))}
+          onResetAll={() => changeOverrideRows(clearAllOverrides)}
         />
       )}
 
@@ -533,14 +666,11 @@ function UserDetailView({
 
       <UserDangerZone
         userLabel={userLabel}
-        canDelete={canDelete}
         canReset={canEditUser}
         resetDisabledHint={resetDisabledHint}
         targetIsAdmin={isTargetAdmin}
-        deleteDisabledHint={deleteDisabledHint}
         confirmKind={confirmKind}
         pending={pending}
-        onRequestDelete={() => openConfirm('delete')}
         onRequestReset={() => openConfirm('reset')}
         onCancelConfirm={cancelConfirm}
         onConfirm={confirm}
@@ -553,6 +683,8 @@ function UserDetailView({
         onCancel={() => setImpersonateOpen(false)}
         onConfirm={() => void confirmImpersonation()}
       />
+
+      <UnsavedChangesModal open={guard.isBlocking} onCancel={guard.cancel} onConfirm={guard.confirm} />
     </DataEntryScreenLayout>
   )
 }

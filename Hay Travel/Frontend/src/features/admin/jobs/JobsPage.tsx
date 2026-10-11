@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { redirect, useLoaderData, useRevalidator } from 'react-router'
-import { AdminToolbar, UnsavedChangesModal } from '@/shared/ui'
+import { AdminToolbar, DataEntryScreenLayout, UnsavedChangesModal } from '@/shared/ui'
+import { AlertIcon, CheckIcon } from '@/shared/ui/icons'
 import { HelpButton } from '@/shared/ui/HelpButton'
 import { HelpRevealZone } from '@/shared/ui/HelpReveal'
 import { useUnsavedChangesGuard } from '@/shared/hooks'
@@ -9,7 +10,7 @@ import { useCopy } from '@/shared/i18n/defineCopy'
 import { getJobScreenParameters, getJobs, runJob, setJobScreenParameters } from '@/features/admin/api/adminJobs'
 import { SettingValueType } from '@/features/admin/lib/enums'
 import { jobsCopy, jobsErrorMessage } from './lib/jobsCopy'
-import { isValidParameterNumber } from './lib/jobsModel'
+import { isValidParameterNumber, parameterValuesEqual } from './lib/jobsModel'
 import { jobPermissionHints } from './lib/jobsPermissionHints'
 import { JobParametersCard } from './components/JobParametersCard'
 import { JobRow } from './components/JobRow'
@@ -57,9 +58,11 @@ export function JobsPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveNotice, setSaveNotice] = useState<string | null>(null)
 
-  const dirtyKeys = Object.keys(draft).filter(
-    (key) => draft[key] !== screenParameters.find((parameter) => parameter.key === key)?.value,
-  )
+  const dirtyKeys = Object.keys(draft).filter((key) => {
+    const parameter = screenParameters.find((candidate) => candidate.key === key)
+    if (!parameter) return false
+    return !parameterValuesEqual(draft[key], parameter.value, parameter.valueType === SettingValueType.Number)
+  })
   const dirty = dirtyKeys.length > 0
   const draftValid = dirtyKeys.every((key) => {
     const parameter = screenParameters.find((candidate) => candidate.key === key)
@@ -88,6 +91,18 @@ export function JobsPage() {
     }
   }
 
+  /** Значение, вернувшееся к сохранённому, из черновика выкидывается — dirty считается по отличию
+   * от baseline, а не по факту «поле трогали». */
+  function handleParameterChange(key: string, value: string) {
+    const saved = screenParameters.find((parameter) => parameter.key === key)?.value
+    setDraft((prev) => {
+      const next = { ...prev }
+      if (value === saved) delete next[key]
+      else next[key] = value
+      return next
+    })
+  }
+
   function handleRun(key: string) {
     if (pendingRunKeys.has(key)) return
     setPendingRunKeys((prev) => new Set(prev).add(key))
@@ -107,49 +122,56 @@ export function JobsPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-      <div>
-        <HelpRevealZone as="h1" className="flex items-center gap-2 text-xl font-extrabold tracking-tight text-neutral-900">
+    <DataEntryScreenLayout
+      title={
+        <HelpRevealZone as="span" className="flex items-center gap-2">
           {copy.title}
           <HelpButton surface="admin" title={copy.title}>
             {copy.titleHint}
           </HelpButton>
         </HelpRevealZone>
-      </div>
-
-      {screenParameters.length > 0 && (
-        <AdminToolbar
-          onCancel={() => setDraft({})}
-          onSave={() => void handleSaveScreenParameters()}
-          cancelState={{ disabled: savePending || !dirty }}
-          saveState={{
-            disabled: savePending || !dirty || !draftValid || hints.update !== null,
-            pending: savePending,
-            hint: hints.update,
-          }}
-        />
-      )}
-
-      {saveError && (
-        <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <span aria-hidden="true">⚠️</span>
-          <span>{saveError}</span>
-        </div>
-      )}
-      {saveNotice && (
-        <div role="status" className="flex items-start gap-2 rounded-lg border border-neutral-300 bg-neutral-50 px-4 py-3 text-sm text-neutral-900">
-          <span aria-hidden="true">✓</span>
-          <span>{saveNotice}</span>
-        </div>
-      )}
-
+      }
+      subtitle={copy.subtitle}
+      controlZone={
+        screenParameters.length > 0 && (
+          <AdminToolbar
+            onCancel={() => setDraft({})}
+            onSave={() => void handleSaveScreenParameters()}
+            cancelState={{ disabled: savePending || !dirty }}
+            saveState={{
+              disabled: savePending || !dirty || !draftValid || hints.update !== null,
+              pending: savePending,
+              hint: hints.update,
+            }}
+          />
+        )
+      }
+      message={
+        (saveError || saveNotice) && (
+          <>
+            {saveError && (
+              <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <AlertIcon size={16} className="mt-0.5 shrink-0" />
+                <span>{saveError}</span>
+              </div>
+            )}
+            {saveNotice && (
+              <div role="status" className="flex items-start gap-2 rounded-lg border border-neutral-300 bg-neutral-50 px-4 py-3 text-sm text-neutral-900">
+                <CheckIcon size={16} className="mt-0.5 shrink-0" />
+                <span>{saveNotice}</span>
+              </div>
+            )}
+          </>
+        )
+      }
+    >
       {jobs.length === 0 ? (
         <p className="rounded-xl border border-dashed border-neutral-200 px-4 py-12 text-center text-sm text-neutral-500">
           {copy.empty}
         </p>
       ) : (
         <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-          <div className="hidden items-center gap-4 border-b border-neutral-200 bg-neutral-50 px-4 py-[9px] text-[11px] font-semibold tracking-[.05em] text-neutral-500 uppercase sm:flex">
+          <div className="hidden items-center gap-4 border-b border-neutral-200 bg-neutral-50 px-4 py-[9px] text-[11px] font-semibold tracking-[.05em] text-neutral-500 uppercase lg:flex">
             <span className="flex-1">{copy.colJobAndLastRun}</span>
             <span className="w-[176px]">{copy.colNextRun}</span>
             <span className="w-[132px]">{copy.colState}</span>
@@ -171,13 +193,13 @@ export function JobsPage() {
       <JobParametersCard
         parameters={screenParameters}
         draftValues={draft}
-        onChange={(key, value) => setDraft((prev) => ({ ...prev, [key]: value }))}
+        onChange={handleParameterChange}
         disabled={savePending || hints.update !== null}
         title={copy.screenParametersCardTitle}
         titleHint={copy.screenParametersCardHint}
       />
 
       <UnsavedChangesModal open={guard.isBlocking} onCancel={guard.cancel} onConfirm={guard.confirm} />
-    </div>
+    </DataEntryScreenLayout>
   )
 }

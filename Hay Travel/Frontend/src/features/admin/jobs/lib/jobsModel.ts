@@ -239,6 +239,23 @@ export function isValidParameterNumber(raw: string): boolean {
   return /^\d+$/.test(raw.trim())
 }
 
+/** «Значение параметра не изменилось» в том виде, в каком его поймёт сервер: у числового — по
+ * числу (`"7"` и `" 07"` — одно и то же, валидатор тоже тримит и парсит), у строкового — побайтно.
+ * Невалидное число сравнивается как строка: такая правка грязная и подсветится ошибкой. */
+export function parameterValuesEqual(a: string, b: string, isNumber: boolean): boolean {
+  if (isNumber && isValidParameterNumber(a) && isValidParameterNumber(b)) return Number(a) === Number(b)
+  return a === b
+}
+
+/** Каноническая форма cron для сравнения «изменилось ли расписание»: пресет → его же строка
+ * (`"05 03 * * *"` → `"5 3 * * *"`), своё выражение — с одиночными пробелами. Нужна потому, что
+ * `Select` вызывает `onChange` и при выборе ТОГО ЖЕ пункта, а `presetToCron` пишет строку заново. */
+export function canonicalCron(cron: string): string {
+  const preset = cronToPreset(cron)
+  if (preset.kind === 'custom') return preset.expression.trim().split(/\s+/).join(' ')
+  return presetToCron(preset)
+}
+
 /** Cyrillic-safe: plain `toUpperCase`/`toLowerCase` on the first code point works the same for
  * Cyrillic as for Latin, no locale-specific casing table needed here. */
 export function capitalizeFirst(text: string): string {
@@ -301,7 +318,11 @@ export function overrideRowsEqual(a: TourAutoCloseOverrideDraftRow[], b: TourAut
   const sortById = (rows: TourAutoCloseOverrideDraftRow[]) => [...rows].sort((x, y) => x.tourId - y.tourId)
   const left = sortById(a)
   const right = sortById(b)
-  return left.every((row, index) => row.tourId === right[index].tourId && row.leadTimeHours === right[index].leadTimeHours)
+  return left.every(
+    (row, index) =>
+      row.tourId === right[index].tourId &&
+      parameterValuesEqual(row.leadTimeHours, right[index].leadTimeHours, true),
+  )
 }
 
 /** Same shape as `orders/lib/ordersModel.ts`'s `tourTitleResolver` — kept as a small, deliberate

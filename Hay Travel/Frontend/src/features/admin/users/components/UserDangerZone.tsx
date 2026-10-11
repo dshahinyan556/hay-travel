@@ -9,39 +9,35 @@ export type DangerConfirmKind = 'delete' | 'reset'
 interface UserDangerZoneProps {
   /** Full name (or username fallback) shown in the confirm modal's title. */
   userLabel: string
-  /** `false` on your own profile, on another Admin's profile unless the actor is the SuperAdmin
-   * (D3), and ALWAYS on the SuperAdmin's own row (`SuperAdminGuard`, 2026-08-27) — mirrors the
-   * backend's guards (`CannotDeleteSelf`, `SuperAdminPrivilegeRequired`). `UserDetailPage` computes
-   * this the same way `UsersTable` computes `isSelf`/`roleLocked`. */
-  canDelete: boolean
   /** `users.Update`, minus the SuperAdmin lock (2026-08-27) — same `canEditUser` the page hands to
    * every other editor on the screen. Disables the reset button rather than hiding it: the row
    * explains what the action is, and an explanation with no control reads better than a silently
    * missing section. */
   canReset: boolean
   /** Shown under the reset button when `canReset` is false — WHICH of the two reasons it is, picked
-   * by the page, exactly like `deleteDisabledHint`. */
+   * by the page. */
   resetDisabledHint: string
   /** The account being viewed is an Admin (and not you). Only changes the confirm dialog's WORDING:
    * deleting a colleague with panel access has wider consequences than deleting a customer, and the
    * one person who can actually do it should be told so before they do. */
   targetIsAdmin?: boolean
-  /** Shown under the delete button when `canDelete` is false — which of the two reasons above. */
-  deleteDisabledHint: string
   /** Which confirm modal is open, or `null`. Owned by the parent — same "container owns the
    * `Modal`'s open state" shape `ProductsPage`/`PlacesTab` already use for their own delete
    * confirmations. */
   confirmKind: DangerConfirmKind | null
   /** True while the request for `confirmKind` is in flight. */
   pending: boolean
-  onRequestDelete: () => void
   onRequestReset: () => void
   onCancelConfirm: () => void
   onConfirm: () => void
 }
 
 /**
- * "Опасная зона" (F4): force password reset + soft-delete, each behind its own confirm `Modal` —
+ * "Опасная зона" (F4): force password reset + the confirm `Modal` for it AND for soft-delete. The
+ * delete BUTTON moved to the page's `AdminToolbar` (2026-10-11, шаблон A — «Удалить» живёт в
+ * тулбаре); the page opens this same modal with `confirmKind = 'delete'`, so the two
+ * confirmations keep one shared look and pending state. Original note:
+ * force password reset + soft-delete, each behind its own confirm `Modal` —
  * the same `Modal` contract "Продукты"/"Справочники" already use (title + message + cancel/confirm
  * row), rendered here rather than in `UserDetailPage` because the two actions and their modals are
  * a single cohesive unit with nothing else on the page needing to know about them mid-flight.
@@ -53,14 +49,11 @@ interface UserDangerZoneProps {
  */
 export function UserDangerZone({
   userLabel,
-  canDelete,
   canReset,
   resetDisabledHint,
   targetIsAdmin = false,
-  deleteDisabledHint,
   confirmKind,
   pending,
-  onRequestDelete,
   onRequestReset,
   onCancelConfirm,
   onConfirm,
@@ -95,17 +88,6 @@ export function UserDangerZone({
             disabled={pending || !canReset}
           >
             {copy.danger.resetButton}
-          </Button>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
-          <div>
-            <p className="text-sm font-semibold text-neutral-900">{copy.danger.deleteHeading}</p>
-            <p className="text-xs text-neutral-500">{copy.danger.deleteHint}</p>
-            {!canDelete && <p className="mt-1 text-[11px] text-neutral-500">{deleteDisabledHint}</p>}
-          </div>
-          <Button variant="danger" size="sm" onClick={onRequestDelete} disabled={pending || !canDelete}>
-            {copy.danger.deleteButton}
           </Button>
         </div>
       </div>

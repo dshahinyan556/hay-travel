@@ -172,6 +172,10 @@ export interface TourFormState {
   transferPrices: TransferPriceFormState[]
   mainImageUrl: string
   isActive: boolean
+  /** «Показывать в избранном» — блок «Избранное» на главной (2026-10-11). Как и `isActive`, НЕ
+   * входит в `UpdateTour`/`CreateTour` (сервер его там игнорирует): после успешного сохранения
+   * `useTourForm` вызывает `SetFeatured`, и только если значение отличается от сохранённого. */
+  isFeatured: boolean
   /** Показывать ли блок предоплаты на публичной странице тура (B12, 2026-08-13). В отличие
    * от isActive — не игнорируется UpdateTour, редактируется прямо здесь. */
   requiresPrepayment: boolean

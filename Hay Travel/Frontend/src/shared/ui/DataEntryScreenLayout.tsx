@@ -70,9 +70,8 @@ export function DataEntryScreenLayout({
         {subtitle && <p className="mt-0.5 text-sm text-neutral-500">{subtitle}</p>}
       </div>
 
-      {/* Pinned the same way as the «Справочники» tab strip (`CatalogPage`): below the mobile
-          hamburger bar (60px) on phones, flush to the viewport top on desktop where that bar
-          doesn't exist. Bleeds to `main`'s own edges (`-mx-4 sm:-mx-6`) so the background covers
+      {/* Pinned below the mobile hamburger bar (60px) on phones, flush to the viewport top on
+          desktop where that bar doesn't exist (`SetupFormLayout.controlZone` uses the same classes). Bleeds to `main`'s own edges (`-mx-4 sm:-mx-6`) so the background covers
           content scrolling underneath it — Save must stay reachable without scrolling back up on
           a long form (решение Давида 2026-08-31). */}
       {controlZone && (

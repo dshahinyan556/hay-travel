@@ -3,6 +3,7 @@ import { useLoaderData, useNavigate } from 'react-router'
 import type { LoaderFunctionArgs } from 'react-router'
 import { UnsavedChangesModal } from '@/shared/ui'
 import { useUnsavedChangesGuard } from '@/shared/hooks'
+import { AdminScreen, useScreenPermission } from '@/shared/auth'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import { getStoredLocale } from '@/shared/lib/locale'
 import { TourNoteType, TourType } from '@/features/admin/lib/enums'
@@ -120,6 +121,9 @@ function TourCreateView({
   const initialState = useMemo(() => createModelToForm(dto), [dto])
   const navigate = useNavigate()
   const copy = useCopy(tourFormCopy)
+  // `SetFeatured` (досылается после создания, если отмечено «Показывать в избранном») требует
+  // `products.Update` — без него галочка видна, но заблокирована с подсказкой.
+  const canFeature = useScreenPermission(AdminScreen.Products).canUpdate
   const { state, actions, validation, hasAttemptedSubmit, submit, isSubmitting, error, isDirty } =
     useTourForm(initialState)
   const guard = useUnsavedChangesGuard(isDirty && !isSubmitting)
@@ -152,6 +156,7 @@ function TourCreateView({
         state={state}
         actions={actions}
         validation={validation}
+        featureHint={canFeature ? null : copy.header.noPermissionHint}
         catalogSuggestions={catalogSuggestions}
         regions={regions}
         tags={tags}

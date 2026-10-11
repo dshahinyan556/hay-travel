@@ -39,6 +39,9 @@ interface TourFormProps {
   /** The vehicle-class catalog, for the transfer's price table. Empty is a legitimate state —
    * the catalog may simply not have been filled in yet (the editor says so). */
   vehicleClasses: VehicleClassOption[]
+  /** Why «Показывать в избранном» is locked (no `products.Update`), or `null` when editable —
+   * passed through to `TourFormHeader`. */
+  featureHint?: string | null
   /** Submitting the form (Enter inside a field) — the same action the toolbar's Save runs. */
   onSubmit: () => void
 }
@@ -74,6 +77,7 @@ export function TourForm({
   tags,
   daySources,
   vehicleClasses,
+  featureHint = null,
   onSubmit,
 }: TourFormProps) {
   const copy = useCopy(tourFormCopy)
@@ -131,6 +135,7 @@ export function TourForm({
         typeLocked={typeLocked}
         regions={regions}
         tags={tags}
+        featureHint={featureHint}
       />
 
       {isTransfer && (

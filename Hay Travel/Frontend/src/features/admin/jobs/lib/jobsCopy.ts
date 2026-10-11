@@ -26,6 +26,7 @@ export const jobsCopy = defineCopy(
     title: 'Фоновые задачи',
     titleHint:
       'Задачи, которые сервер выполняет сам по расписанию. Их набор задан кодом — добавить или удалить задачу из админки нельзя.',
+    subtitle: 'Расписание, состояние и общие параметры серверных задач.',
     breadcrumbsLabel: 'Хлебные крошки',
     backToList: 'Фоновые задачи',
 
@@ -268,6 +269,7 @@ export const jobsCopy = defineCopy(
     title: 'Background jobs',
     titleHint:
       'Tasks the server runs on its own, on a schedule. The set is fixed in code — jobs cannot be added or removed from the admin panel.',
+    subtitle: 'Schedule, state, and shared parameters of the server jobs.',
     breadcrumbsLabel: 'Breadcrumbs',
     backToList: 'Background jobs',
 

@@ -23,7 +23,14 @@
  */
 
 import { redirect } from 'react-router'
-import { ensureAuthReady, ensurePermissionsReady, hasAnyScreenAccess, type AuthUser } from '@/shared/auth'
+import {
+  ensureAuthReady,
+  ensurePermissionsReady,
+  getAuthState,
+  hasAnyScreenAccess,
+  refreshPermissions,
+  type AuthUser,
+} from '@/shared/auth'
 
 export interface AdminRootData {
   /** True → `AdminLayout` renders the access-denied screen instead of the panel shell. */
@@ -32,7 +39,10 @@ export interface AdminRootData {
 }
 
 export async function adminRootLoader({ request }: { request: Request }): Promise<AdminRootData> {
-  const state = await ensureAuthReady()
+  // Live state after the wait — the value `ensureAuthReady()` resolves with is cached per page load
+  // and can predate a refresh that has since failed or a login that has since happened.
+  await ensureAuthReady()
+  const state = getAuthState()
   const url = new URL(request.url)
   const returnTo = encodeURIComponent(`${url.pathname}${url.search}`)
 
@@ -45,10 +55,16 @@ export async function adminRootLoader({ request }: { request: Request }): Promis
     throw redirect(`/auth/change-password?returnTo=${returnTo}`)
   }
 
-  await ensurePermissionsReady()
+  let permissions = await ensurePermissionsReady()
 
-  if (!hasAnyScreenAccess()) {
-    return { accessDenied: true, user: state.user }
+  // «Недостаточно прав» is a verdict, so it is never rendered off a single read: a token refresh
+  // racing this loader (another tab, another dev port sharing the cookie) can clear or blank the set
+  // in between. One fresh re-read; if the session died meanwhile, that is a login, not a denial.
+  if (!hasAnyScreenAccess(permissions)) {
+    permissions = await refreshPermissions()
+    const user = getAuthState().user
+    if (!user) throw redirect(`/auth?returnTo=${returnTo}`)
+    if (!hasAnyScreenAccess(permissions)) return { accessDenied: true, user }
   }
 
   return { accessDenied: false, user: state.user }

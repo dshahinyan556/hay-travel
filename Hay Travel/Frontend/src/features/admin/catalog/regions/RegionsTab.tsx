@@ -1,136 +1,99 @@
-import { useState } from 'react'
-import { Card, Textarea } from '@/shared/ui'
+import { Field, Textarea } from '@/shared/ui'
 import { useCopy } from '@/shared/i18n/defineCopy'
-import type { RegionInfoModel } from '@/shared/types/attours'
-import { adminCommonCopy } from '@/features/admin/lib/adminCommonCopy'
 import { RegionTranslationType } from '@/features/admin/lib/enums'
-import { readLocalizedByType } from '@/features/admin/catalog/lib/catalogMapper'
-import { catalogCopy } from '@/features/admin/catalog/lib/catalogCopy'
-import { updateRegionBlurb } from '@/features/admin/api/adminCatalog'
-import type { Localized } from '@/features/admin/types/localized'
-import { ApiError } from '@/shared/lib/http'
+import type { RegionInfoModel } from '@/shared/types/attours'
+import { catalogCopy } from '../lib/catalogCopy'
+import { readLocalizedByType } from '../lib/catalogMapper'
+import { filterDraftRows } from '../lib/filterDraftRows'
+import { CatalogGrid } from '../grid/CatalogGrid'
+import { CatalogTabFrame, type CatalogTabProps } from '../grid/CatalogTabFrame'
+import { CellText } from '../grid/CatalogCells'
+import { textColumn, type CatalogCellContext, type CatalogColumn } from '../grid/catalogColumns'
+import type { RegionValues } from './regionsTable'
 
-interface RegionsTabProps {
-  regions: RegionInfoModel[]
-  /** `catalog.regions.Update`. The set of regions is fixed by a seed migration, so View and Update
-   * are the only actions this key has at all — without Update the cards are read-only. */
-  canUpdate: boolean
-  /** Called after a successful blurb save so the parent can revalidate the loader. */
-  onMutated: () => void
-}
+type Props = CatalogTabProps<RegionInfoModel, RegionValues>
+type Ctx = CatalogCellContext<RegionInfoModel, RegionValues>
 
-/**
- * Name/slug/order are fixed reference data (seeded by a migration, David 2026-08-01 — no
- * Create/Update/Delete for those). The teaser text ("blurb" — shown on the public map hover
- * tooltip and region panel) IS editable here since 2026-08-02: it used to be hardcoded in
- * `Frontend/src/shared/data/armeniaRegions.ts`, now it round-trips through `UpdateBlurb`.
- */
-export function RegionsTab({ regions, canUpdate, onMutated }: RegionsTabProps) {
+const regionName = (region: RegionInfoModel | null) =>
+  region ? readLocalizedByType(region.translations, RegionTranslationType.Name) : { ru: '', en: '' }
+
+/** Teasers are short (one line on the map), so they are edited right in the cell; the detail row
+ * gives the same two fields as multi-line `Textarea`s for a longer text. */
+function RegionTeaserDetail({ ctx }: { ctx: Ctx }) {
   const copy = useCopy(catalogCopy)
-  const sorted = [...regions].sort((a, b) => a.sortOrder - b.sortOrder)
-
+  const field = (key: 'teaserRu' | 'teaserEn', label: string) => (
+    <Field label={label} htmlFor={`${ctx.row.key}-${key}`}>
+      <Textarea
+        id={`${ctx.row.key}-${key}`}
+        rows={2}
+        disabled={!ctx.editable}
+        value={ctx.row.values[key]}
+        onChange={(e) => ctx.setField(key, e.target.value)}
+        // A ring, not a background: `Textarea` already sets `bg-white`, and two background
+        // utilities on one element resolve by stylesheet order, not by class order.
+        className={ctx.row.changed.has(key) ? 'ring-2 ring-blue-300' : ''}
+      />
+    </Field>
+  )
   return (
-    <div className="flex flex-col gap-4">
-      <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
-        {copy.regions.notice}
-      </div>
-
-      <div className="flex flex-col gap-3">
-        {sorted.map((region) => (
-          <RegionBlurbCard
-            key={region.id}
-            region={region}
-            canUpdate={canUpdate}
-            onMutated={onMutated}
-          />
-        ))}
-      </div>
+    <div className="grid gap-3 sm:grid-cols-2">
+      {field('teaserRu', copy.regions.teaserRu)}
+      {field('teaserEn', copy.regions.teaserEn)}
     </div>
   )
 }
 
-function RegionBlurbCard({
-  region,
-  canUpdate,
-  onMutated,
-}: {
-  region: RegionInfoModel
-  canUpdate: boolean
-  onMutated: () => void
-}) {
+export function RegionsTab({ draft, permission, query, locked, showErrors }: Props) {
   const copy = useCopy(catalogCopy)
-  const common = useCopy(adminCommonCopy)
-  const name = readLocalizedByType(region.translations, RegionTranslationType.Name)
-  const savedBlurb = readLocalizedByType(region.translations, RegionTranslationType.Blurb)
+  const rows = filterDraftRows(draft.rows, query, (row) => {
+    const name = regionName(row.item)
+    return `${name.ru} ${name.en} ${row.item?.slug ?? ''}`
+  })
 
-  const [draft, setDraft] = useState<Localized>(savedBlurb)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const dirty = draft.ru.trim() !== savedBlurb.ru.trim() || draft.en.trim() !== savedBlurb.en.trim()
-
-  async function save() {
-    setSaving(true)
-    setError(null)
-    try {
-      await updateRegionBlurb(region.id, draft.ru.trim(), draft.en.trim())
-      onMutated()
-    } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? copy.regions.saveServerError(err.status)
-          : copy.regions.saveNetworkError,
-      )
-    } finally {
-      setSaving(false)
-    }
-  }
+  const columns: CatalogColumn<RegionInfoModel, RegionValues>[] = [
+    {
+      id: 'name',
+      label: copy.regions.colName,
+      help: copy.regions.notice,
+      className: 'w-48',
+      wideOnCard: true,
+      render: (ctx) => {
+        const name = regionName(ctx.row.item)
+        return <CellText value={[name.ru, name.en].filter(Boolean).join(' · ')} layout={ctx.layout} />
+      },
+    },
+    {
+      id: 'tours',
+      label: copy.regions.colTours,
+      className: 'w-24',
+      align: 'end',
+      render: (ctx) => <CellText value={String(ctx.row.item?.tourCount ?? 0)} align="end" layout={ctx.layout} />,
+    },
+    textColumn('teaserRu', copy.regions.teaserRu, { wideOnCard: true }),
+    textColumn('teaserEn', copy.regions.teaserEn, { wideOnCard: true }),
+  ]
 
   return (
-    <Card padding="sm" className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <span className="font-semibold text-neutral-900">{name.ru || copy.common.emptyValue}</span>
-          <span className="ml-2 text-sm text-neutral-500">{name.en}</span>
-        </div>
-        <span className="text-xs text-neutral-400">
-          {region.slug} · {copy.regions.tourCount(region.tourCount)}
-        </span>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-neutral-700">{copy.regions.teaserRu}</span>
-          <Textarea
-            rows={2}
-            disabled={!canUpdate}
-            value={draft.ru}
-            onChange={(e) => setDraft((prev) => ({ ...prev, ru: e.target.value }))}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium text-neutral-700">{copy.regions.teaserEn}</span>
-          <Textarea
-            rows={2}
-            disabled={!canUpdate}
-            value={draft.en}
-            onChange={(e) => setDraft((prev) => ({ ...prev, en: e.target.value }))}
-          />
-        </label>
-      </div>
-
-      {error && <p className="text-sm text-rose-600">{error}</p>}
-
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={save}
-          disabled={!dirty || saving || !canUpdate}
-          className="inline-flex items-center rounded-lg bg-neutral-950 px-3.5 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {saving ? copy.common.savingButton : common.save}
-        </button>
-      </div>
-    </Card>
+    <CatalogTabFrame
+      isEmpty={draft.rows.length === 0}
+      emptyText={copy.regions.empty}
+      nothingFoundText={rows.length === 0 ? copy.common.nothingFoundFor(query.trim()) : null}
+    >
+      <CatalogGrid
+        draft={draft}
+        rows={rows}
+        columns={columns}
+        permission={permission}
+        locked={locked}
+        showErrors={showErrors}
+        reorderable={false}
+        reorderEnabled={false}
+        selectable={false}
+        rowLabel={(row) => regionName(row.item).ru || row.item?.slug || copy.common.emptyValue}
+        itemLabel={copy.common.tabs.regions}
+        renderDetail={(ctx) => <RegionTeaserDetail ctx={ctx} />}
+        tableMinWidth="min-w-[860px]"
+      />
+    </CatalogTabFrame>
   )
 }

@@ -132,7 +132,16 @@ setAuthTokenProvider(getAccessToken)
 // The permission store must wait for the session before asking the server "what may I do?", but it
 // may not import this module (that would invert the documented direction into a cycle — see its
 // doc comment). So the wait is injected, exactly like the token provider above.
-setPermissionSessionProbe(async () => (await ensureAuthReady()).user !== null)
+//
+// The answer is read from the LIVE state after the wait, not from the value `ensureAuthReady()`
+// resolves with: that promise is cached per page load and holds the snapshot from when it settled.
+// `applyLoginResult` fires a permission reload BEFORE it swaps the cached promise, so a probe that
+// trusted the cached value saw the pre-login "anonymous" and committed an empty set — the admin
+// then opened on «Недостаточно прав» until a reload.
+setPermissionSessionProbe(async () => {
+  await ensureAuthReady()
+  return state.user !== null
+})
 
 /** Refresh this many ms before the token actually expires, so a request can't die in flight
  * because the token aged out between the check and the server reading it. */

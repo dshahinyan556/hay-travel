@@ -6,7 +6,7 @@ interface CatalogSearchInputProps {
   placeholder: string
 }
 
-/** Shared search box for the three CRUD catalog tabs — see `useCatalogSearch`. */
+/** Search box of the catalog control zone — filters the active tab (see `lib/filterDraftRows`). */
 export function CatalogSearchInput({ value, onChange, placeholder }: CatalogSearchInputProps) {
   return (
     <div className="relative w-full sm:max-w-xs">

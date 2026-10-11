@@ -68,6 +68,12 @@ export const tourFormCopy = defineCopy(
       isActive: 'Активен — виден на сайте',
       payment: 'Оплата',
       requiresPrepayment: 'Требуется предоплата',
+      isFeatured: 'Показывать в избранном',
+      isFeaturedHint: (max: number) =>
+        `Продукт появится в блоке «Избранное» на главной странице сайта (если он опубликован). Одновременно там может быть не больше ${max} продуктов. Порядок задаётся в списке продуктов, вид «Избранные». Изменение применяется кнопкой «Сохранить».`,
+      /** Тултип у заблокированной галочки «Показывать в избранном» — `SetFeatured` требует права
+       * `products.Update`. */
+      noPermissionHint: 'Недостаточно прав',
       discount: 'Скидка',
       discountPercent: 'Размер, %',
       discountStartDate: 'Дата начала',
@@ -304,6 +310,17 @@ export const tourFormCopy = defineCopy(
         `Не удалось сохранить: сервер вернул ошибку (${status}). Данные формы сохранены — попробуйте ещё раз.`,
       network: 'Не удалось сохранить: проверьте соединение и попробуйте ещё раз. Данные формы сохранены.',
     },
+
+    /** Продукт СОХРАНЁН, не прошёл только `SetFeatured` — текст говорит именно это, чтобы админ
+     * не переделывал сохранённое. */
+    featuredError: {
+      tooMany: (max: number) =>
+        `Продукт сохранён, но не добавлен в «Избранное»: там уже ${max} продуктов. Уберите один в списке продуктов (вид «Избранные») и сохраните снова.`,
+      server: (status: number) =>
+        `Продукт сохранён, но «Показывать в избранном» не применилось: сервер вернул ошибку (${status}). Сохраните ещё раз.`,
+      network:
+        'Продукт сохранён, но «Показывать в избранном» не применилось: проверьте соединение и сохраните ещё раз.',
+    },
   },
   {
     localizedName: (value: Localized) => value.en || value.ru,
@@ -347,6 +364,10 @@ export const tourFormCopy = defineCopy(
       isActive: 'Active — visible on the site',
       payment: 'Payment',
       requiresPrepayment: 'Prepayment required',
+      isFeatured: 'Show in featured',
+      isFeaturedHint: (max: number) =>
+        `The product appears in the "Featured" block on the site's home page (if it is published). At most ${max} products can be there at once. Their order is set in the products list, "Featured" view. The change is applied with the "Save" button.`,
+      noPermissionHint: 'Not enough permissions',
       discount: 'Discount',
       discountPercent: 'Amount, %',
       discountStartDate: 'Start date',
@@ -559,6 +580,15 @@ export const tourFormCopy = defineCopy(
       server: (status: number) =>
         `Could not save: the server returned an error (${status}). Your form data is kept — please try again.`,
       network: 'Could not save: check your connection and try again. Your form data is kept.',
+    },
+
+    featuredError: {
+      tooMany: (max: number) =>
+        `The product is saved but not added to "Featured": there are already ${max} products there. Remove one in the products list ("Featured" view) and save again.`,
+      server: (status: number) =>
+        `The product is saved, but "Show in featured" was not applied: the server returned an error (${status}). Save again.`,
+      network:
+        'The product is saved, but "Show in featured" was not applied: check your connection and save again.',
     },
   },
 )

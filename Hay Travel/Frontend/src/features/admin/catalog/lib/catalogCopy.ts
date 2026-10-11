@@ -1,17 +1,16 @@
 /**
- * Interface text of the whole "Справочники" screen (ADR 021) — ONE module for all five tabs
- * rather than one per tab: the tabs are five instances of the same shell (search box + sortable
- * table + side panel form + delete confirmation), so their strings differ only in the noun. Five
- * copy modules would repeat the `common` half five times and make a wording change a five-file
- * edit.
+ * Interface text of the whole "Справочники" screen (ADR 021) — ONE module for all six tabs rather
+ * than one per tab: since 2026-10-11 the tabs are six instances of the same editable table (shared
+ * toolbar + draft + grid), so their strings differ only in the noun. Six copy modules would repeat
+ * the `common` half six times and make a wording change a six-file edit.
  *
- * Sections mirror the folders: `common` (the shell), `places`, `expenseTemplates`,
- * `noteTemplates`, `tags`, `regions`.
+ * Sections mirror the folders: `common` (page, toolbar, grid), `places`, `expenseTemplates`,
+ * `noteTemplates`, `tags`, `regions`, `vehicleClasses`.
  *
- * What is NOT here: generic verbs (`Сохранить`, `Отмена`, `Добавить`, `Изменить`, `Удалить`) come
- * from `adminCommonCopy`, and tag colour captions from `adminEnumsCopy`. What the admin TYPES —
- * the catalog entries' own names and teasers — is content, stored in RU+EN by `catalogMapper`,
- * and is not translated by the interface locale.
+ * What is NOT here: toolbar button captions (`Отмена`/`Сохранить`/`Добавить`/`Удалить`) come from
+ * `AdminToolbar`'s own `ui.toolbar.*` dictionary, tag colour captions from `adminEnumsCopy`. What the
+ * admin TYPES — the catalog entries' own names and teasers — is content, stored in RU+EN by
+ * `catalogMapper`, and is not translated by the interface locale.
  *
  * `ru` is deliberately not `as const` — see `shared/i18n/defineCopy.ts`.
  */
@@ -34,17 +33,42 @@ const ru = {
       tags: 'Теги',
       vehicleClasses: 'Классы авто',
     },
+    /** Screen-reader text of the dot on a tab that holds unsaved edits. */
+    tabHasChanges: 'есть несохранённые правки',
     searchByName: 'Поиск по названию…',
+    changeCount: (count: number) =>
+      `${count} ${pluralizeRu(count, ['изменение', 'изменения', 'изменений'])}`,
+    noPermission: 'Недостаточно прав',
     colOrder: 'Порядок',
-    colName: 'Название',
-    nameField: 'Название',
+    colSelect: 'Выбор',
+    colStatus: 'Состояние',
+    colDetails: 'Подробности',
+    colNameRu: 'Название RU',
+    colNameEn: 'Название EN',
+    selectAll: 'Выбрать все строки',
+    selectRow: (name: string) => `Выбрать «${name}»`,
+    statusNew: 'новая',
+    statusChanged: 'изменено',
+    statusDeleted: 'удалится',
+    restore: 'Вернуть',
+    restoreRow: (name: string) => `Вернуть «${name}»`,
+    discard: 'Убрать',
+    discardRow: (name: string) => `Убрать новую строку «${name}»`,
+    details: 'Подробнее',
+    showDetails: (name: string) => `Показать подробности: ${name}`,
+    hideDetails: (name: string) => `Скрыть подробности: ${name}`,
+    newRowFallback: 'Новая строка',
     requiredField: 'Обязательное поле.',
-    savingButton: 'Сохранение…',
-    deletingButton: 'Удаление…',
     emptyValue: '—',
     nothingFoundFor: (query: string) => `Ничего не найдено по «${query}».`,
     reorderDisabledBySearch: 'Изменение порядка недоступно во время поиска — очистите поле.',
     dragToReorder: (name: string) => `Перетащить «${name}», чтобы изменить порядок`,
+    banners: {
+      validation: (tabs: string) =>
+        `Не сохранено: исправьте подсвеченные поля (${tabs}). Остальные правки ждут в черновике.`,
+      partial: (count: number, tabs: string) =>
+        `Сохранено не всё: ${count} ${pluralizeRu(count, ['строка не сохранилась', 'строки не сохранились', 'строк не сохранились'])} (${tabs}) — они подсвечены и остались в черновике. Остальные правки применены.`,
+    },
     errors: {
       inUse: 'Эта запись используется в турах — сначала уберите её оттуда, затем удалите.',
       invalidData: (action: string) =>
@@ -56,22 +80,15 @@ const ru = {
 
   places: {
     searchPlaceholder: 'Поиск по названию, слагу, региону…',
-    addButton: 'Добавить точку',
     empty: 'Точек маршрута пока нет.',
     colSlug: 'Слаг',
     colRegion: 'Регион',
+    colPhotos: 'Фото',
     sortableItem: 'Точка маршрута',
-    panelEdit: 'Точка маршрута',
-    panelCreate: 'Новая точка маршрута',
-    deleteTitle: 'Удалить точку?',
-    deleteBefore: 'Точка «',
-    deleteAfter: '» будет удалена безвозвратно. Если она используется в турах, сначала уберите её оттуда.',
-    slugLabel: 'Слаг',
     slugHint: 'Уникальный, латиницей, напр. «garni-temple».',
     slugError: 'Укажите слаг.',
-    regionLabel: 'Регион',
     regionPlaceholder: 'Выберите регион',
-    /** Shown under a disabled region picker: the role has no `catalog.regions` view right. */
+    /** Help of the region column when the role has no `catalog.regions` view right. */
     regionsUnavailableHint:
       'Список регионов недоступен вашей роли — попросите администратора выдать право на просмотр справочника регионов.',
     regionError: 'Выберите регион.',
@@ -84,7 +101,6 @@ const ru = {
     photosHint:
       'Добавляются в галерею дня автоматически, когда эта точка выбрана из справочника в маршруте (не для точек, введённых свободным текстом).',
     actions: {
-      reorder: 'изменить порядок точек',
       save: 'сохранить точку',
       add: 'добавить точку',
       delete: 'удалить точку',
@@ -92,17 +108,10 @@ const ru = {
   },
 
   expenseTemplates: {
-    addButton: 'Добавить расход',
     empty: 'Доп. расходов пока нет.',
     sortableItem: 'Доп. расход',
-    panelEdit: 'Доп. расход',
-    panelCreate: 'Новый доп. расход',
-    deleteTitle: 'Удалить расход?',
-    deleteBefore: 'Расход «',
-    deleteAfter: '» будет удалён безвозвратно. Если он используется в турах, сначала уберите его оттуда.',
     rowFallback: (id: number) => `расход №${id}`,
     actions: {
-      reorder: 'изменить порядок расходов',
       save: 'сохранить расход',
       add: 'добавить расход',
       delete: 'удалить расход',
@@ -110,21 +119,14 @@ const ru = {
   },
 
   noteTemplates: {
-    addButton: 'Добавить заметку',
     empty: 'Заметок пока нет.',
     emptyOfType: 'Заметок этого типа пока нет.',
     colType: 'Тип',
-    typeField: 'Тип',
     typeFilterLabel: 'Тип заметки',
     reorderDisabledByFilter: 'Изменение порядка недоступно во время фильтрации — сбросьте поиск и тип.',
     sortableItem: 'Заметка',
-    panelEdit: 'Заметка',
-    panelCreate: 'Новая заметка',
-    deleteTitle: 'Удалить заметку?',
-    deleteBefore: 'Заметка «',
-    deleteAfter: '» будет удалена безвозвратно. Если она используется в турах, сначала уберите её оттуда.',
-    rowFallback: (id: number) => `заметку №${id}`,
-    /** Full captions — the `Тип` column and the form's select. */
+    rowFallback: (id: number) => `заметка №${id}`,
+    /** Full captions — the `Тип` column's select. */
     typeLabels: {
       [TourNoteType.OrganizationalDetail]: 'Организационная деталь',
       [TourNoteType.Restriction]: 'Ограничение',
@@ -138,7 +140,6 @@ const ru = {
     filterIncluded: 'Включено',
     filterNotIncluded: 'Не включено',
     actions: {
-      reorder: 'изменить порядок заметок',
       save: 'сохранить заметку',
       add: 'добавить заметку',
       delete: 'удалить заметку',
@@ -146,19 +147,12 @@ const ru = {
   },
 
   tags: {
-    addButton: 'Добавить тег',
     empty: 'Тегов пока нет.',
     sortableItem: 'Тег',
-    panelEdit: 'Тег',
-    panelCreate: 'Новый тег',
-    deleteTitle: 'Удалить тег?',
-    deleteBefore: 'Тег «',
-    deleteAfter: '» будет удалён безвозвратно. Если он назначен турам, сначала уберите его оттуда.',
     rowFallback: (id: number) => `тег №${id}`,
-    colorLabel: 'Цвет',
-    colorGroupLabel: 'Цвет тега',
+    colColor: 'Цвет',
+    colorGroupLabel: (name: string) => `Цвет тега «${name}»`,
     actions: {
-      reorder: 'изменить порядок тегов',
       save: 'сохранить тег',
       add: 'добавить тег',
       delete: 'удалить тег',
@@ -166,44 +160,36 @@ const ru = {
   },
 
   regions: {
+    empty: 'Регионов нет.',
     notice:
       'Список регионов зафиксирован на бэкенде — добавление, переименование и удаление здесь недоступны. Редактируется только тизер (короткое описание под названием на карте).',
-    tourCount: (count: number) => `${count} ${pluralizeRu(count, ['тур', 'тура', 'туров'])}`,
+    colName: 'Название',
+    colTours: 'Туров',
     teaserRu: 'Тизер (RU)',
     teaserEn: 'Тизер (EN)',
-    saveServerError: (status: number) => `Не удалось сохранить: сервер вернул ошибку (${status}).`,
-    saveNetworkError: 'Не удалось сохранить: проверьте соединение и попробуйте ещё раз.',
+    actions: {
+      save: 'сохранить тизер региона',
+    },
   },
 
   vehicleClasses: {
-    addButton: 'Добавить класс',
     empty: 'Классов авто пока нет.',
     sortableItem: 'Класс авто',
-    panelEdit: 'Класс авто',
-    panelCreate: 'Новый класс авто',
-    deleteTitle: 'Удалить класс?',
-    deleteBefore: 'Класс «',
-    deleteAfter: '» будет удалён безвозвратно. Если он используется в трансферах или заказах, сначала уберите его оттуда.',
     /** Тексту API-ошибки 2010 нужна своя формулировка — общий `common.errors.inUse` говорит
      * «используется в турах», что для класса авто звучит неточно (он привязан к трансферу/заказу,
      * не к турам вообще). */
     deleteInUseError:
       'Этот класс авто используется в трансферах или заказах — сначала уберите его оттуда, затем удалите.',
     rowFallback: (id: number) => `класс №${id}`,
-    capacityLabel: 'Вместимость, пассажиров',
-    capacityHint: 'Без учёта водителя.',
-    capacityError: 'Укажите вместимость — минимум 1 пассажир.',
-    luggageCapacityLabel: 'Лимит багажа, единиц',
-    luggageCapacityHint: 'Средний чемодан = 3 единицы, большой чемодан = 5 единиц.',
-    luggageCapacityError: 'Укажите лимит багажа — 0 или больше.',
-    isActiveLabel: 'Активен (доступен для выбора в трансферах)',
-    colCapacity: 'Вместимость',
-    colLuggage: 'Багаж',
-    colStatus: 'Статус',
-    statusActive: 'Активен',
-    statusHidden: 'Скрыт',
+    colCapacity: 'Мест',
+    capacityHint: 'Вместимость в пассажирах, без учёта водителя.',
+    capacityError: 'Минимум 1 пассажир.',
+    colLuggage: 'Багаж, ед.',
+    luggageCapacityHint: 'Лимит багажа в единицах: средний чемодан = 3 единицы, большой чемодан = 5 единиц.',
+    luggageCapacityError: '0 или больше.',
+    colActive: 'Активен',
+    activeHint: 'Только активные классы доступны для выбора в трансферах. Неактивный класс не удаляется.',
     actions: {
-      reorder: 'изменить порядок классов авто',
       save: 'сохранить класс авто',
       add: 'добавить класс авто',
       delete: 'удалить класс авто',
@@ -225,17 +211,40 @@ export const catalogCopy = defineCopy(ru, {
       tags: 'Tags',
       vehicleClasses: 'Vehicle classes',
     },
+    tabHasChanges: 'has unsaved edits',
     searchByName: 'Search by name…',
+    changeCount: (count: number) => `${count} ${pluralizeEn(count, ['change', 'changes'])}`,
+    noPermission: 'Not enough permissions',
     colOrder: 'Order',
-    colName: 'Name',
-    nameField: 'Name',
+    colSelect: 'Select',
+    colStatus: 'Status',
+    colDetails: 'Details',
+    colNameRu: 'Name RU',
+    colNameEn: 'Name EN',
+    selectAll: 'Select all rows',
+    selectRow: (name: string) => `Select “${name}”`,
+    statusNew: 'new',
+    statusChanged: 'changed',
+    statusDeleted: 'will be deleted',
+    restore: 'Restore',
+    restoreRow: (name: string) => `Restore “${name}”`,
+    discard: 'Remove',
+    discardRow: (name: string) => `Remove the new row “${name}”`,
+    details: 'Details',
+    showDetails: (name: string) => `Show details: ${name}`,
+    hideDetails: (name: string) => `Hide details: ${name}`,
+    newRowFallback: 'New row',
     requiredField: 'This field is required.',
-    savingButton: 'Saving…',
-    deletingButton: 'Deleting…',
     emptyValue: '—',
     nothingFoundFor: (query: string) => `Nothing found for “${query}”.`,
     reorderDisabledBySearch: 'Reordering is unavailable while searching — clear the field.',
     dragToReorder: (name: string) => `Drag “${name}” to change the order`,
+    banners: {
+      validation: (tabs: string) =>
+        `Not saved: fix the highlighted fields (${tabs}). Your other edits are still in the draft.`,
+      partial: (count: number, tabs: string) =>
+        `Not everything was saved: ${count} ${pluralizeEn(count, ['row', 'rows'])} failed (${tabs}) — they are highlighted and kept in the draft. All other edits were applied.`,
+    },
     errors: {
       inUse: 'This entry is used by tours — remove it from them first, then delete it.',
       invalidData: (action: string) =>
@@ -247,20 +256,13 @@ export const catalogCopy = defineCopy(ru, {
 
   places: {
     searchPlaceholder: 'Search by name, slug or region…',
-    addButton: 'Add route point',
     empty: 'No route points yet.',
     colSlug: 'Slug',
     colRegion: 'Region',
+    colPhotos: 'Photos',
     sortableItem: 'Route point',
-    panelEdit: 'Route point',
-    panelCreate: 'New route point',
-    deleteTitle: 'Delete route point?',
-    deleteBefore: 'The route point “',
-    deleteAfter: '” will be deleted permanently. If it is used in tours, remove it from them first.',
-    slugLabel: 'Slug',
     slugHint: 'Unique, Latin letters, e.g. “garni-temple”.',
     slugError: 'Enter a slug.',
-    regionLabel: 'Region',
     regionPlaceholder: 'Select a region',
     regionsUnavailableHint:
       'The region list is not available to your role — ask an administrator to grant view access to the regions reference.',
@@ -274,7 +276,6 @@ export const catalogCopy = defineCopy(ru, {
     photosHint:
       'Added to the day gallery automatically when this point is picked from the catalog in an itinerary (not for points typed in as free text).',
     actions: {
-      reorder: 'reorder route points',
       save: 'save the route point',
       add: 'add the route point',
       delete: 'delete the route point',
@@ -282,17 +283,10 @@ export const catalogCopy = defineCopy(ru, {
   },
 
   expenseTemplates: {
-    addButton: 'Add expense',
     empty: 'No extra expenses yet.',
     sortableItem: 'Extra expense',
-    panelEdit: 'Extra expense',
-    panelCreate: 'New extra expense',
-    deleteTitle: 'Delete expense?',
-    deleteBefore: 'The expense “',
-    deleteAfter: '” will be deleted permanently. If it is used in tours, remove it from them first.',
     rowFallback: (id: number) => `expense #${id}`,
     actions: {
-      reorder: 'reorder extra expenses',
       save: 'save the expense',
       add: 'add the expense',
       delete: 'delete the expense',
@@ -300,19 +294,12 @@ export const catalogCopy = defineCopy(ru, {
   },
 
   noteTemplates: {
-    addButton: 'Add note',
     empty: 'No notes yet.',
     emptyOfType: 'No notes of this type yet.',
     colType: 'Type',
-    typeField: 'Type',
     typeFilterLabel: 'Note type',
     reorderDisabledByFilter: 'Reordering is unavailable while filtering — clear the search and the type.',
     sortableItem: 'Note',
-    panelEdit: 'Note',
-    panelCreate: 'New note',
-    deleteTitle: 'Delete note?',
-    deleteBefore: 'The note “',
-    deleteAfter: '” will be deleted permanently. If it is used in tours, remove it from them first.',
     rowFallback: (id: number) => `note #${id}`,
     typeLabels: {
       [TourNoteType.OrganizationalDetail]: 'Organisational detail',
@@ -326,7 +313,6 @@ export const catalogCopy = defineCopy(ru, {
     filterIncluded: 'Included',
     filterNotIncluded: 'Not included',
     actions: {
-      reorder: 'reorder notes',
       save: 'save the note',
       add: 'add the note',
       delete: 'delete the note',
@@ -334,19 +320,12 @@ export const catalogCopy = defineCopy(ru, {
   },
 
   tags: {
-    addButton: 'Add tag',
     empty: 'No tags yet.',
     sortableItem: 'Tag',
-    panelEdit: 'Tag',
-    panelCreate: 'New tag',
-    deleteTitle: 'Delete tag?',
-    deleteBefore: 'The tag “',
-    deleteAfter: '” will be deleted permanently. If it is assigned to tours, remove it from them first.',
     rowFallback: (id: number) => `tag #${id}`,
-    colorLabel: 'Colour',
-    colorGroupLabel: 'Tag colour',
+    colColor: 'Colour',
+    colorGroupLabel: (name: string) => `Colour of the tag “${name}”`,
     actions: {
-      reorder: 'reorder tags',
       save: 'save the tag',
       add: 'add the tag',
       delete: 'delete the tag',
@@ -354,41 +333,33 @@ export const catalogCopy = defineCopy(ru, {
   },
 
   regions: {
+    empty: 'No regions.',
     notice:
       'The list of regions is fixed on the backend — adding, renaming and deleting are not available here. Only the teaser (the short description under the name on the map) is editable.',
-    tourCount: (count: number) => `${count} ${pluralizeEn(count, ['tour', 'tours'])}`,
+    colName: 'Name',
+    colTours: 'Tours',
     teaserRu: 'Teaser (RU)',
     teaserEn: 'Teaser (EN)',
-    saveServerError: (status: number) => `Could not save: the server returned an error (${status}).`,
-    saveNetworkError: 'Could not save: check your connection and try again.',
+    actions: {
+      save: 'save the region teaser',
+    },
   },
 
   vehicleClasses: {
-    addButton: 'Add vehicle class',
     empty: 'No vehicle classes yet.',
     sortableItem: 'Vehicle class',
-    panelEdit: 'Vehicle class',
-    panelCreate: 'New vehicle class',
-    deleteTitle: 'Delete vehicle class?',
-    deleteBefore: 'The vehicle class “',
-    deleteAfter: '” will be deleted permanently. If it is used in transfers or orders, remove it from them first.',
     deleteInUseError:
       'This vehicle class is used in transfers or orders — remove it from them first, then delete it.',
     rowFallback: (id: number) => `vehicle class #${id}`,
-    capacityLabel: 'Capacity, passengers',
-    capacityHint: 'Not counting the driver.',
-    capacityError: 'Enter the capacity — at least 1 passenger.',
-    luggageCapacityLabel: 'Luggage limit, units',
-    luggageCapacityHint: 'A medium suitcase = 3 units, a large suitcase = 5 units.',
-    luggageCapacityError: 'Enter the luggage limit — 0 or more.',
-    isActiveLabel: 'Active (selectable for transfers)',
-    colCapacity: 'Capacity',
-    colLuggage: 'Luggage',
-    colStatus: 'Status',
-    statusActive: 'Active',
-    statusHidden: 'Hidden',
+    colCapacity: 'Seats',
+    capacityHint: 'Passenger capacity, not counting the driver.',
+    capacityError: 'At least 1 passenger.',
+    colLuggage: 'Luggage, units',
+    luggageCapacityHint: 'Luggage limit in units: a medium suitcase = 3 units, a large suitcase = 5 units.',
+    luggageCapacityError: '0 or more.',
+    colActive: 'Active',
+    activeHint: 'Only active classes can be picked for transfers. An inactive class is not deleted.',
     actions: {
-      reorder: 'reorder vehicle classes',
       save: 'save the vehicle class',
       add: 'add the vehicle class',
       delete: 'delete the vehicle class',

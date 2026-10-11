@@ -279,6 +279,40 @@ export function RefreshIcon(props: IconProps) {
   )
 }
 
+/** Counter-clockwise arrow — "Восстановить" (bring an archived record back). One arc + one
+ * arrowhead, deliberately not `RefreshIcon`'s two-arrow loop: restoring is a one-way return, not
+ * a re-fetch. */
+export function RestoreIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" />
+      <path d="M4 4.5v4h4" />
+    </Icon>
+  )
+}
+
+/** Archive box — empty state of the products archive. A lid over a box with a handle slot. */
+export function ArchiveIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="4" width="18" height="4.5" rx="1" />
+      <path d="M5 8.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5" />
+      <path d="M10 12.5h4" />
+    </Icon>
+  )
+}
+
+/** Picture frame — placeholder for a missing thumbnail. */
+export function ImageIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <circle cx="9" cy="9.5" r="1.5" />
+      <path d="m20.5 15.5-4.5-4.5-8 8" />
+    </Icon>
+  )
+}
+
 export function AlertIcon(props: IconProps) {
   return (
     <Icon {...props}>

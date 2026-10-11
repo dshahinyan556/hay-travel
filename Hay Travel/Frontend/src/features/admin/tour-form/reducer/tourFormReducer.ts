@@ -68,6 +68,7 @@ export type TourFormAction =
   | { kind: 'setField'; field: 'groupCapacity'; value: string }
   | { kind: 'setField'; field: 'mainImageUrl'; value: string }
   | { kind: 'setField'; field: 'isActive'; value: boolean }
+  | { kind: 'setField'; field: 'isFeatured'; value: boolean }
   | { kind: 'setField'; field: 'requiresPrepayment'; value: boolean }
   | { kind: 'setField'; field: 'discountPercent'; value: string }
   | { kind: 'setField'; field: 'discountStartDate'; value: string }
@@ -233,11 +234,22 @@ export function applyDayRule(days: TourDayFormState[], type: TourType): TourDayF
   return next
 }
 
-/** Normalize a freshly built form so its day count already matches its type. Used as the
- * `useReducer` lazy initializer so the initial render is never in an invalid day-count state. */
+/**
+ * Normalize a freshly built form so it already looks the way the editor would leave it. Used as the
+ * `useReducer` lazy initializer, so the initial render — and therefore the dirty-check baseline —
+ * is already in that shape:
+ *  - the day count matches the type (never an invalid day-count state on first render);
+ *  - start times are chronological. The server returns them by `sortOrder`, which is not
+ *    necessarily chronological (rows saved before the editor started sorting), and the editor
+ *    sorts on every blur — without this, merely focusing and leaving a time field reordered the
+ *    list and the form reported "unsaved changes" (checklist 1.2).
+ */
 export function normalizeInitialState(state: TourFormState): TourFormState {
   const days = applyDayRule(state.days, state.type)
-  return days === state.days ? state : { ...state, days }
+  const startTimes = sortStartTimes(state.startTimes)
+  const timesMoved = startTimes.some((slot, i) => slot !== state.startTimes[i])
+  if (days === state.days && !timesMoved) return state
+  return { ...state, days, startTimes: timesMoved ? startTimes : state.startTimes }
 }
 
 /** The smallest legal day count for the current type. */
@@ -290,6 +302,7 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
       if (action.field === 'groupCapacity') return { ...state, groupCapacity: action.value }
       if (action.field === 'mainImageUrl') return { ...state, mainImageUrl: action.value }
       if (action.field === 'isActive') return { ...state, isActive: action.value }
+      if (action.field === 'isFeatured') return { ...state, isFeatured: action.value }
       if (action.field === 'requiresPrepayment') return { ...state, requiresPrepayment: action.value }
       if (action.field === 'discountPercent') return { ...state, discountPercent: action.value }
       if (action.field === 'discountStartDate') return { ...state, discountStartDate: action.value }
@@ -345,7 +358,15 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
         routePoints: setItemText(day.routePoints, action.key, action.lang, action.value),
       }))
 
-    case 'setRoutePointPlace':
+    case 'setRoutePointPlace': {
+      // Re-picking the place the point is ALREADY linked to is not an edit. `Select` commits on
+      // every click, including the current option, and without this guard that click re-appended
+      // the place's photos to the gallery (for a loaded tour `autofilledImageKeys` is empty, so
+      // the old copies are never swapped out) and overwrote the admin's own text with the catalog
+      // name — a real data change out of a "nothing changed" click (checklist 1.2).
+      const targetDay = state.days.find((d) => d.key === action.dayKey)
+      const point = targetDay?.routePoints.find((rp) => rp.key === action.key)
+      if (point && point.placeId === action.placeId) return state
       return updateDay(state, action.dayKey, (day) => {
         const { [action.key]: previousKeys, ...otherLinks } = day.autofilledImageKeys
         const { gallery, insertAt } = removeLinkedImages(day.gallery, previousKeys)
@@ -364,6 +385,7 @@ export function tourFormReducer(state: TourFormState, action: TourFormAction): T
               : otherLinks,
         }
       })
+    }
 
     case 'fillDayFromSource': {
       const routePoints = action.content.routePoints.map((rp) => ({

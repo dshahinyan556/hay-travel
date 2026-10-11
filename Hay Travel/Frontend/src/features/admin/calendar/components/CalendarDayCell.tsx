@@ -57,6 +57,25 @@ export function CalendarDayCell({ day, selected, tourTitle, onSelect }: Calendar
       )
     }
   }
+  // Правки черновика: «будет закрыт / будет открыт» словами — цвет и пунктир для скринридера не
+  // информация. Имена — как у частичного закрытия выше: до двух по названию, дальше числом.
+  const draft = day.draft ?? null
+  if (draft !== null) {
+    const nameList = (names: string[]) => (names.length <= 2 ? names.join(', ') : String(names.length))
+    if (draft.global === 'close') parts.push(copy.draftCellWillClose(copy.draftCellWholeDay))
+    if (draft.global === 'open') parts.push(copy.draftCellWillOpen(copy.draftCellWholeDay))
+    const closing = [
+      ...draft.closeTypes.map((tourType) => tourTypePluralLabel(tourType, copy)),
+      ...draft.closeTours.map(tourTitle),
+    ]
+    const opening = [
+      ...draft.openTypes.map((tourType) => tourTypePluralLabel(tourType, copy)),
+      ...draft.openTours.map(tourTitle),
+    ]
+    if (closing.length > 0) parts.push(copy.draftCellWillClose(nameList(closing)))
+    if (opening.length > 0) parts.push(copy.draftCellWillOpen(nameList(opening)))
+    if (draft.rulesTouched) parts.push(copy.draftCellTouched)
+  }
   const description = parts.join(', ')
 
   const stateClasses = selected
@@ -64,6 +83,14 @@ export function CalendarDayCell({ day, selected, tourTitle, onSelect }: Calendar
     : level === 'closed'
       ? 'ring-1 ring-neutral-200'
       : 'ring-1 ring-neutral-200 hover:bg-neutral-50'
+  // Синий пунктир по контуру — «в этом дне есть несохранённая правка»; закрытый черновиком день
+  // получает ещё и синюю штриховку вместо серой, чтобы «будет закрыт» не читался как «закрыт».
+  const draftClasses =
+    draft === null ? '' : 'outline outline-1 -outline-offset-1 outline-dashed outline-blue-600'
+  const hatchClasses =
+    draft?.global === 'close'
+      ? 'bg-blue-50 bg-[repeating-linear-gradient(45deg,transparent,transparent_5px,rgb(29_78_216/0.14)_5px,rgb(29_78_216/0.14)_10px)] text-blue-700'
+      : 'bg-neutral-100 bg-[repeating-linear-gradient(45deg,transparent,transparent_5px,rgb(0_0_0/0.05)_5px,rgb(0_0_0/0.05)_10px)] text-neutral-400'
 
   return (
     <button
@@ -73,12 +100,12 @@ export function CalendarDayCell({ day, selected, tourTitle, onSelect }: Calendar
       aria-pressed={selected}
       aria-current={day.isToday ? 'date' : undefined}
       title={description}
-      className={`relative flex aspect-square min-h-11 w-full min-w-0 cursor-pointer flex-col items-start justify-between overflow-hidden rounded-lg p-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30 ${stateClasses} ${
+      className={`relative flex aspect-square min-h-11 w-full min-w-0 cursor-pointer flex-col items-start justify-between overflow-hidden rounded-lg p-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900/30 ${stateClasses} ${draftClasses} ${
         level === 'closed'
           ? // Diagonal hatch as an arbitrary background-IMAGE (the `bg-neutral-100` next to it is
             // the background-COLOR, so the two compose rather than fight). Kept inline instead of
             // a global CSS class: one screen uses it.
-            'bg-neutral-100 bg-[repeating-linear-gradient(45deg,transparent,transparent_5px,rgb(0_0_0/0.05)_5px,rgb(0_0_0/0.05)_10px)] text-neutral-400'
+            hatchClasses
           : day.isPast
             ? 'bg-white text-neutral-400'
             : 'bg-white text-neutral-900'

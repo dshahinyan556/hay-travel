@@ -114,9 +114,12 @@ export function canViewAny(screens: readonly KnownScreenKey[]): boolean {
  *
  * Note it asks the RESOLVED set, not the token bit: by the time the panel root is reached the matrix
  * has been fetched, and it is the more current of the two.
+ *
+ * Pass the snapshot an `await ensurePermissionsReady()` returned rather than re-reading the store:
+ * a concurrent token refresh can clear the store between that await and this check, and the
+ * cleared `idle` state would read as "no access".
  */
-export function hasAnyScreenAccess(): boolean {
-  const snapshot = getPermissions()
+export function hasAnyScreenAccess(snapshot: PermissionSnapshot = getPermissions()): boolean {
   if (snapshot.status !== 'ready') return false
   if (snapshot.isAdmin) return true
   return Object.values(snapshot.screens).some((screen) => screen.canView)

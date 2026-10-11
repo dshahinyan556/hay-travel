@@ -37,6 +37,8 @@ export interface UseSettingsFormResult {
   actions: SettingsFormActions
   /** Number of settings that differ from the baseline. 0 = nothing to save. */
   dirtyCount: number
+  /** Drop every unsaved edit (toolbar «Отмена»). */
+  reset: () => void
   validation: SettingsValidation
   /** False while saving or while nothing changed. Stays true even if a required language is
    *  empty — `submit` itself no-ops on an invalid form and reveals the field errors instead, so
@@ -130,6 +132,12 @@ export function useSettingsForm(initial: SiteSettingInfoModel[]): UseSettingsFor
   const dirtyCount = payload.length
   const canSubmit = !isSubmitting && dirtyCount > 0
 
+  function reset(): void {
+    setState((prev) => ({ ...prev, fields: baseline }))
+    setHasAttemptedSubmit(false)
+    setError(null)
+  }
+
   function submit(): void {
     setHasAttemptedSubmit(true)
     if (isSubmitting || dirtyCount === 0 || !rawValidation.isValid) return
@@ -150,6 +158,7 @@ export function useSettingsForm(initial: SiteSettingInfoModel[]): UseSettingsFor
     state,
     actions,
     dirtyCount,
+    reset,
     validation,
     canSubmit,
     hasAttemptedSubmit,

@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link, redirect, useLoaderData } from 'react-router'
 import type { LoaderFunctionArgs } from 'react-router'
 import {
-  AdminActionButton,
+  AdminToolbar,
   DataEntryScreenLayout,
   Tabs,
   UnsavedChangesModal,
   type TabItem,
 } from '@/shared/ui'
+import { AlertIcon, CheckIcon } from '@/shared/ui/icons'
 import { useUnsavedChangesGuard } from '@/shared/hooks'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import { getStoredLocale } from '@/shared/lib/locale'
@@ -147,28 +148,25 @@ function NotificationEventView({ event, users, templates }: NotificationEventVie
       breadcrumbsLabel={copy.breadcrumbAria}
       title={eventLabel}
       subtitle={copy.eventSubtitle}
-      /* Не `AdminToolbar`: его `onAdd`/`onDelete` обязательны, а здесь бессмысленны — событие
-         нельзя ни создать, ни удалить. Тот же ряд контекстных кнопок, что у `UserDetailPage`. */
+      /* `AdminToolbar` без Add/Delete — событие нельзя ни создать, ни удалить (набор событий
+         задан сервером), так что тулбар — только Отмена/Сохранить, как у фоновых задач. */
       controlZone={
-        <div className="ml-auto flex items-center gap-3">
-          {form.isDirty && <span className="hidden text-xs text-neutral-500 sm:inline">{copy.dirtyHint}</span>}
-          <AdminActionButton
-            label={copy.cancelEdits}
-            variant="secondary"
-            disabled={!form.isDirty || form.isSubmitting}
-            onClick={form.reset}
+        <>
+          <AdminToolbar
+            onCancel={form.reset}
+            onSave={form.submit}
+            cancelState={{ disabled: !form.isDirty || form.isSubmitting }}
+            saveState={{
+              disabled: !form.canSubmit || !permission.canUpdate,
+              pending: form.isSubmitting,
+              hint: permission.canUpdate ? null : copy.readOnlyHint,
+            }}
           />
-          <AdminActionButton
-            label={copy.save}
-            pendingLabel={copy.saving}
-            variant="primary"
-            pending={form.isSubmitting}
-            disabled={!form.canSubmit || !permission.canUpdate}
-            onClick={form.submit}
-          />
-        </div>
+          {form.isDirty && <span className="text-xs text-neutral-500">{copy.dirtyHint}</span>}
+        </>
       }
       message={
+        (!permission.canUpdate || form.error || form.savedAt !== null) && (
         <>
           {!permission.canUpdate && (
             <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
@@ -180,7 +178,7 @@ function NotificationEventView({ event, users, templates }: NotificationEventVie
               role="alert"
               className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
             >
-              <span aria-hidden="true">⚠️</span>
+              <AlertIcon size={16} className="mt-0.5 shrink-0" />
               <span>{form.error}</span>
             </div>
           )}
@@ -189,11 +187,12 @@ function NotificationEventView({ event, users, templates }: NotificationEventVie
               role="status"
               className="flex items-start gap-2 rounded-lg border border-neutral-300 bg-neutral-50 px-4 py-3 text-sm text-neutral-900"
             >
-              <span aria-hidden="true">✓</span>
+              <CheckIcon size={16} className="mt-0.5 shrink-0" />
               <span>{copy.saved}</span>
             </div>
           )}
         </>
+        )
       }
     >
       <Tabs tabs={tabs} activeId={activeTab} onChange={setActiveTab} label={copy.tabsLabel} />

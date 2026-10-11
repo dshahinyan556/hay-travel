@@ -258,6 +258,11 @@ export const userCopy = defineCopy(
       resetSuperAdminHint: 'Сбросить пароль главного администратора может только он сам',
       resetTitle: (userLabel: string) => `Сбросить пароль «${userLabel}»?`,
       resetBody: 'Пользователь будет обязан задать новый пароль при следующем входе.',
+      /** Тулбар карточки: Save заблокирован `SuperAdminGuard`'ом, а не отсутствием права. */
+      saveSuperAdminHint: 'Учётную запись главного администратора может менять только он сам',
+      actionsGroupAccount: 'Учётная запись',
+      actionsLabel: (userLabel: string) => `Действия с пользователем «${userLabel}»`,
+      unsavedChanges: 'Есть несохранённые изменения',
     },
 
     /** What was being attempted — substituted into `errors.forbidden`/`server`/`network` so no
@@ -266,6 +271,7 @@ export const userCopy = defineCopy(
       changeRole: (userLabel: string) => `изменить роль пользователя «${userLabel}»`,
       changeJobRole: 'изменить роль исполнителя по умолчанию',
       changePreferredLanguage: 'изменить язык писем пользователя',
+      saveChanges: 'сохранить изменения пользователя',
       deleteUser: 'удалить пользователя',
       resetPassword: 'сбросить пароль',
       sendPasswordResetEmail: 'отправить ссылку на смену пароля',
@@ -468,12 +474,17 @@ export const userCopy = defineCopy(
       resetSuperAdminHint: 'Only the super administrator can reset their own password',
       resetTitle: (userLabel: string) => `Reset the password of “${userLabel}”?`,
       resetBody: 'The user will have to set a new password at their next sign-in.',
+      saveSuperAdminHint: 'Only the super administrator can change their own account',
+      actionsGroupAccount: 'Account',
+      actionsLabel: (userLabel: string) => `Actions for the user “${userLabel}”`,
+      unsavedChanges: 'You have unsaved changes',
     },
 
     errorActions: {
       changeRole: (userLabel: string) => `change the role of “${userLabel}”`,
       changeJobRole: 'change the default employee role',
       changePreferredLanguage: 'change the user’s email language',
+      saveChanges: 'save the user’s changes',
       deleteUser: 'delete the user',
       resetPassword: 'reset the password',
       sendPasswordResetEmail: 'send a password reset link',

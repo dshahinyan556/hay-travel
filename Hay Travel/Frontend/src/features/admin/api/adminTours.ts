@@ -12,8 +12,26 @@
  */
 
 import { authFetch } from '@/shared/auth'
+import { ApiError } from '@/shared/lib/http'
 import type { TourType } from '@/features/admin/lib/enums'
 import type { TourCreateModel, TourCreatedModel, TourInfoModel } from '@/shared/types/attours'
+
+/** How many tours may be featured at once — mirrors `TourFeaturedService.MaxFeaturedTours`
+ * (backend). The server is the authority: this number only feeds copy («N из 9») and never gates
+ * a request on its own. NB: the server counts ARCHIVED featured tours too (archiving does not
+ * clear `IsFeatured`). */
+export const MAX_FEATURED_TOURS = 9
+
+/** `GlobalErrorCode.TooManyFeaturedTours` — what `SetFeatured` answers once the cap is reached. */
+const TOO_MANY_FEATURED_CODE = 2011
+
+/** True when `err` is the backend's "already 9 featured" rejection of `setTourFeatured`. Shared by
+ * the products list and the product card, which both turn it into their own sentence. */
+export function isTooManyFeaturedError(err: unknown): boolean {
+  if (!(err instanceof ApiError) || typeof err.body !== 'object' || err.body === null) return false
+  const record = err.body as Record<string, unknown>
+  return (record.errorCode ?? record.ErrorCode) === TOO_MANY_FEATURED_CODE
+}
 
 /** GET the empty create skeleton for a given tour type. */
 export function initTour(type: TourType): Promise<TourCreateModel> {
@@ -69,7 +87,9 @@ export function setTourArchived(id: number, isArchived: boolean): Promise<void> 
 }
 
 /** PATCH the featured flag of a tour (show / hide in the public "избранное" section). Rejects
- * with `ApiError` carrying `errorCode: TooManyFeaturedTours` (2011) when 9 are already featured. */
+ * with `ApiError` carrying `errorCode: TooManyFeaturedTours` (2011) when 9 are already featured —
+ * see `isTooManyFeaturedError`. Not part of `UpdateTour` (the server ignores `isFeatured` there),
+ * so the product card calls this after a successful save when the checkbox changed. */
 export function setTourFeatured(id: number, isFeatured: boolean): Promise<void> {
   return authFetch<void>('api/Tour/SetFeatured', {
     method: 'PATCH',

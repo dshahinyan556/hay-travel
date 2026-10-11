@@ -19,11 +19,11 @@ interface SettingsFormProps {
  *
  * Tabs hide the other sections' fields behind a single "Сохранить" button — the risk being the
  * admin forgets what they changed on a tab they've since left. `SettingsActions` covers that: its
- * "Изменено N полей" counter lives in the pinned bottom bar, OUTSIDE this form (it is now
- * `SetupFormLayout`'s `footer`, rendered by `SettingsPage`), so it stays visible no matter which
- * tab is active — the admin never loses sight of pending changes, and "Сохранить" always saves
- * every section, not just the open one. The `<form>` is kept even though its submit button now
- * sits outside it: that is what still makes Enter-in-a-field save.
+ * "N несохранённых изменений" counter sits next to the toolbar in the pinned control zone
+ * (`SetupFormLayout.controlZone`, rendered by `SettingsPage`), OUTSIDE this form, so it stays
+ * visible no matter which tab is active — and "Сохранить" always saves every section, not just
+ * the open one. The `<form>` is kept even though its submit button sits outside it: that is what
+ * still makes Enter-in-a-field save.
  *
  * Owns only which tab is active; the field values themselves still live in `useSettingsForm`.
  */
@@ -45,17 +45,15 @@ export function SettingsForm({ state, actions, validation, onSubmit }: SettingsF
       className="flex flex-col gap-4"
       noValidate
     >
-      {/* Pinned below the mobile hamburger bar (60px) on phones, flush to the viewport top on
-          desktop where that bar doesn't exist. Bleeds to `main`'s own edges (`-mx-4 sm:-mx-6`)
-          so the background covers content scrolling underneath it. */}
-      <div className="sticky top-[60px] z-10 -mx-4 bg-neutral-50 px-4 pt-1 sm:-mx-6 sm:px-6 md:top-0">
-        <Tabs
-          tabs={tabs}
-          activeId={String(activeSection?.group ?? '')}
-          onChange={(id) => setActiveGroup(Number(id))}
-          label={copy.tabsLabel}
-        />
-      </div>
+      {/* Not pinned any more (2026-10-11): the toolbar zone above (`SetupFormLayout.controlZone`)
+          now takes that exact sticky spot, and two bars pinned at the same `top` would overlap.
+          The "N несохранённых изменений" counter rides in the pinned zone instead. */}
+      <Tabs
+        tabs={tabs}
+        activeId={String(activeSection?.group ?? '')}
+        onChange={(id) => setActiveGroup(Number(id))}
+        label={copy.tabsLabel}
+      />
 
       {activeSection &&
         (() => {

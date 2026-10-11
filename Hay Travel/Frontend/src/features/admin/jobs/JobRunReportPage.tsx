@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { Link, redirect, useLoaderData, useRevalidator } from 'react-router'
 import type { LoaderFunctionArgs } from 'react-router'
-import { buttonClassName } from '@/shared/ui'
+import { InquiryScreenLayout, buttonClassName } from '@/shared/ui'
 import { AdminScreen, canView, ensurePermissionsReady } from '@/shared/auth'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
@@ -35,8 +35,8 @@ export async function jobRunReportLoader({ params }: LoaderFunctionArgs) {
   return { key, run }
 }
 
-/** «Экран 3 · Отчёт о прогоне» (mockup §08) — read-only, no toolbar, no draft. Same skeleton as
- * `JobDetailPage` (crumbs → header card + summary) so it doesn't read as a foreign screen. */
+/** «Экран 3 · Отчёт о прогоне» (mockup §08) — read-only, no toolbar, no draft: шаблон D
+ * (`InquiryScreenLayout`) с крошками, тот же каркас «колонка + сводка справа», что у `JobDetailPage`. */
 export function JobRunReportPage() {
   const { key, run } = useLoaderData<typeof jobRunReportLoader>()
   const copy = useCopy(jobsCopy)
@@ -52,26 +52,42 @@ export function JobRunReportPage() {
 
   const jobName = copy.jobDisplayNameByKey[key] ?? key
 
+  const jobsCrumb = (
+    <Link to="/admin/jobs" className="transition-colors hover:text-neutral-800">
+      {copy.backToList}
+    </Link>
+  )
+  const jobCrumb = (
+    <Link to={`/admin/jobs/${key}`} className="transition-colors hover:text-neutral-800">
+      {jobName}
+    </Link>
+  )
+
   if (!run) {
     return (
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-        <nav className="text-xs text-neutral-500" aria-label={copy.breadcrumbsLabel}>
-          <Link to="/admin/jobs" className="transition-colors hover:text-neutral-800">
-            {copy.backToList}
-          </Link>
-          <span aria-hidden="true"> · </span>
-          <Link to={`/admin/jobs/${key}`} className="transition-colors hover:text-neutral-800">
-            {jobName}
-          </Link>
-        </nav>
+      <InquiryScreenLayout
+        breadcrumbs={
+          <>
+            {jobsCrumb}
+            <span aria-hidden="true"> · </span>
+            {jobCrumb}
+          </>
+        }
+        breadcrumbsLabel={copy.breadcrumbsLabel}
+        title={copy.notFoundTitle}
+        subtitle={
+          <>
+            {jobName} · <span className="font-mono text-xs text-neutral-700">{key}</span>
+          </>
+        }
+      >
         <div className="flex flex-col items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-14 text-center">
-          <p className="text-sm font-semibold text-neutral-900">{copy.notFoundTitle}</p>
           <p className="max-w-sm text-sm text-neutral-500">{copy.notFoundBody}</p>
           <Link to={`/admin/jobs/${key}`} className={`mt-1 ${buttonClassName('secondary', 'md')}`}>
             {copy.notFoundBack}
           </Link>
         </div>
-      </div>
+      </InquiryScreenLayout>
     )
   }
 
@@ -79,40 +95,40 @@ export function JobRunReportPage() {
   const duration = formatDurationSeconds(run.startedAtUtc, run.finishedAtUtc, locale)
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-      <nav className="text-xs text-neutral-500" aria-label={copy.breadcrumbsLabel}>
-        <Link to="/admin/jobs" className="transition-colors hover:text-neutral-800">
-          {copy.backToList}
+    <InquiryScreenLayout
+      breadcrumbs={
+        <>
+          {jobsCrumb}
+          <span aria-hidden="true"> · </span>
+          {jobCrumb}
+          <span aria-hidden="true"> · </span>
+          <span className="font-semibold text-neutral-800">{copy.runCrumb(when)}</span>
+        </>
+      }
+      breadcrumbsLabel={copy.breadcrumbsLabel}
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          {copy.runCrumb(when)}
+          <JobStatusBadge status={run.status} />
+        </span>
+      }
+      subtitle={
+        <>
+          {jobName} · <span className="font-mono text-xs text-neutral-700">{key}</span>
+        </>
+      }
+      controlZone={
+        <Link
+          to={`/admin/jobs/${key}`}
+          className="inline-flex min-h-11 items-center gap-1.5 text-[13px] font-semibold text-neutral-600 transition-colors hover:text-neutral-900"
+        >
+          {copy.backToHistory}
         </Link>
-        <span aria-hidden="true"> · </span>
-        <Link to={`/admin/jobs/${key}`} className="transition-colors hover:text-neutral-800">
-          {jobName}
-        </Link>
-        <span aria-hidden="true"> · </span>
-        <span className="font-semibold text-neutral-800">{copy.runCrumb(when)}</span>
-      </nav>
-
-      <Link
-        to={`/admin/jobs/${key}`}
-        className="inline-flex min-h-11 items-center gap-1.5 text-[13px] font-semibold text-neutral-600 transition-colors hover:text-neutral-900"
-      >
-        {copy.backToHistory}
-      </Link>
-
+      }
+    >
+      {/* Панель прогона — справа на десктопе и первой на мобиле; слева — ошибка и отчёт. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="text-lg font-bold text-neutral-900">{copy.runCrumb(when)}</h1>
-              <p className="mt-0.5 text-sm text-neutral-500">
-                {jobName} · <span className="font-mono text-xs text-neutral-700">{key}</span>
-              </p>
-            </div>
-            <JobStatusBadge status={run.status} />
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white lg:self-start">
+        <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white lg:order-2 lg:self-start">
           <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[11px] font-bold tracking-[.12em] text-neutral-500 uppercase">
             {copy.runPanelTitle}
           </div>
@@ -139,24 +155,26 @@ export function JobRunReportPage() {
             <SummaryRow label={copy.fieldAffected} value={String(run.affectedCount)} />
           </dl>
         </div>
+
+        <div className="flex min-w-0 flex-col gap-4 lg:order-1">
+          {run.status === JobRunStatus.Failed && run.error && (
+            <div className="rounded-xl border border-neutral-200 bg-white p-[18px]">
+              <p className="mb-3.5 text-[11px] font-bold tracking-[.1em] text-neutral-500 uppercase">{copy.errorCardTitle}</p>
+              <pre className="overflow-x-auto rounded-lg border border-red-200 bg-red-50 p-3 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap text-red-700">
+                {run.error}
+              </pre>
+            </div>
+          )}
+
+          {run.summary && (
+            <div className="rounded-xl border border-neutral-200 bg-white p-[18px]">
+              <p className="mb-3.5 text-[11px] font-bold tracking-[.1em] text-neutral-500 uppercase">{copy.reportCardTitle}</p>
+              <p className="max-w-[80ch] text-sm leading-relaxed whitespace-pre-wrap text-neutral-800">{run.summary}</p>
+            </div>
+          )}
+        </div>
       </div>
-
-      {run.status === JobRunStatus.Failed && run.error && (
-        <div className="rounded-xl border border-neutral-200 bg-white p-[18px]">
-          <p className="mb-3.5 text-[11px] font-bold tracking-[.1em] text-neutral-500 uppercase">{copy.errorCardTitle}</p>
-          <pre className="overflow-x-auto rounded-lg border border-red-200 bg-red-50 p-3 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap text-red-700">
-            {run.error}
-          </pre>
-        </div>
-      )}
-
-      {run.summary && (
-        <div className="rounded-xl border border-neutral-200 bg-white p-[18px]">
-          <p className="mb-3.5 text-[11px] font-bold tracking-[.1em] text-neutral-500 uppercase">{copy.reportCardTitle}</p>
-          <p className="max-w-[80ch] text-sm leading-relaxed whitespace-pre-wrap text-neutral-800">{run.summary}</p>
-        </div>
-      )}
-    </div>
+    </InquiryScreenLayout>
   )
 }
 

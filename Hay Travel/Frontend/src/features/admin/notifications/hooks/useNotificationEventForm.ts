@@ -90,22 +90,19 @@ export function useNotificationEventForm({
    * Общая точка правки одной платформы черновика: единственное место, где живёт поиск по
    * `platform`, чтобы четыре сеттера ниже не повторяли его каждый по-своему.
    *
-   * Патч, ничего не меняющий, возвращает ПРЕЖНИЙ черновик. Это не микрооптимизация: после
-   * сохранения в `RichTextEditor` приезжает санитизированный сервером HTML, редактор
-   * перевыставляет документ и отвечает `onChange` с тем же значением — без этой проверки такой
-   * эхо-патч считался бы правкой пользователя.
+   * Патч применяется всегда, даже «пустой»: «грязно» решает `isEventDraftEqual` против baseline
+   * (с нормализацией — см. `isRecipientEqual`), а не факт вызова сеттера. Прежний guard
+   * «нормализованно равно → вернуть старый черновик» здесь бы мешал: он глотал бы ввод, который
+   * нормализация считает пустым (например, пробел в конце адреса посреди набора).
    */
   const patchPlatform = useCallback(
     (platform: NotificationPlatform, patch: (current: PlatformDraft) => PlatformDraft) => {
-      setDraft((prev) => {
-        const next = {
-          ...prev,
-          platforms: prev.platforms.map((candidate) =>
-            candidate.platform === platform ? patch(candidate) : candidate,
-          ),
-        }
-        return isEventDraftEqual(next, prev) ? prev : next
-      })
+      setDraft((prev) => ({
+        ...prev,
+        platforms: prev.platforms.map((candidate) =>
+          candidate.platform === platform ? patch(candidate) : candidate,
+        ),
+      }))
     },
     [],
   )
@@ -215,7 +212,7 @@ export function useNotificationEventForm({
     isSubmitting,
     error,
     // Появившаяся правка гасит плашку сама — отдельного `setSavedAt(null)` в каждом сеттере для
-    // этого не нужно (и он бы срабатывал на эхо-патч редактора, см. `patchPlatform`).
+    // этого не нужно (и он бы срабатывал на «пустой» патч, который dirty не меняет).
     savedAt: isDirty ? null : savedAt,
   }
 }

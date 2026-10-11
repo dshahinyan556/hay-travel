@@ -10,6 +10,7 @@ import {
   type UserInfoModel,
 } from '@/shared/auth'
 import { MaintenanceFormLayout } from '@/shared/ui'
+import { AlertIcon } from '@/shared/ui/icons'
 import { changeUserRole, getUsers } from '@/features/admin/api/adminUsers'
 import { getRoles } from '@/features/admin/api/adminRoles'
 import type { RoleInfoModel } from '@/features/admin/types/roles'
@@ -149,7 +150,7 @@ export function UsersPage() {
             role="alert"
             className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
           >
-            <span aria-hidden="true">⚠️</span>
+            <AlertIcon size={16} className="mt-0.5 shrink-0" />
             <span>{actionError}</span>
           </div>
         )

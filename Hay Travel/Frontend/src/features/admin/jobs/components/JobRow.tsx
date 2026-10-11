@@ -27,7 +27,7 @@ export function JobRow({ job, runPending, onRun, runHint }: JobRowProps) {
 
   return (
     <div
-      className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5 border-t border-neutral-100 px-4 py-3.5 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_176px_132px_auto_auto] sm:gap-4 ${
+      className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5 border-t border-neutral-100 px-4 py-3.5 first:border-t-0 lg:grid-cols-[minmax(0,1fr)_176px_132px_auto_auto] lg:gap-4 ${
         job.isEnabled ? '' : 'bg-neutral-50'
       } ${
         job.lastRun && job.lastRun.status === JobRunStatus.Failed
@@ -37,7 +37,7 @@ export function JobRow({ job, runPending, onRun, runHint }: JobRowProps) {
             : ''
       }`}
     >
-      <div className="col-span-2 min-w-0 sm:col-span-1">
+      <div className="col-span-2 min-w-0 lg:col-span-1">
         <Link
           to={`/admin/jobs/${job.key}`}
           className={`inline-block text-[15px] font-semibold hover:underline hover:underline-offset-2 ${
@@ -46,7 +46,7 @@ export function JobRow({ job, runPending, onRun, runHint }: JobRowProps) {
         >
           {job.displayName}
         </Link>
-        <div className="mt-1.5 flex min-w-0 items-center gap-2.5">
+        <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
           {job.lastRun ? (
             <>
               <JobStatusBadge status={job.lastRun.status} />
@@ -73,7 +73,7 @@ export function JobRow({ job, runPending, onRun, runHint }: JobRowProps) {
         </div>
       </div>
 
-      <div className="col-span-2 flex items-baseline gap-2 sm:col-span-1 sm:block">
+      <div className="col-span-2 flex items-baseline gap-2 lg:col-span-1 lg:block">
         <div className="text-[10px] font-semibold tracking-[.08em] text-neutral-400 uppercase">{copy.nextLabel}</div>
         {job.nextRunAtUtc ? (
           <div className="mt-0.5 text-[13px] tabular-nums text-neutral-800">
@@ -88,7 +88,7 @@ export function JobRow({ job, runPending, onRun, runHint }: JobRowProps) {
         )}
       </div>
 
-      <div className="col-start-1 row-start-2 sm:col-start-3 sm:row-start-1">
+      <div className="col-start-1 row-start-2 lg:col-start-3 lg:row-start-1">
         <span className={`inline-flex items-center gap-1.5 text-[12.5px] ${job.isEnabled ? 'text-neutral-700' : 'text-neutral-400'}`}>
           <span
             aria-hidden="true"
@@ -98,7 +98,7 @@ export function JobRow({ job, runPending, onRun, runHint }: JobRowProps) {
         </span>
       </div>
 
-      <div className="col-start-2 row-start-2 justify-self-end sm:col-start-4 sm:row-start-1 sm:justify-self-auto">
+      <div className="col-start-2 row-start-2 justify-self-end lg:col-start-4 lg:row-start-1 lg:justify-self-auto">
         <Tooltip enabled={Boolean(runHint)} content={runHint} cursor="not-allowed">
           <button
             type="button"
@@ -114,7 +114,7 @@ export function JobRow({ job, runPending, onRun, runHint }: JobRowProps) {
       <Link
         to={`/admin/jobs/${job.key}`}
         aria-label={copy.openJobAria(job.displayName)}
-        className="hidden shrink-0 rounded-lg p-1.5 text-lg text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-900 sm:block"
+        className="hidden shrink-0 rounded-lg p-1.5 text-lg text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-900 lg:block"
       >
         →
       </Link>

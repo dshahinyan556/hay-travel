@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useLoaderData, useNavigate } from 'react-router'
+import { useLoaderData, useLocation, useNavigate } from 'react-router'
 import type { LoaderFunctionArgs } from 'react-router'
 import { UnsavedChangesModal } from '@/shared/ui'
 import { useUnsavedChangesGuard } from '@/shared/hooks'
@@ -30,7 +30,7 @@ import {
 import type { DaySource, VehicleClassOption } from '@/features/admin/lib/tourMapper'
 import type { CatalogSuggestions } from '@/features/admin/types/form'
 import type { RegionInfoModel, TagInfoModel, TourInfoModel } from '@/shared/types/attours'
-import { useTourForm } from './hooks/useTourForm'
+import { readSaveWarning, useTourForm } from './hooks/useTourForm'
 import { tourFormCopy } from './lib/tourFormCopy'
 import { tourTitle } from '@/features/admin/ui/TourTableParts'
 import { TourForm } from './components/TourForm'
@@ -124,13 +124,15 @@ function TourEditView({
   const copy = useCopy(tourFormCopy)
   // Архивирование — это `Delete` экрана «Продукты» на бэкенде (мягкое удаление того же продукта),
   // отдельного права у него нет: без `products.Delete` кнопки в тулбаре просто нет.
-  const canArchive = useScreenPermission(AdminScreen.Products).canDelete
+  const permission = useScreenPermission(AdminScreen.Products)
+  const canArchive = permission.canDelete
   const { state, actions, validation, hasAttemptedSubmit, submit, isSubmitting, error, isDirty } =
-    useTourForm(initialState, {
-      kind: 'edit',
-      tourId: dto.id,
-      initialIsActive: dto.isActive,
-    })
+    useTourForm(initialState, { kind: 'edit', tourId: dto.id })
+
+  // Продукт только что создан, но `SetFeatured` после создания не прошёл (лимит 9 и т.п.) —
+  // экран создания передал текст сюда через router state. Показывается до следующего действия.
+  const location = useLocation()
+  const [carriedWarning, setCarriedWarning] = useState<string | null>(() => readSaveWarning(location.state))
 
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [archivePending, setArchivePending] = useState(false)
@@ -149,6 +151,12 @@ function TourEditView({
   // Название берётся из загруженного продукта, а не из черновика: в архив уходит сохранённая
   // запись, и подтверждение должно называть именно её.
   const productTitle = tourTitle(dto, locale).text
+
+  /** Save from the toolbar or by Enter — a new attempt makes the carried-over warning stale. */
+  function save(): void {
+    setCarriedWarning(null)
+    submit()
+  }
 
   async function confirmArchive(): Promise<void> {
     if (archivePending) return
@@ -175,12 +183,12 @@ function TourEditView({
       subtitle={copy.page.subtitleEdit}
       /* Ошибка сохранения и ошибка архивации показываются в одном слоте — одновременно они
          возникнуть не могут: обе операции блокируют тулбар целиком. */
-      error={error ?? archiveError}
+      error={error ?? archiveError ?? carriedWarning}
       isValid={validation.isValid}
       hasAttemptedSubmit={hasAttemptedSubmit}
       isDirty={isDirty}
       isSubmitting={isSubmitting}
-      onSave={submit}
+      onSave={save}
       onCancel={() => navigate('/admin/products')}
       archive={
         canArchive
@@ -188,6 +196,7 @@ function TourEditView({
               pending: archivePending,
               onRequest: () => {
                 setArchiveError(null)
+                setCarriedWarning(null)
                 setArchiveOpen(true)
               },
             }
@@ -198,13 +207,14 @@ function TourEditView({
         state={state}
         actions={actions}
         validation={validation}
+        featureHint={permission.canUpdate ? null : copy.header.noPermissionHint}
         typeLocked
         catalogSuggestions={catalogSuggestions}
         regions={regions}
         tags={tags}
         daySources={daySources}
         vehicleClasses={vehicleClasses}
-        onSubmit={submit}
+        onSubmit={save}
       />
 
       <TourArchiveModal

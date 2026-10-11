@@ -69,6 +69,8 @@ const ru = {
     'Уровень включает всё, что ниже него: «Изменение» разрешает и просмотр, и создание. ' +
     'Если у экрана какого-то действия нет, оно и не предлагается.',
   unsavedChanges: 'Есть несохранённые изменения',
+  /** Тултип недоступной кнопки тулбара карточки роли — та же формулировка, что у заказа. */
+  noPermissionHint: 'Недостаточно прав',
 
   canManageAdminsLabel: 'Может управлять другими администраторами',
   canManageAdminsHint:
@@ -178,6 +180,7 @@ const en: { [K in keyof typeof ru]: (typeof ru)[K] } = {
     'A level includes everything below it: “Update” also allows viewing and creating. Actions a ' +
     'screen does not have are simply not offered.',
   unsavedChanges: 'You have unsaved changes',
+  noPermissionHint: 'Not enough permissions',
 
   canManageAdminsLabel: 'Can manage other administrators',
   canManageAdminsHint:

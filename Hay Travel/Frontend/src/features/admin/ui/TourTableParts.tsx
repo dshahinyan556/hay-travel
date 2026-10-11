@@ -4,6 +4,7 @@ import { TourTranslationType, TourType } from '@/features/admin/lib/enums'
 import { adminEnumsCopy } from '@/features/admin/lib/adminEnumsCopy'
 import { readLocalized } from '@/features/admin/lib/tourMapper'
 import { adaptiveImageUrl } from '@/shared/lib/adaptiveImage'
+import { ImageIcon } from '@/shared/ui/icons'
 import type { Locale } from '@/shared/lib/locale'
 import type { TourInfoModel } from '@/shared/types/attours'
 import { adminUiCopy } from './adminUiCopy'
@@ -35,16 +36,30 @@ export function tourTitle(
 /**
  * Square-ish list thumbnail. `mainImageUrl` can be null or a broken link, so we render a
  * neutral placeholder when there's no url and swap to it on load error.
+ *
+ * `size="md"` (64×48) is the products list's row card (2026-10-11 mockup); its placeholder carries
+ * a picture glyph so "no photo yet" reads as a state, not as a grey stripe. `sm` keeps the
+ * dashboard's compact table cell unchanged.
  */
-export function TourThumb({ url, alt }: { url: string | null; alt: string }) {
+export function TourThumb({
+  url,
+  alt,
+  size = 'sm',
+}: {
+  url: string | null
+  alt: string
+  size?: 'sm' | 'md'
+}) {
   const [failed, setFailed] = useState(false)
+  const box = size === 'md' ? 'h-12 w-16 rounded-lg' : 'h-9 w-13 rounded-md'
 
   if (!url || failed) {
-    return (
-      <div
-        aria-hidden="true"
-        className="h-9 w-13 rounded-md bg-gradient-to-br from-neutral-200 to-neutral-300"
-      />
+    return size === 'md' ? (
+      <div aria-hidden="true" className={`flex shrink-0 items-center justify-center bg-neutral-100 text-neutral-400 ${box}`}>
+        <ImageIcon size={20} />
+      </div>
+    ) : (
+      <div aria-hidden="true" className={`bg-gradient-to-br from-neutral-200 to-neutral-300 ${box}`} />
     )
   }
 
@@ -54,7 +69,7 @@ export function TourThumb({ url, alt }: { url: string | null; alt: string }) {
       alt={alt}
       loading="lazy"
       onError={() => setFailed(true)}
-      className="h-9 w-13 rounded-md object-cover"
+      className={`shrink-0 object-cover ${box}`}
     />
   )
 }

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { AdminToolbar, DataEntryScreenLayout } from '@/shared/ui'
+import { AlertIcon } from '@/shared/ui/icons'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import { adminEnumsCopy } from '@/features/admin/lib/adminEnumsCopy'
 import type { TourType } from '@/features/admin/lib/enums'
@@ -91,10 +92,12 @@ export function TourFormScreen({
           onDelete={archive ? archive.onRequest : undefined}
           labels={{ delete: copy.archive.button }}
           cancelState={{ disabled: busy }}
-          // Сохранить остаётся кликабельной и на невалидной форме — `onSave` сам ничего не
+          // Без правок сохранять нечего — Save неактивна (общее правило черновика, как на заказе;
+          // `isDirty` считается по смысловому сравнению с сохранённым, см. `tourFormSnapshot`).
+          // С правками Save остаётся кликабельной и на невалидной форме — `onSave` сам ничего не
           // отправит и покажет ошибки полей; заблокированная кнопка не объяснила бы, почему
-          // сохранение не произошло. Это поведение прежней панели, оно сохранено намеренно.
-          saveState={{ disabled: busy, pending: isSubmitting }}
+          // сохранение не произошло.
+          saveState={{ disabled: busy || !isDirty, pending: isSubmitting }}
           deleteState={{ disabled: isSubmitting, pending: archive?.pending }}
         />
       }
@@ -104,7 +107,7 @@ export function TourFormScreen({
             role="alert"
             className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
           >
-            <span aria-hidden="true">⚠️</span>
+            <AlertIcon size={17} className="mt-0.5 shrink-0" />
             <span>{error}</span>
           </div>
         ) : showInvalidWarning ? (
@@ -112,7 +115,7 @@ export function TourFormScreen({
             role="alert"
             className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
           >
-            <span aria-hidden="true">⚠️</span>
+            <AlertIcon size={17} className="mt-0.5 shrink-0" />
             <span>{copy.actions.invalidNote}</span>
           </div>
         ) : isDirty ? (

@@ -15,13 +15,17 @@ import { userCopy } from '../lib/userCopy'
 interface UserDetailInfoProps {
   user: UserDetailInfoModel
   /** Задача D — the assignment popup's default. Only shown for `RoleType.Employee` accounts,
-   * where it's actually meaningful; the field itself has no such restriction server-side. */
+   * where it's actually meaningful; the field itself has no such restriction server-side.
+   * The EFFECTIVE value (page draft over `user.defaultJobRole`) — saved by the page's toolbar. */
+  jobRole: EmployeeJobRole | null
   onChangeJobRole: (role: EmployeeJobRole | null) => void
-  jobRolePending: boolean
   /** Язык писем (редизайн 2026-08-23). Unlike the job role this is shown for EVERY account: emails
-   * go to clients and admins just as much as to employees. Non-nullable — there is no "clear". */
+   * go to clients and admins just as much as to employees. Non-nullable — there is no "clear".
+   * Effective value, same as `jobRole`. */
+  preferredLanguage: LanguageCode
   onChangePreferredLanguage: (language: LanguageCode) => void
-  languagePending: boolean
+  /** The page's Save is in flight. */
+  pending: boolean
   /** `users.Update`, already narrowed by the page's SuperAdmin lock (`canEditUser`, 2026-08-27) —
    * a capability, resolved once by the container, never a permission lookup in here. The row stays
    * VISIBLE without it (it is information, not just a control) and the picker is merely disabled —
@@ -72,10 +76,11 @@ function InfoRow({ label, value, mono }: { label: string; value: ReactNode; mono
  */
 export function UserDetailInfo({
   user,
+  jobRole,
   onChangeJobRole,
-  jobRolePending,
+  preferredLanguage,
   onChangePreferredLanguage,
-  languagePending,
+  pending,
   canUpdate,
 }: UserDetailInfoProps) {
   const { locale } = useLocale()
@@ -106,15 +111,15 @@ export function UserDetailInfo({
                 `RoleType` to look up, and its name is the only caption that exists. */}
             <InfoRow label={copy.info.role} value={user.roleName} />
             {/* Роль исполнителя по умолчанию (Задача D) — только для аккаунтов «Исполнитель»: для
-                любой другой роли поле не несёт смысла, хотя бэкенд не запрещает его иметь. Меняется
-                сразу, без отдельной кнопки Save — тот же паттерн, что и у RoleSelect в таблице. */}
+                любой другой роли поле не несёт смысла, хотя бэкенд не запрещает его иметь. Правка
+                уходит в черновик страницы, сохраняет её Save тулбара (2026-10-11). */}
             {user.role === RoleType.Employee && (
               <div className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm">
                 <span className="text-neutral-500">{copy.info.defaultJobRole}</span>
                 <EmployeeJobRoleSelect
-                  value={user.defaultJobRole}
+                  value={jobRole}
                   onChange={onChangeJobRole}
-                  disabled={jobRolePending || !canUpdate}
+                  disabled={pending || !canUpdate}
                   allowClear
                   className="w-44"
                   aria-label={copy.info.defaultJobRoleAria}
@@ -123,12 +128,12 @@ export function UserDetailInfo({
             )}
             {/* Язык писем (редизайн 2026-08-23) — по нему notification-сервис выбирает языковую
                 версию шаблона. Без ограничения по роли, в отличие от строки выше: письма получают
-                и клиенты, и администраторы. Сохраняется сразу, без отдельной кнопки Save. */}
+                и клиенты, и администраторы. Тоже в черновик страницы, как и строка выше. */}
             <div className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm">
               <span className="text-neutral-500">{copy.info.preferredLanguage}</span>
               <Select
                 surface="admin"
-                value={String(user.preferredLanguage)}
+                value={String(preferredLanguage)}
                 onChange={(next) => {
                   const language = parseLanguage(next)
                   if (language !== null) onChangePreferredLanguage(language)
@@ -137,7 +142,7 @@ export function UserDetailInfo({
                   value: String(language),
                   label: languageLabels[language],
                 }))}
-                disabled={languagePending || !canUpdate}
+                disabled={pending || !canUpdate}
                 className="w-44"
                 aria-label={copy.info.preferredLanguageAria}
               />
