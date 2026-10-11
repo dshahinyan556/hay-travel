@@ -1,8 +1,10 @@
 using ATTours.BusinessServices.Jobs;
 using ATTours.BusinessServices.Notifications;
+using ATTours.BusinessServices.Services.InfoServices;
 using ATTours.Common.Authorization;
 using ATTours.Common.Constants;
 using ATTours.Common.Dto.Init;
+using ATTours.Common.DTO.Account;
 using ATTours.Common.DTO.Auth;
 using ATTours.Common.DTO.Authorization;
 using ATTours.Common.DTO.Info;
@@ -346,11 +348,16 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
 
             CreateMap<NotificationPlatformView, NotificationPlatformInfoModel>();
 
-            // Шаблон отдаётся вместе с каталогом токенов своего события — редактор должен
-            // знать, что можно вставлять, а ActionKey наружу из вложенного DTO не едет.
-            CreateMap<EmailTemplate, NotificationTemplateInfoModel>()
+            // ============= Mappings for NOTIFICATION TEMPLATES =============
+            // Библиотека шаблонов (2026-08-31, экран /admin/notification-templates) —
+            // заменяет удалённый EmailTemplate. AvailablePlaceholders — по BoundEntity
+            // (шаблон переиспользуем, конкретное событие-потребитель заранее не известно).
+            // Usages — read-only производная, которую заполняет NotificationTemplatesInfo
+            // отдельным походом в БД (кросс-сущностный лукап, маппером не выражается).
+            CreateMap<NotificationTemplate, NotificationTemplateInfoModel>()
                 .ForMember(dest => dest.AvailablePlaceholders, opt => opt.Ignore())
-                .AfterMap((src, dest) => dest.AvailablePlaceholders = EmailPlaceholders.WrappedTokensFor(src.ActionKey));
+                .ForMember(dest => dest.Usages, opt => opt.Ignore())
+                .AfterMap((src, dest) => dest.AvailablePlaceholders = EmailPlaceholders.ForEntity(src.BoundEntity));
 
             // UserFullName/UserEmail денормализуются из загруженного User (см.
             // NotificationSettingsInfo) — грид показывает их read-only.
@@ -396,6 +403,12 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.IsRunning, opt => opt.MapFrom(src => src.IsRunning))
                 .ForMember(dest => dest.NextRunAtUtc, opt => opt.MapFrom(src => src.NextRunAtUtc))
                 .ForMember(dest => dest.LastRun, opt => opt.MapFrom(src => src.LastRun));
+
+            // Исключения из порога автозакрытия. Имена совпадают один в один, поэтому
+            // ForMember нет ни одного: название продукта разрешает сама проекция
+            // (TourAutoCloseOverrideInfo), а не маппер — правило выбора перевода общее
+            // с ResolveTourTitle и жить в двух местах не должно.
+            CreateMap<TourAutoCloseOverrideView, TourAutoCloseOverrideInfoModel>();
 
             // ============= Mappings for REGION =============
 
@@ -768,7 +781,15 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 .ForMember(dest => dest.UserFullName, opt => opt.Ignore())
                 .ForMember(dest => dest.DiscountTotal, opt => opt.Ignore())
                 .ForMember(dest => dest.Total, opt => opt.Ignore())
+                .ForMember(dest => dest.Contacts, opt => opt.MapFrom(src =>
+                    src.Contacts.OrderByDescending(contact => contact.IsPrimary)
+                                .ThenBy(contact => contact.SortOrder)))
                 .AfterMap((src, dest) => ApplyOrderDenormalizedFields(src, dest));
+
+            // Контакты заказа — ОСНОВНОЙ ПЕРВЫМ, дальше по SortOrder, который проставил
+            // сервер при создании. Порядок задаётся здесь, а не на фронте: тот же список в
+            // том же порядке уезжает в письмо, в Telegram и в админскую карточку.
+            CreateMap<OrderContact, OrderContactInfoModel>();
 
             // OrderLine -> OrderLineInfoModel. TourTitle/TourMainImageUrl денормализуются так
             // же, как раньше делал Order -> OrderInfoModel (D-1, 2026-08-16 логика) — требует
@@ -871,6 +892,27 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
             // и навигация User наружу не едут — список запрашивается по конкретному
             // пользователю, чей id клиенту уже известен.
             CreateMap<LoginHistory, LoginHistoryModel>();
+
+            // RefreshToken -> SessionInfoModel (spec 017 §4.2). Только скалярные поля строки:
+            // IsCurrent считает сервис (сравнением с хешем cookie вызывающего), а
+            // CountryCode/CountryName/City резолвит geoIpLookup по CreatedByIp — в самой
+            // таблице сессий их нет, в отличие от LoginHistory.
+            CreateMap<RefreshToken, SessionInfoModel>();
+
+            // Справочник способов связи в профиле (батч 2026-08-29). Плоские 1:1: переводов
+            // у контакта нет (ADR 032), UserId наружу не едет — справочник всегда читается
+            // по владельцу из токена. Маппинга OrderContactCreateModel -> OrderContact нет:
+            // контакты ЗАКАЗА собирает OrderContactBuilder, а не маппер.
+            // Личные предпочтения (2026-08-29). Плоская 1:1 проекция по совпадающим именам,
+            // включая null'ы: подмешивать сюда дефолты сайта нельзя — фронт обязан отличать
+            // «выбрано dark» от «выбора нет» (см. UserPreferencesModel).
+            // Обратного маппинга (UpdatePreferencesModel -> User) нет намеренно: там null
+            // означает «сбросить», а не «пропустить поле», и это решение принимает сервис.
+            CreateMap<User, UserPreferencesModel>();
+
+            CreateMap<UserContactMethod, ContactMethodInfoModel>();
+            CreateMap<ContactMethodCreateModel, UserContactMethod>();
+            CreateMap<ContactMethodUpdateModel, UserContactMethod>();
 
             // ============= Mappings for ROLES & PERMISSIONS =============
             // Гибкая система прав (architecture-flexible-roles.md §3.4), уровневая модель
@@ -1238,6 +1280,9 @@ namespace ATTours.ClientAPI.Mapper.MappingProfile
                 // Язык клиента нужен резолверу получателя «Клиент заказа», чтобы выбрать
                 // языковую версию письма без второго похода в БД.
                 destination.UserPreferredLanguage = source.User.PreferredLanguage;
+                // По той же причине — chat id: без него доставка заказа клиенту в Telegram
+                // была бы невозможна и оставалась бы no-op'ом (ADR 031 §5).
+                destination.UserTelegramChatId = source.User.TelegramChatId;
             }
 
             if (source.Lines is null)

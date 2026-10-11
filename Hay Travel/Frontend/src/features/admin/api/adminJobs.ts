@@ -11,12 +11,15 @@
 import { authFetch } from '@/shared/auth'
 import { ApiError } from '@/shared/lib/http'
 import type {
+  JobParameterInfoModel,
   JobRunTriggerResultModel,
   ScheduledJobInfoModel,
   ScheduledJobRunInfoModel,
   SetJobEnabledModel,
+  TourAutoCloseOverrideInfoModel,
   UpdateJobCronModel,
   UpdateJobParametersModel,
+  UpdateTourAutoCloseOverridesModel,
 } from '@/features/admin/types/jobs'
 
 /** GET `api/Jobs` — список экрана: каталог + состояние из БД + последний прогон каждой задачи,
@@ -53,6 +56,26 @@ export function setJobParameters(
   model: UpdateJobParametersModel,
 ): Promise<ScheduledJobInfoModel> {
   return authFetch<ScheduledJobInfoModel>(`api/Jobs/${key}/Parameters`, {
+    method: 'PATCH',
+    body: JSON.stringify(model),
+  })
+}
+
+/** GET `api/Jobs/ScreenParameters` — параметры самого экрана, а не отдельной задачи (сегодня
+ * это глубина хранения истории прогонов: её читает ядро планировщика для всех задач сразу).
+ * Отдельный запрос, а не поле в `getJobs`: параметр экрана, приписанный к строке одной из
+ * задач, читался бы как её собственный. */
+export function getJobScreenParameters(): Promise<JobParameterInfoModel[]> {
+  return authFetch<JobParameterInfoModel[]>('api/Jobs/ScreenParameters')
+}
+
+/** PATCH `api/Jobs/ScreenParameters` — правка тех же параметров под правом `jobs:Update`.
+ * Частичное тело, как и у `setJobParameters`: только реально изменённые ключи. Ответ —
+ * перечитанный список параметров экрана. */
+export function setJobScreenParameters(
+  model: UpdateJobParametersModel,
+): Promise<JobParameterInfoModel[]> {
+  return authFetch<JobParameterInfoModel[]>('api/Jobs/ScreenParameters', {
     method: 'PATCH',
     body: JSON.stringify(model),
   })
@@ -101,4 +124,24 @@ export async function getJobRun(key: string, runId: number): Promise<ScheduledJo
     if (err instanceof ApiError && err.status === 404) return null
     throw err
   }
+}
+
+/** GET `api/Jobs/AutoCloseOverrides` — per-tour exceptions to `booking.autoCloseLeadTimeHours`,
+ * owned by the `tour-date-auto-closure` job's own card (checklist
+ * `checklist-autoclose-per-tour-2026-08-29.txt`, Р3/F1). Not a job PARAMETER (`JobParameterInfoModel`)
+ * because it is a list keyed by tour, not a single scalar the `Parameters` endpoint's shape can carry. */
+export function getAutoCloseOverrides(): Promise<TourAutoCloseOverrideInfoModel[]> {
+  return authFetch<TourAutoCloseOverrideInfoModel[]>('api/Jobs/AutoCloseOverrides')
+}
+
+/** PUT `api/Jobs/AutoCloseOverrides` — replaces the WHOLE set (Р4/B8), not add/edit/delete: the
+ * card saves with the same single "Сохранить" button as the rest of the job's draft, so a partial
+ * per-row mutation has no caller. Returns the reconciled list (fresh `tourName`s included). */
+export function setAutoCloseOverrides(
+  model: UpdateTourAutoCloseOverridesModel,
+): Promise<TourAutoCloseOverrideInfoModel[]> {
+  return authFetch<TourAutoCloseOverrideInfoModel[]>('api/Jobs/AutoCloseOverrides', {
+    method: 'PUT',
+    body: JSON.stringify(model),
+  })
 }

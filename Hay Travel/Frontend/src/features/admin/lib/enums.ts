@@ -178,6 +178,14 @@ export const SiteSettingGroup = {
   Content: 6,
   /** Тема оформления сайта: палитра-пресет + мягкий дефолт dark/light (backend Spec 002). */
   Theme: 7,
+  /** Правила бронирования (порог автозакрытия дня). Экран «Настройки сайта» их НЕ показывает —
+   * `GET SiteSettings/GetAll` их не отдаёт: этот порог правится на карточке задачи
+   * «Автозакрытие дат» (`SiteSettingCatalog.BelongsToSettingsScreen`). Зеркало нужно, чтобы
+   * номер группы не выглядел свободным при добавлении следующей. */
+  Booking: 8,
+  /** Операционные параметры фоновых задач. Тоже вне экрана настроек: параметры задачи — на её
+   * карточке, параметры экрана задач — на списке задач (`features/admin/jobs`). */
+  Jobs: 9,
 } as const
 
 export type SiteSettingGroup = (typeof SiteSettingGroup)[keyof typeof SiteSettingGroup]

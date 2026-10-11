@@ -41,5 +41,9 @@ namespace ATTours.Common.DTO.Init
         // Маршрут: ровно одна точка From, 0..N Stop в порядке SortOrder, ровно одна To.
         // Одноязычный — ровно тот текст, который ввёл клиент.
         public List<CustomTransferStopCreateModel> Stops { get; set; } = [];
+
+        // Контакты для связи: 1..3, ровно один основной. Пустой список — отказ
+        // (OrderContactRequired): менеджер не должен гадать, по какому номеру звонить.
+        public List<OrderContactCreateModel> Contacts { get; set; } = [];
     }
 }

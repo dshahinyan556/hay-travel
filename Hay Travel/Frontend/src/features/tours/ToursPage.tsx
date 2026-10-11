@@ -133,7 +133,7 @@ export function ToursPage() {
               className="mt-8 grid gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4"
             >
               {visible.map((tour) => (
-                <div key={tour.id} className="reveal-item grid">
+                <div key={tour.id} className="reveal-item grid min-w-0">
                   <TourCard tour={tour} />
                 </div>
               ))}

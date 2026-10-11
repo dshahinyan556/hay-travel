@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link, redirect, useLoaderData } from 'react-router'
 import type { LoaderFunctionArgs } from 'react-router'
 import {
-  AdminActionButton,
+  AdminToolbar,
   DataEntryScreenLayout,
   Tabs,
   UnsavedChangesModal,
   type TabItem,
 } from '@/shared/ui'
+import { AlertIcon, CheckIcon } from '@/shared/ui/icons'
 import { useUnsavedChangesGuard } from '@/shared/hooks'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import { getStoredLocale } from '@/shared/lib/locale'
@@ -20,15 +21,20 @@ import {
 } from '@/shared/auth'
 import { getNotificationEvent } from '@/features/admin/api/adminNotifications'
 import { getUsers } from '@/features/admin/api/adminUsers'
+import { getNotificationTemplates } from '@/features/admin/api/adminNotificationTemplates'
 import { adminEnumsCopy } from '@/features/admin/lib/adminEnumsCopy'
 import {
   NotificationPlatform,
   isEmailActionKey,
   type NotificationEventInfoModel,
 } from '@/features/admin/types/notifications'
-import { EmailTemplateEditor } from './components/EmailTemplateEditor'
+import {
+  NotificationTemplateEntity,
+  type NotificationTemplateInfoModel,
+} from '@/features/admin/types/notificationTemplates'
 import { PlatformsTab } from './components/PlatformsTab'
 import { RecipientsGrid } from './components/RecipientsGrid'
+import { TemplatePicker } from './components/TemplatePicker'
 import { useNotificationEventForm } from './hooks/useNotificationEventForm'
 import { eventLabelOf } from './lib/notificationEventModel'
 import { notificationsCopy } from './lib/notificationsCopy'
@@ -57,28 +63,37 @@ export async function notificationEventLoader({ params }: LoaderFunctionArgs) {
   // Список пользователей нужен колонке «Получатель» источника User, но гейтится ЧУЖИМ ключом
   // (`users.View`) — поэтому деградирует до пустого списка, а не 403-ит весь экран: уже
   // сохранённые строки останутся читаемыми за счёт денормализованных userFullName/userEmail.
-  const [event, users] = await Promise.all([
+  //
+  // Шаблоны — тем же приёмом, чужим ключом `notification-templates.View`: пикер без доступа
+  // деградирует до "показать текущее имя, выбор недоступен" (см. TemplatePicker), карточку не
+  // 403-ит. Фильтр по BoundEntity=Order: событие только про заказы, шаблоны для других сущностей
+  // сюда не годятся вне зависимости от канала.
+  const [event, users, templates] = await Promise.all([
     getNotificationEvent(raw),
     canView(AdminScreen.Users) ? getUsers() : Promise.resolve<UserInfoModel[]>([]),
+    canView(AdminScreen.NotificationTemplates)
+      ? getNotificationTemplates({ boundEntity: NotificationTemplateEntity.Order })
+      : Promise.resolve<NotificationTemplateInfoModel[]>([]),
   ])
 
-  return { event, users }
+  return { event, users, templates }
 }
 
 export function NotificationEventPage() {
-  const { event, users } = useLoaderData<typeof notificationEventLoader>()
+  const { event, users, templates } = useLoaderData<typeof notificationEventLoader>()
 
   // Key-инг по ключу события: переход между событиями пересобирает форму, а не тащит черновик
   // предыдущего — то же, что делают `OrderDetailPage`/`UserDetailPage`.
-  return <NotificationEventView key={event.eventKey} event={event} users={users} />
+  return <NotificationEventView key={event.eventKey} event={event} users={users} templates={templates} />
 }
 
 interface NotificationEventViewProps {
   event: NotificationEventInfoModel
   users: UserInfoModel[]
+  templates: NotificationTemplateInfoModel[]
 }
 
-function NotificationEventView({ event, users }: NotificationEventViewProps) {
+function NotificationEventView({ event, users, templates }: NotificationEventViewProps) {
   const copy = useCopy(notificationsCopy)
   const enums = useCopy(adminEnumsCopy)
   const permission = useScreenPermission(AdminScreen.Notifications)
@@ -133,28 +148,25 @@ function NotificationEventView({ event, users }: NotificationEventViewProps) {
       breadcrumbsLabel={copy.breadcrumbAria}
       title={eventLabel}
       subtitle={copy.eventSubtitle}
-      /* Не `AdminToolbar`: его `onAdd`/`onDelete` обязательны, а здесь бессмысленны — событие
-         нельзя ни создать, ни удалить. Тот же ряд контекстных кнопок, что у `UserDetailPage`. */
+      /* `AdminToolbar` без Add/Delete — событие нельзя ни создать, ни удалить (набор событий
+         задан сервером), так что тулбар — только Отмена/Сохранить, как у фоновых задач. */
       controlZone={
-        <div className="ml-auto flex items-center gap-3">
-          {form.isDirty && <span className="hidden text-xs text-neutral-500 sm:inline">{copy.dirtyHint}</span>}
-          <AdminActionButton
-            label={copy.cancelEdits}
-            variant="secondary"
-            disabled={!form.isDirty || form.isSubmitting}
-            onClick={form.reset}
+        <>
+          <AdminToolbar
+            onCancel={form.reset}
+            onSave={form.submit}
+            cancelState={{ disabled: !form.isDirty || form.isSubmitting }}
+            saveState={{
+              disabled: !form.canSubmit || !permission.canUpdate,
+              pending: form.isSubmitting,
+              hint: permission.canUpdate ? null : copy.readOnlyHint,
+            }}
           />
-          <AdminActionButton
-            label={copy.save}
-            pendingLabel={copy.saving}
-            variant="primary"
-            pending={form.isSubmitting}
-            disabled={!form.canSubmit || !permission.canUpdate}
-            onClick={form.submit}
-          />
-        </div>
+          {form.isDirty && <span className="text-xs text-neutral-500">{copy.dirtyHint}</span>}
+        </>
       }
       message={
+        (!permission.canUpdate || form.error || form.savedAt !== null) && (
         <>
           {!permission.canUpdate && (
             <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
@@ -166,7 +178,7 @@ function NotificationEventView({ event, users }: NotificationEventViewProps) {
               role="alert"
               className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
             >
-              <span aria-hidden="true">⚠️</span>
+              <AlertIcon size={16} className="mt-0.5 shrink-0" />
               <span>{form.error}</span>
             </div>
           )}
@@ -175,11 +187,12 @@ function NotificationEventView({ event, users }: NotificationEventViewProps) {
               role="status"
               className="flex items-start gap-2 rounded-lg border border-neutral-300 bg-neutral-50 px-4 py-3 text-sm text-neutral-900"
             >
-              <span aria-hidden="true">✓</span>
+              <CheckIcon size={16} className="mt-0.5 shrink-0" />
               <span>{copy.saved}</span>
             </div>
           )}
         </>
+        )
       }
     >
       <Tabs tabs={tabs} activeId={activeTab} onChange={setActiveTab} label={copy.tabsLabel} />
@@ -214,18 +227,15 @@ function NotificationEventView({ event, users }: NotificationEventViewProps) {
             onRemove={(rowKey) => form.removeRecipient(activePlatform.platform, rowKey)}
           />
 
-          {activePlatform.platform === NotificationPlatform.Email && (
-            <EmailTemplateEditor
-              subject={activePlatform.subject}
-              subjectEn={activePlatform.subjectEn}
-              bodyHtml={activePlatform.bodyHtml}
-              bodyHtmlEn={activePlatform.bodyHtmlEn}
-              availablePlaceholders={activePlatform.availablePlaceholders}
-              disabled={disabled}
-              error={form.templateError}
-              onChange={(patch) => form.patchTemplate(activePlatform.platform, patch)}
-            />
-          )}
+          <TemplatePicker
+            platform={activePlatform.platform}
+            templateId={activePlatform.templateId}
+            templateName={activePlatform.templateName}
+            templates={templates.filter((template) => template.channel === activePlatform.platform)}
+            disabled={disabled}
+            error={form.templateError}
+            onChange={(templateId) => form.setTemplateId(activePlatform.platform, templateId)}
+          />
         </div>
       )}
 

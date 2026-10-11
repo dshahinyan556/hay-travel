@@ -107,7 +107,11 @@
             chosen === 'light' || chosen === 'dark' ? chosen : fallback === 'light' ? 'light' : 'dark'
           var theme = isAdmin ? 'light' : preferred
 
-          var palette = localStorage.getItem('hay-travel-palette')
+          // Тот же порядок, что в readCachedPalette(): личный выбор залогиненного →
+          // закэшированный админский пресет → обсидиан. Два ключа, а не один, ровно по доводу из
+          // shared/lib/palette.ts: иначе ответ GetPublic затирал бы личный выбор на каждой загрузке.
+          var palette = localStorage.getItem('hay-travel-palette-choice')
+          if (!COLORS[palette]) palette = localStorage.getItem('hay-travel-palette')
           if (!COLORS[palette]) palette = 'obsidian'
 
           root.dataset.theme = theme

@@ -73,6 +73,8 @@ export { Accordion } from './Accordion'
 export type { AccordionProps } from './Accordion'
 export { AccessLevelSelect, ACCESS_LEVEL_ORDER } from './AccessLevelSelect'
 export type { AccessLevelSelectProps, AccessLevel } from './AccessLevelSelect'
+export { PhoneField } from './PhoneField'
+export { CountrySelect } from './CountrySelect'
 
 /* Public site only */
 export { GuestStepper } from './GuestStepper'
@@ -81,3 +83,7 @@ export { TourCard, TourCardSkeleton } from './TourCard'
 export { FormatChip, KindChip } from './Chip'
 export type { FormatChipProps } from './Chip'
 export { ProductTag, TAG_COLOR_HEX } from './ProductTag'
+/* Классы публичных кнопок (обсидиан/золото) — не компонент, потому что те же классы нужны и
+   `<button>`, и `<Link>`. Переехали из кабинета вместе с выносом блока контактов в `shared`. */
+export { publicButtonClass } from './publicButton'
+export type { PublicButtonVariant } from './publicButton'

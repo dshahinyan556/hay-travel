@@ -177,6 +177,33 @@ export const userCopy = defineCopy(
       noActivity: 'Нет данных об активности',
     },
 
+    /** Живые сессии пользователя (spec 017 §4). Это НЕ история входов ниже: там — запись о том, что
+     * уже случилось, здесь — устройства, которые прямо сейчас могут действовать от имени этого
+     * пользователя, и их можно отключить. */
+    sessions: {
+      title: 'Активные сеансы',
+      subtitle: 'Устройства, на которых сейчас выполнен вход. Отзыв действует сразу.',
+      loadFailed: 'Не удалось загрузить список сеансов. Остальные данные пользователя показаны выше.',
+      empty: 'Активных сеансов нет — пользователь нигде не залогинен.',
+      /** Одна строка списка: устройство неизвестно, если User-Agent не распознан или сессия
+       * создана до того, как его начали сохранять. */
+      unknownDevice: 'Устройство не определено',
+      signedInAt: (moment: string) => `Вход: ${moment}`,
+      expiresAt: (moment: string) => `Действует до ${moment}`,
+      /** Только в своей же карточке: строку текущего устройства отзывать нечем — это тот самый
+       * сеанс, в котором админ сейчас работает. */
+      current: 'Это устройство',
+      revoke: 'Завершить',
+      revoking: 'Завершаем…',
+      revokeAria: (device: string) => `Завершить сеанс: ${device}`,
+      revokeAll: 'Завершить все сеансы',
+      /** В своей же карточке действие щадящее — текущий сеанс остаётся. */
+      revokeOthers: 'Завершить прочие сеансы',
+      revokedOne: 'Сеанс завершён.',
+      revokedAll: 'Все сеансы пользователя завершены.',
+      revokedOthers: 'Все прочие сеансы завершены.',
+    },
+
     history: {
       title: 'История входов',
       subtitle: 'Только успешные входы. Обновление токена входом не считается.',
@@ -231,6 +258,11 @@ export const userCopy = defineCopy(
       resetSuperAdminHint: 'Сбросить пароль главного администратора может только он сам',
       resetTitle: (userLabel: string) => `Сбросить пароль «${userLabel}»?`,
       resetBody: 'Пользователь будет обязан задать новый пароль при следующем входе.',
+      /** Тулбар карточки: Save заблокирован `SuperAdminGuard`'ом, а не отсутствием права. */
+      saveSuperAdminHint: 'Учётную запись главного администратора может менять только он сам',
+      actionsGroupAccount: 'Учётная запись',
+      actionsLabel: (userLabel: string) => `Действия с пользователем «${userLabel}»`,
+      unsavedChanges: 'Есть несохранённые изменения',
     },
 
     /** What was being attempted — substituted into `errors.forbidden`/`server`/`network` so no
@@ -239,10 +271,13 @@ export const userCopy = defineCopy(
       changeRole: (userLabel: string) => `изменить роль пользователя «${userLabel}»`,
       changeJobRole: 'изменить роль исполнителя по умолчанию',
       changePreferredLanguage: 'изменить язык писем пользователя',
+      saveChanges: 'сохранить изменения пользователя',
       deleteUser: 'удалить пользователя',
       resetPassword: 'сбросить пароль',
       sendPasswordResetEmail: 'отправить ссылку на смену пароля',
       impersonate: 'войти как пользователь',
+      revokeSession: 'завершить сеанс',
+      revokeSessions: 'завершить сеансы',
     },
 
     errors: {
@@ -372,6 +407,25 @@ export const userCopy = defineCopy(
       noActivity: 'No activity data',
     },
 
+    sessions: {
+      title: 'Active sessions',
+      subtitle: 'Devices this account is currently signed in on. Revoking takes effect immediately.',
+      loadFailed: "Could not load the session list. The user's other data is shown above.",
+      empty: 'No active sessions — this account is not signed in anywhere.',
+      unknownDevice: 'Unrecognised device',
+      signedInAt: (moment: string) => `Signed in: ${moment}`,
+      expiresAt: (moment: string) => `Valid until ${moment}`,
+      current: 'This device',
+      revoke: 'Revoke',
+      revoking: 'Revoking…',
+      revokeAria: (device: string) => `Revoke session: ${device}`,
+      revokeAll: 'Revoke every session',
+      revokeOthers: 'Revoke the other sessions',
+      revokedOne: 'Session revoked.',
+      revokedAll: "Every one of this account's sessions has been revoked.",
+      revokedOthers: 'Every other session has been revoked.',
+    },
+
     history: {
       title: 'Sign-in history',
       subtitle: 'Successful sign-ins only. A token refresh does not count as one.',
@@ -420,16 +474,23 @@ export const userCopy = defineCopy(
       resetSuperAdminHint: 'Only the super administrator can reset their own password',
       resetTitle: (userLabel: string) => `Reset the password of “${userLabel}”?`,
       resetBody: 'The user will have to set a new password at their next sign-in.',
+      saveSuperAdminHint: 'Only the super administrator can change their own account',
+      actionsGroupAccount: 'Account',
+      actionsLabel: (userLabel: string) => `Actions for the user “${userLabel}”`,
+      unsavedChanges: 'You have unsaved changes',
     },
 
     errorActions: {
       changeRole: (userLabel: string) => `change the role of “${userLabel}”`,
       changeJobRole: 'change the default employee role',
       changePreferredLanguage: 'change the user’s email language',
+      saveChanges: 'save the user’s changes',
       deleteUser: 'delete the user',
       resetPassword: 'reset the password',
       sendPasswordResetEmail: 'send a password reset link',
       impersonate: 'sign in as this user',
+      revokeSession: 'revoke the session',
+      revokeSessions: 'revoke the sessions',
     },
 
     errors: {

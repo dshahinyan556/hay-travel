@@ -14,6 +14,12 @@ export interface JobParametersCardProps {
   draftValues: Record<string, string>
   onChange: (key: string, value: string) => void
   disabled: boolean
+  /** Заголовок карточки. По умолчанию «Параметры задачи» — карточка живёт и на списке задач,
+   * где те же поля означают параметры ЭКРАНА, а не какой-то одной задачи. */
+  title?: string
+  /** Пояснение за «?» рядом с заголовком (конвенция админки — подсказка не текстом в вёрстке).
+   * У карточки задачи его нет: там смысл карточки задаёт сама задача. */
+  titleHint?: string
 }
 
 /**
@@ -23,16 +29,34 @@ export interface JobParametersCardProps {
  * — never a label the backend sent, since `JobParameterInfoModel.displayName` is always `null`
  * today (see that type's doc comment).
  */
-export function JobParametersCard({ parameters, draftValues, onChange, disabled }: JobParametersCardProps) {
+export function JobParametersCard({
+  parameters,
+  draftValues,
+  onChange,
+  disabled,
+  title,
+  titleHint,
+}: JobParametersCardProps) {
   const copy = useCopy(jobsCopy)
 
   if (parameters.length === 0) return null
 
+  const cardTitle = title ?? copy.parametersCardTitle
+
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-[18px]">
-      <p className="mb-3.5 text-[11px] font-bold tracking-[.1em] text-neutral-500 uppercase">
-        {copy.parametersCardTitle}
-      </p>
+      <HelpRevealZone
+        as="p"
+        enabled={Boolean(titleHint)}
+        className="mb-3.5 flex items-center gap-2 text-[11px] font-bold tracking-[.1em] text-neutral-500 uppercase"
+      >
+        {cardTitle}
+        {titleHint && (
+          <HelpButton surface="admin" title={cardTitle}>
+            {titleHint}
+          </HelpButton>
+        )}
+      </HelpRevealZone>
 
       <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
         {parameters.map((parameter) => {

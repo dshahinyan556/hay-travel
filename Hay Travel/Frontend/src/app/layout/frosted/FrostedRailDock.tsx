@@ -24,11 +24,12 @@ export function FrostedRailDock() {
 
   const tabItems = [
     { to: '/', label: t('nav.home'), end: true, Icon: HomeIcon },
-    { to: '/trips', label: t('nav.trips'), end: false, Icon: CompassIcon },
     // Пятая вкладка (батч 2026-08-29). Подписи с этого момента обрезаются многоточием
     // (`truncate` ниже): на 375px пять колонок дают ~71px, и «Путешествия» в них не помещается
     // целиком — но подпись под иконкой это подсказка, а не единственный носитель смысла.
     { to: '/transfers', label: t('nav.transfersShort'), end: false, Icon: CarIcon },
+    // «Путешествия» — средняя, третья из пяти вкладок (решение Давида 2026-08-31).
+    { to: '/trips', label: t('nav.trips'), end: false, Icon: CompassIcon },
     { to: '/regions', label: t('nav.regionsShort'), end: false, Icon: MapIcon },
     // Одна вкладка, два адреса: у кабинета свой маршрут (`/account`), и `/auth` всё равно
     // отправил бы вошедшего туда же — незачем гонять через редирект на каждом тапе. `end`

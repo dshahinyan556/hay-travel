@@ -128,6 +128,9 @@ export function RecipientsGrid({
   }
 
   function changeSource(row: RecipientDraft, next: NotificationRecipientSource): void {
+    // `Select` зовёт `onChange` и на повторный выбор ТОГО ЖЕ источника — без этой проверки он
+    // стирал получателя строки (userId/роль/адрес), и карточка становилась «грязной» на ровном месте.
+    if (next === row.sourceType) return
     onPatch(row.rowKey, {
       sourceType: next,
       userId: null,

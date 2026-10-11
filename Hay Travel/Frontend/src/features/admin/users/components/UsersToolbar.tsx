@@ -1,4 +1,5 @@
 import { Input, Select, type SelectOption } from '@/shared/ui'
+import { SearchIcon } from '@/shared/ui/icons'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import type { RoleInfoModel } from '@/features/admin/types/roles'
 import { userCopy, type UserCopy } from '../lib/userCopy'
@@ -51,7 +52,7 @@ export function UsersToolbar({ filters, onFiltersChange, roles }: UsersToolbarPr
           aria-hidden="true"
           className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400"
         >
-          🔍
+          <SearchIcon size={16} />
         </span>
         <Input
           type="search"

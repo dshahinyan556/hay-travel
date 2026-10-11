@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { redirect, useLoaderData, useRevalidator } from 'react-router'
-import { MaintenanceFormLayout, Tabs, type TabItem } from '@/shared/ui'
+import { AdminToolbar, DataEntryScreenLayout, Tabs, UnsavedChangesModal, type TabItem } from '@/shared/ui'
+import { AlertIcon } from '@/shared/ui/icons'
+import { useUnsavedChangesGuard } from '@/shared/hooks'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import {
   AdminScreen,
@@ -9,6 +11,7 @@ import {
   canViewAny,
   ensurePermissionsReady,
   useScreenPermission,
+  type ScreenPermission,
 } from '@/shared/auth'
 import {
   getExpenseTemplates,
@@ -19,18 +22,28 @@ import {
   getVehicleClasses,
 } from '@/features/admin/api/adminCatalog'
 import { PlacesTab } from './places/PlacesTab'
+import { placesTable } from './places/placesTable'
 import { ExpenseTemplatesTab } from './expense-templates/ExpenseTemplatesTab'
+import { expenseTemplatesTable } from './expense-templates/expenseTemplatesTable'
 import { NoteTemplatesTab } from './note-templates/NoteTemplatesTab'
+import { noteTemplatesTable, type NoteTypeFilter } from './note-templates/noteTemplatesTable'
 import { RegionsTab } from './regions/RegionsTab'
+import { regionsTable } from './regions/regionsTable'
 import { TagsTab } from './tags/TagsTab'
+import { tagsTable } from './tags/tagsTable'
 import { VehicleClassesTab } from './vehicle-classes/VehicleClassesTab'
-import { catalogCopy } from './lib/catalogCopy'
+import { vehicleClassesTable } from './vehicle-classes/vehicleClassesTable'
+import { CatalogSearchInput } from './CatalogSearchInput'
+import { catalogCopy, type CatalogCopy } from './lib/catalogCopy'
+import { failedCount, type CatalogEntity, type RowKey, type SaveOutcome } from './lib/catalogDraft'
+import { executeSavePlan } from './lib/catalogSave'
+import { useCatalogTableDraft, type CatalogTableDraft } from './lib/useCatalogTableDraft'
 
 /**
  * Loads the catalog lists in parallel. Errors are NOT swallowed — a rejection propagates to
  * `AdminErrorBoundary`, same contract as `productsLoader`/`settingsLoader`. Revalidated as a whole
- * after every mutation on any tab (catalogs are small — a handful to a few dozen rows each — so
- * refetching them costs nothing and keeps `tourCount`/cross-tab state honest).
+ * after every Save (catalogs are small — a handful to a few dozen rows each — so refetching them
+ * costs nothing and keeps `tourCount`/cross-tab state honest).
  *
  * ONE route, SIX independent permission keys. So:
  *  - the route opens when at least one of them is viewable;
@@ -55,104 +68,293 @@ export async function catalogLoader() {
 
 type CatalogTabId = 'places' | 'expenses' | 'notes' | 'regions' | 'tags' | 'vehicle-classes'
 
+/** Stable stand-in for a list the role cannot read — keeps that tab's draft hook memo-stable. */
+const NO_ROWS: never[] = []
+
+/** The page-level view of one tab's draft — everything here is independent of the row type. */
+interface CatalogTabSlot {
+  id: CatalogTabId
+  label: string
+  /** The list loaded (the role may view it); an unavailable tab is left out, not shown empty. */
+  available: boolean
+  count: number
+  permission: ScreenPermission
+  draft: Pick<
+    CatalogTableDraft<CatalogEntity, object>,
+    'changeCount' | 'isDirty' | 'hasErrors' | 'selected' | 'reset' | 'remove' | 'applyOutcome'
+  >
+  /** Runs this tab's Save plan; never rejects — failures come back per row. */
+  save: () => Promise<SaveOutcome>
+  /** Absent for Regions — a fixed set: no «Добавить» / «Удалить» at all. */
+  add?: () => void
+}
+
+function slotOf<T extends CatalogEntity, V extends object>(
+  draft: CatalogTableDraft<T, V>,
+  rest: Omit<CatalogTabSlot, 'draft' | 'save' | 'count'> & { copy: CatalogCopy },
+): CatalogTabSlot {
+  const { copy, ...slot } = rest
+  return {
+    ...slot,
+    count: draft.rows.filter((row) => row.item !== null).length,
+    draft,
+    save: () => executeSavePlan(draft.def, draft.plan(), copy),
+  }
+}
+
 /**
- * Справочники (4.2): reference catalogs consumed as selectable options on the tour form (4.3,
- * not built yet). Five tabs have full CRUD (Places / Expense templates / Note templates / Tags,
- * 2026-08-16; Vehicle classes, batch 2026-08-29 decision 0.7) — the backend has Create/Update/
- * Delete for all five. "Регионы" stays name/slug/order-fixed (seeded by a migration, David
- * 2026-08-01) but its teaser text is editable since 2026-08-02 (`UpdateBlurb`) — see `RegionsTab`.
+ * Справочники (4.2) — reference catalogs the tour/transfer forms pick from. Since 2026-10-11
+ * (checklist «приведение админки к шаблонам», этап 4) every tab is an EDITABLE TABLE over one
+ * page-wide draft, by the order screen's pattern: Template A (`DataEntryScreenLayout`), one pinned
+ * `AdminToolbar` (Отмена / Сохранить / Добавить / Удалить), nothing reaches the server until
+ * «Сохранить». The side-panel forms are gone.
  *
- * One loader for all six lists; each tab owns its own add/edit/delete state and calls
- * `revalidator.revalidate()` after a successful mutation, same contract as `ProductsPage`.
- *
- * Template B — «Форма обслуживания» (`MaintenanceFormLayout`). All six tabs are the same
- * archetype: independent, unlinked records, edited one at a time in a side panel. «Регионы» is its
- * fixed-set variant — many records, but the count is settled forever by a migration, so Add and
- * Delete are structurally absent rather than merely hidden.
- *
- * The layout's page-level `controlZone` is left empty ON PURPOSE: per the proposal's own §B
- * diagram the tab strip sits ABOVE the control zone, so search/count/«Добавить» belong to the
- * ACTIVE tab, not to the page — each `*Tab` already renders exactly that row (and its own message
- * slot above its own table), and lifting six independent search states up here would only make
- * the page own state it has no use for.
+ *  - The draft spans ALL tabs (six `useCatalogTableDraft`s live here, not in the tabs): switching a
+ *    tab keeps its edits, a dot on the tab shows where they are, one Save sends everything.
+ *  - Save validates first (any invalid new/changed row → nothing is sent, banner + highlighted
+ *    cells), then runs each tab's plan row by row. A row the server rejects stays in the draft
+ *    with its error; everything else is applied. The loader is revalidated once at the end.
+ *  - «Добавить» / «Удалить» act on the ACTIVE tab; each tab's own permission key decides whether
+ *    they (and its cells) are live — no rights → visible but disabled with a hint, like orders.
+ *  - Search sits in the control zone and filters the active tab (each tab keeps its own query).
  */
 export function CatalogPage() {
-  const { places, expenseTemplates, noteTemplates, regions, tags, vehicleClasses } =
-    useLoaderData<typeof catalogLoader>()
+  const data = useLoaderData<typeof catalogLoader>()
   const copy = useCopy(catalogCopy)
   const revalidator = useRevalidator()
 
-  const placesPermission = useScreenPermission(AdminScreen.CatalogPlaces)
-  const expensesPermission = useScreenPermission(AdminScreen.CatalogExpenseTemplates)
-  const notesPermission = useScreenPermission(AdminScreen.CatalogNoteTemplates)
-  const regionsPermission = useScreenPermission(AdminScreen.CatalogRegions)
-  const tagsPermission = useScreenPermission(AdminScreen.CatalogTags)
-  const vehicleClassesPermission = useScreenPermission(AdminScreen.CatalogVehicleClasses)
+  const permissions = {
+    places: useScreenPermission(AdminScreen.CatalogPlaces),
+    expenses: useScreenPermission(AdminScreen.CatalogExpenseTemplates),
+    notes: useScreenPermission(AdminScreen.CatalogNoteTemplates),
+    regions: useScreenPermission(AdminScreen.CatalogRegions),
+    tags: useScreenPermission(AdminScreen.CatalogTags),
+    vehicleClasses: useScreenPermission(AdminScreen.CatalogVehicleClasses),
+  }
 
-  const revalidate = () => revalidator.revalidate()
+  const placesDraft = useCatalogTableDraft(placesTable, data.places ?? NO_ROWS)
+  const expensesDraft = useCatalogTableDraft(expenseTemplatesTable, data.expenseTemplates ?? NO_ROWS)
+  const notesDraft = useCatalogTableDraft(noteTemplatesTable, data.noteTemplates ?? NO_ROWS)
+  const regionsDraft = useCatalogTableDraft(regionsTable, data.regions ?? NO_ROWS)
+  const tagsDraft = useCatalogTableDraft(tagsTable, data.tags ?? NO_ROWS)
+  const vehicleClassesDraft = useCatalogTableDraft(vehicleClassesTable, data.vehicleClasses ?? NO_ROWS)
 
-  /** Only the tabs whose list actually loaded. A tab the role cannot read is ABSENT, not empty:
-   * an empty «Точки маршрута» would read as "there are none", which is a different statement. */
-  const tabs: TabItem[] = [
-    places !== null && { id: 'places', label: copy.common.tabs.places },
-    expenseTemplates !== null && { id: 'expenses', label: copy.common.tabs.expenses },
-    noteTemplates !== null && { id: 'notes', label: copy.common.tabs.notes },
-    regions !== null && { id: 'regions', label: copy.common.tabs.regions },
-    tags !== null && { id: 'tags', label: copy.common.tabs.tags },
-    vehicleClasses !== null && { id: 'vehicle-classes', label: copy.common.tabs.vehicleClasses },
-  ].filter((tab): tab is TabItem => tab !== false)
+  const [noteTypeFilter, setNoteTypeFilter] = useState<NoteTypeFilter>('all')
+  const [queries, setQueries] = useState<Partial<Record<CatalogTabId, string>>>({})
+  const [saving, setSaving] = useState(false)
+  const [showErrors, setShowErrors] = useState(false)
+  const [banner, setBanner] = useState<string | null>(null)
 
-  // Seeded from the first AVAILABLE tab, not the constant `'places'`: the loader guarantees at
-  // least one, but it is not necessarily that one.
-  const [activeTab, setActiveTab] = useState<CatalogTabId>(() => tabs[0].id as CatalogTabId)
+  const slots: CatalogTabSlot[] = [
+    slotOf(placesDraft, {
+      id: 'places',
+      label: copy.common.tabs.places,
+      available: data.places !== null,
+      permission: permissions.places,
+      add: () => placesDraft.add(),
+      copy,
+    }),
+    slotOf(expensesDraft, {
+      id: 'expenses',
+      label: copy.common.tabs.expenses,
+      available: data.expenseTemplates !== null,
+      permission: permissions.expenses,
+      add: () => expensesDraft.add(),
+      copy,
+    }),
+    slotOf(notesDraft, {
+      id: 'notes',
+      label: copy.common.tabs.notes,
+      available: data.noteTemplates !== null,
+      permission: permissions.notes,
+      // A new note opens already scoped to the type the admin is filtering by.
+      add: () => notesDraft.add(noteTypeFilter === 'all' ? undefined : { type: String(noteTypeFilter) }),
+      copy,
+    }),
+    slotOf(regionsDraft, {
+      id: 'regions',
+      label: copy.common.tabs.regions,
+      available: data.regions !== null,
+      permission: permissions.regions,
+      copy,
+    }),
+    slotOf(tagsDraft, {
+      id: 'tags',
+      label: copy.common.tabs.tags,
+      available: data.tags !== null,
+      permission: permissions.tags,
+      add: () => tagsDraft.add(),
+      copy,
+    }),
+    slotOf(vehicleClassesDraft, {
+      id: 'vehicle-classes',
+      label: copy.common.tabs.vehicleClasses,
+      available: data.vehicleClasses !== null,
+      permission: permissions.vehicleClasses,
+      add: () => vehicleClassesDraft.add(),
+      copy,
+    }),
+  ]
+  const availableSlots = slots.filter((slot) => slot.available)
+
+  // Seeded from the first AVAILABLE tab: the loader guarantees at least one, not which.
+  const [activeTab, setActiveTab] = useState<CatalogTabId>(() => availableSlots[0].id)
+  const active = availableSlots.find((slot) => slot.id === activeTab) ?? availableSlots[0]
+
+  const totalChanges = availableSlots.reduce((sum, slot) => sum + slot.draft.changeCount, 0)
+  const dirty = totalChanges > 0
+  const guard = useUnsavedChangesGuard(dirty && !saving)
+
+  const query = queries[active.id] ?? ''
+  const noPermission = copy.common.noPermission
+  const anyWritable = availableSlots.some(
+    ({ permission }) => permission.canCreate || permission.canUpdate || permission.canDelete,
+  )
+
+  function handleCancel() {
+    for (const slot of slots) slot.draft.reset()
+    setShowErrors(false)
+    setBanner(null)
+  }
+
+  async function handleSave() {
+    if (saving) return
+    const dirtySlots = availableSlots.filter((slot) => slot.draft.isDirty)
+    if (dirtySlots.length === 0) return
+    setShowErrors(true)
+
+    const invalid = dirtySlots.filter((slot) => slot.draft.hasErrors)
+    if (invalid.length > 0) {
+      setBanner(copy.common.banners.validation(invalid.map((slot) => slot.label).join(', ')))
+      if (!invalid.some((slot) => slot.id === active.id)) setActiveTab(invalid[0].id)
+      return
+    }
+
+    setSaving(true)
+    setBanner(null)
+    const outcomes: { slot: CatalogTabSlot; outcome: SaveOutcome }[] = []
+    try {
+      // Strictly sequential — tab after tab, row after row (see `catalogSave.ts`).
+      for (const slot of dirtySlots) outcomes.push({ slot, outcome: await slot.save() })
+      await revalidator.revalidate()
+    } finally {
+      // Folded in only after the fresh baseline has landed, so a saved value never flashes back
+      // to the old one between "draft cleared" and "loader refetched".
+      for (const { slot, outcome } of outcomes) slot.draft.applyOutcome(outcome)
+      setSaving(false)
+    }
+
+    const failed = outcomes.filter(({ outcome }) => failedCount(outcome) > 0)
+    if (failed.length === 0) {
+      setShowErrors(false)
+      return
+    }
+    const failedRows = failed.reduce((sum, { outcome }) => sum + failedCount(outcome), 0)
+    setBanner(copy.common.banners.partial(failedRows, failed.map(({ slot }) => slot.label).join(', ')))
+  }
+
+  function handleDelete() {
+    const keys: RowKey[] = [...active.draft.selected]
+    if (keys.length > 0) active.draft.remove(keys)
+  }
+
+  const tabs: TabItem[] = availableSlots.map((slot) => ({
+    id: slot.id,
+    label: slot.label,
+    badge: slot.count,
+    unsavedDot: slot.draft.isDirty ? copy.common.tabHasChanges : undefined,
+  }))
+
+  const tabProps = { query, locked: saving, showErrors }
 
   return (
-    <MaintenanceFormLayout title={copy.common.title} subtitle={copy.common.subtitle}>
-      {/* Pinned below the mobile hamburger bar (60px) on phones, flush to the viewport top on
-          desktop where that bar doesn't exist. Bleeds to `main`'s own edges (`-mx-4 sm:-mx-6`)
-          so the background covers content scrolling underneath it. */}
-      <div className="sticky top-[60px] z-10 -mx-4 bg-neutral-50 px-4 pt-1 sm:-mx-6 sm:px-6 md:top-0">
+    <>
+      <DataEntryScreenLayout
+        title={copy.common.title}
+        subtitle={copy.common.subtitle}
+        controlZone={
+          <>
+            <AdminToolbar
+              className="w-full sm:w-auto"
+              onCancel={handleCancel}
+              onSave={() => void handleSave()}
+              onAdd={active.add}
+              onDelete={active.add ? handleDelete : undefined}
+              // Cancel only drops the local draft — no rights involved, no hint.
+              cancelState={{ disabled: saving || !dirty }}
+              saveState={{
+                disabled: saving || !dirty || !anyWritable,
+                pending: saving,
+                hint: anyWritable ? null : noPermission,
+              }}
+              addState={{
+                disabled: saving || !active.permission.canCreate,
+                hint: active.permission.canCreate ? null : noPermission,
+              }}
+              deleteState={{
+                disabled: saving || !active.permission.canDelete || active.draft.selected.size === 0,
+                hint: active.permission.canDelete ? null : noPermission,
+              }}
+            />
+            {dirty && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+                {copy.common.changeCount(totalChanges)}
+              </span>
+            )}
+            <div className="w-full sm:ml-auto sm:w-72">
+              <CatalogSearchInput
+                value={query}
+                onChange={(value) => setQueries((current) => ({ ...current, [active.id]: value }))}
+                placeholder={active.id === 'places' ? copy.places.searchPlaceholder : copy.common.searchByName}
+              />
+            </div>
+          </>
+        }
+        message={
+          banner && (
+            <div
+              role="alert"
+              className="flex items-start gap-2.5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+            >
+              <AlertIcon size={17} className="mt-px shrink-0" />
+              <span>{banner}</span>
+            </div>
+          )
+        }
+      >
         <Tabs
           tabs={tabs}
-          activeId={activeTab}
+          activeId={active.id}
           onChange={(id) => setActiveTab(id as CatalogTabId)}
           label={copy.common.tabsLabel}
         />
-      </div>
 
-      {activeTab === 'places' && places !== null && (
-        <PlacesTab
-          places={places}
-          // A role may edit points without reading regions: the picker then has no options, and
-          // the form says so instead of pretending the list is empty.
-          regions={regions}
-          permission={placesPermission}
-          onMutated={revalidate}
-        />
-      )}
-      {activeTab === 'expenses' && expenseTemplates !== null && (
-        <ExpenseTemplatesTab
-          items={expenseTemplates}
-          permission={expensesPermission}
-          onMutated={revalidate}
-        />
-      )}
-      {activeTab === 'notes' && noteTemplates !== null && (
-        <NoteTemplatesTab items={noteTemplates} permission={notesPermission} onMutated={revalidate} />
-      )}
-      {activeTab === 'regions' && regions !== null && (
-        <RegionsTab
-          regions={regions}
-          canUpdate={regionsPermission.canUpdate}
-          onMutated={revalidate}
-        />
-      )}
-      {activeTab === 'tags' && tags !== null && (
-        <TagsTab items={tags} permission={tagsPermission} onMutated={revalidate} />
-      )}
-      {activeTab === 'vehicle-classes' && vehicleClasses !== null && (
-        <VehicleClassesTab items={vehicleClasses} permission={vehicleClassesPermission} onMutated={revalidate} />
-      )}
-    </MaintenanceFormLayout>
+        {active.id === 'places' && (
+          <PlacesTab draft={placesDraft} permission={permissions.places} regions={data.regions} {...tabProps} />
+        )}
+        {active.id === 'expenses' && (
+          <ExpenseTemplatesTab draft={expensesDraft} permission={permissions.expenses} {...tabProps} />
+        )}
+        {active.id === 'notes' && (
+          <NoteTemplatesTab
+            draft={notesDraft}
+            permission={permissions.notes}
+            typeFilter={noteTypeFilter}
+            onTypeFilterChange={setNoteTypeFilter}
+            {...tabProps}
+          />
+        )}
+        {active.id === 'regions' && (
+          <RegionsTab draft={regionsDraft} permission={permissions.regions} {...tabProps} />
+        )}
+        {active.id === 'tags' && <TagsTab draft={tagsDraft} permission={permissions.tags} {...tabProps} />}
+        {active.id === 'vehicle-classes' && (
+          <VehicleClassesTab draft={vehicleClassesDraft} permission={permissions.vehicleClasses} {...tabProps} />
+        )}
+      </DataEntryScreenLayout>
+
+      <UnsavedChangesModal open={guard.isBlocking} onCancel={guard.cancel} onConfirm={guard.confirm} />
+    </>
   )
 }

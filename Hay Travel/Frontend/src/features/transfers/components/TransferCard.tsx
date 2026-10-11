@@ -27,7 +27,11 @@ export function TransferCard({ transfer }: { transfer: TransferSummary }) {
   const to = transferPointOf(transfer.route, 'to')
 
   return (
-    <article className="card-lift group h-full">
+    // `min-w-0`: the wrapping `<li className="reveal-item grid">` makes THIS article a grid item
+    // too (its own nested grid context, one implicit cell) — a grid item defaults to
+    // `min-width: auto` same as a flex item, so without this it repeats the exact overflow the
+    // `<li>` itself needed `min-w-0` for, just one level deeper (David, 2026-08-31).
+    <article className="card-lift group h-full min-w-0">
       <Link
         to={`/transfers/${transfer.id}`}
         className="flex h-full overflow-hidden rounded-2xl bg-gradient-to-b from-panel-raised to-panel ring-1 ring-edge transition-shadow duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] hover:ring-gold-line focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none sm:flex-col"
@@ -50,11 +54,16 @@ export function TransferCard({ transfer }: { transfer: TransferSummary }) {
         <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-4">
           {from !== '' && (
             <p className="flex min-w-0 items-center gap-1.5 text-[10px] tracking-[0.14em] text-gold-ink uppercase sm:text-[11px]">
-              <span className="truncate">{from}</span>
+              {/* `min-w-0` on each span, not just the row: `truncate`'s `white-space: nowrap` gives
+                  a flex item an intrinsic (max-content) width, and a flex item defaults to
+                  `min-width: auto` — without this it refuses to shrink below the route name's own
+                  full width, which was pushing the whole card past its grid track on mobile
+                  (David, 2026-08-31). */}
+              <span className="min-w-0 truncate">{from}</span>
               {to !== '' && (
                 <>
                   <ArrowRightIcon size={12} className="shrink-0" />
-                  <span className="truncate">{to}</span>
+                  <span className="min-w-0 truncate">{to}</span>
                 </>
               )}
             </p>

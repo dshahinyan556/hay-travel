@@ -1,7 +1,6 @@
 using ArmeniaTours.DataLayer;
 using ATTours.BusinessServices.DataConversion.Core.EntityValidations;
 using ATTours.BusinessServices.Services.Availability;
-using ATTours.BusinessServices.Services.InfoServices;
 using ATTours.BusinessServices.Services.Shared;
 using ATTours.Common.Constants;
 using ATTours.Common.Entities;
@@ -40,15 +39,27 @@ namespace ATTours.BusinessServices.Services.ValidationServices
     // Батч «Трансферы + формат» (2026-08-29) добавил сюда три группы правил: выбор слота и
     // формата, места группового формата (решения 0.19/0.20) и корректность строки-заявки
     // кастомного трансфера (маршрут, класс авто, багаж — решения 0.12-0.14).
+    //
+    // Батч «Контакты в заказах» (2026-08-29) добавил четвёртую группу — контакты для связи
+    // (1..3, ровно один основной, значение соответствует способу). Она живёт здесь, а не в
+    // сервисах создания, сознательно: правило принадлежит АГРЕГАТУ заказа и обязано
+    // достаться любому будущему пути создания автоматически (ADR 032 Р2).
     internal class OrderValidationService : EntityValidationContextDependentBase<Order, ATToursContextFactory>
     {
         private readonly OrderValidationReporting reporting;
 
-        // Порог автозакрытия дня. Читается ОДИН раз на всю валидацию, а не на каждую строку:
-        // в чекауте корзины строк до 10, и десять походов в SiteSetting за одним и тем же
-        // числом — чистая трата. Заодно все строки одного заказа судятся по одному значению,
-        // даже если админ поменяет настройку ровно в этот момент.
-        private int autoCloseLeadTimeHours;
+        // Пороги автозакрытия (глобальный + потуровые исключения). Снимок берётся ОДИН раз
+        // на всю валидацию, а не на каждую строку: в чекауте корзины строк до 10, и десять
+        // походов в SiteSetting за одним и тем же числом — чистая трата. Заодно все строки
+        // одного заказа судятся по одному значению, даже если админ поменяет настройку ровно
+        // в этот момент.
+        //
+        // null! вместо nullable-типа: снимок нельзя собрать в конструкторе (загрузка
+        // асинхронная), но к моменту, когда его читают, он гарантированно заполнен —
+        // ValidateEntitiesAsync это единственный вход в класс, и заполняет он его первой
+        // строкой. Nullable-поле здесь означало бы «?» на каждом обращении ради состояния,
+        // которого не бывает.
+        private AutoCloseLeadTimeResolver autoCloseLeadTime = null!;
 
         // Момент отсчёта тоже фиксируется один раз — по той же причине: соседние строки
         // одного заказа не должны попадать по разные стороны границы окна.
@@ -76,10 +87,9 @@ namespace ATTours.BusinessServices.Services.ValidationServices
 
         public override async Task ValidateEntitiesAsync()
         {
-            // Тот же контекст, что у валидации: своего соединения info-сервису не нужно,
-            // и освобождать его здесь нельзя — он принадлежит вызывающему.
-            autoCloseLeadTimeHours = await new SiteSettingsInfo(Context)
-                .GetNumberAsync(SiteSettingKeys.BookingAutoCloseLeadTimeHours);
+            // Тот же контекст, что у валидации: своего соединения снимку порогов не нужно,
+            // и освобождать чужое здесь нельзя — он принадлежит вызывающему.
+            autoCloseLeadTime = await AutoCloseLeadTimeResolver.LoadAsync(Context);
             nowUtc = DateTime.UtcNow;
 
             await LoadReferenceDataAsync();
@@ -89,6 +99,7 @@ namespace ATTours.BusinessServices.Services.ValidationServices
             foreach (var order in Entities)
             {
                 ValidateLineCount(order);
+                ValidateContacts(order);
 
                 // Места считаются в пределах одного заказа: две позиции корзины на один слот
                 // складываются, но заказы друг друга через этот счётчик не видят — чужие
@@ -139,6 +150,49 @@ namespace ATTours.BusinessServices.Services.ValidationServices
             if (order.Lines.Count > OrderLimits.MaxOrderLines)
                 throw new ErrorModelException(GlobalErrorCode.OrderTooManyLines, HttpStatusCode.BadRequest,
                     $"Order cannot have more than {OrderLimits.MaxOrderLines} lines, got {order.Lines.Count}.");
+        }
+
+        // Контакты — правило ШАПКИ заказа, поэтому бросается плоско даже в режиме PerLine:
+        // привязать «нет контакта» к позиции корзины нельзя, её вины тут нет.
+        //
+        // Правило применяется только к СОБИРАЕМОМУ заказу (Id == 0, ещё не вставлен), а не к
+        // уже существующей строке. Причина конкретная: этот же валидатор третьей точкой
+        // вызывает OrderUpdateService (правка своей брони, PUT Order/Update), и заказ туда
+        // приезжает загруженным с Include(Lines) — БЕЗ Contacts. Без этой проверки правка
+        // любой брони падала бы с OrderContactRequired на пустой невыгруженной коллекции,
+        // а заказы, созданные до батча 2026-08-29, стали бы нередактируемыми навсегда
+        // (их сознательно не бэкфиллили). Контакты заказа неизменяемы по конструкции —
+        // это снимок (ADR 032 Р1), — поэтому на пути правки проверять нечего.
+        private static void ValidateContacts(Order order)
+        {
+            if (order.Id != 0)
+                return;
+
+            if (order.Contacts.Count < ContactLimits.MinOrderContacts)
+                throw new ErrorModelException(GlobalErrorCode.OrderContactRequired, HttpStatusCode.BadRequest,
+                    "Order must have at least one client contact.");
+
+            if (order.Contacts.Count > ContactLimits.MaxOrderContacts)
+                throw new ErrorModelException(GlobalErrorCode.OrderTooManyContacts, HttpStatusCode.BadRequest,
+                    $"Order cannot have more than {ContactLimits.MaxOrderContacts} client contacts, got {order.Contacts.Count}.");
+
+            if (order.Contacts.Count(contact => contact.IsPrimary) != 1)
+                throw new ErrorModelException(GlobalErrorCode.OrderPrimaryContactInvalid, HttpStatusCode.BadRequest,
+                    "Exactly one client contact must be marked as primary.");
+
+            foreach (var contact in order.Contacts)
+            {
+                // Фамилия НЕ обязательна (решение Давида, 2026-08-29): у клиента её может не
+                // быть в удобной форме, а менеджеру для звонка достаточно имени и номера.
+                // Имя обязательно — без него в заказе стоял бы безымянный номер.
+                if (string.IsNullOrWhiteSpace(contact.FirstName))
+                    throw new ErrorModelException(GlobalErrorCode.RequiredFieldMissing, HttpStatusCode.BadRequest,
+                        "Client contact requires a first name.");
+
+                if (!ContactMethodValidator.IsValid(contact.Type, contact.Value))
+                    throw new ErrorModelException(GlobalErrorCode.InvalidContactValue, HttpStatusCode.BadRequest,
+                        $"Contact value is not valid for method {contact.Type}.");
+            }
         }
 
         // Продукты, классы авто и цены трансферов, упомянутые ВСЕМИ строками всех
@@ -220,9 +274,40 @@ namespace ATTours.BusinessServices.Services.ValidationServices
             // приедет менеджеру на день, в который никто не работает.
             if (line.LineKind == OrderLineKind.CustomTransfer)
             {
-                return await IsDateClosedAsync(line, tourId: null, TourType.Transfer)
-                    ? GlobalErrorCode.TourDateUnavailable
-                    : ValidateCustomTransferLine(line);
+                // Живое окно автозакрытия применяется к заявке наравне с бронью (решение Р7
+                // от 2026-08-29). До этого заявку судили ТОЛЬКО материализованные правила, а
+                // публичный ClosureRuleInfo.GetClosedDatesAsync окно конструктору трансфера
+                // уже применял — то есть календарь на сайте день гасил, а бэкенд ту же
+                // заявку принимал. Расхождение между тем, что показано клиенту, и тем, что
+                // принято сервером, недопустимо в любую сторону.
+                //
+                // tourId == null: продукта у заявки нет, значит нет и исключения — порог
+                // глобальный. startTimes == null: расписания нет тем более (время подачи
+                // вводит сам клиент), поэтому отсчёт идёт от начала календарного дня —
+                // ровно то же поведение, что у предопределённого трансфера (решение Р5).
+                //
+                // Обратная дата (ReturnDate) этой проверкой НЕ покрывается, и это осознанно.
+                // Окно закрывает только ближайшие ко «сейчас» дни, а ReturnDate по
+                // определению не раньше TourDate (ValidateReturnTrip): дата, лежащая позже
+                // даты поездки, не может оказаться в окне, если сама поездка в него не
+                // попала. Проверять её здесь означало бы лишний вызов ради заведомо
+                // ложного условия — и, хуже, перебить кодом TourDateUnavailable честный
+                // InvalidReturnTrip у строки с перевёрнутым диапазоном, потому что форму
+                // обратного рейса проверяет ValidateCustomTransferLine НИЖЕ. Правила
+                // закрытия — другое дело: они адресуют произвольный день сколь угодно
+                // далеко вперёд, поэтому IsDateClosedAsync обратную дату смотрит.
+                //
+                // Код ошибки тот же, что у закрытого дня (TourDateUnavailable): снаружи это
+                // неотличимо от обычной блокировки, и заводить второй код ради внутренней
+                // механики не нужно — так же сделано у обычных строк ниже.
+                if (await IsDateClosedAsync(line, tourId: null, TourType.Transfer)
+                    || autoCloseLeadTime.IsWithinAutoCloseWindow(tourId: null, line.TourDate,
+                        startTimes: null, nowUtc))
+                {
+                    return GlobalErrorCode.TourDateUnavailable;
+                }
+
+                return ValidateCustomTransferLine(line);
             }
 
             // Верхняя граница гостей — только для брони ПРОДУКТА, и только после ветки
@@ -246,10 +331,15 @@ namespace ATTours.BusinessServices.Services.ValidationServices
             // по материализованным правилам. Нужен потому, что TourDateAutoClosureJob тикает
             // раз в час — между тиками правила на день ещё нет, а бронировать его уже поздно.
             //
+            // Порог берётся с учётом исключения этого продукта, а отсчёт идёт от самого
+            // позднего слота дня (решение Р1): расписание уже загружено в tour.StartTimes,
+            // отдельного запроса на строку не нужно. У трансфера список пуст — там отсчёт
+            // остаётся от начала дня.
+            //
             // Код ошибки НАМЕРЕННО тот же, что у закрытого дня (TourDateUnavailable): снаружи
             // это неотличимо от обычной блокировки, отдельного кода/сообщения фронт не
             // получает и объяснять клиенту внутреннюю механику не нужно.
-            if (AutoClosureWindow.IsWithinAutoCloseWindow(line.TourDate, autoCloseLeadTimeHours, nowUtc))
+            if (autoCloseLeadTime.IsWithinAutoCloseWindow(tour.Id, line.TourDate, tour.StartTimes, nowUtc))
                 return GlobalErrorCode.TourDateUnavailable;
 
             return tour.Type == TourType.Transfer

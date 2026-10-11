@@ -26,6 +26,7 @@ export const jobsCopy = defineCopy(
     title: 'Фоновые задачи',
     titleHint:
       'Задачи, которые сервер выполняет сам по расписанию. Их набор задан кодом — добавить или удалить задачу из админки нельзя.',
+    subtitle: 'Расписание, состояние и общие параметры серверных задач.',
     breadcrumbsLabel: 'Хлебные крошки',
     backToList: 'Фоновые задачи',
 
@@ -133,6 +134,32 @@ export const jobsCopy = defineCopy(
      * должен падать, если каталог когда-нибудь заведёт параметр другого типа. */
     parameterUnknownTypeHint: 'Тип поля неизвестен фронтенду — значение можно править как текст.',
 
+    /* ── Карточка «Параметры экрана» (список задач) ─────────────────────────────────────── */
+    screenParametersCardTitle: 'Параметры экрана',
+    screenParametersCardHint:
+      'Настройки, которые относятся не к одной задаче, а ко всем сразу: их читает сам планировщик. Пороги конкретной задачи правятся на её карточке.',
+    screenParametersSavedBanner: 'Параметры экрана сохранены.',
+
+    /* ── Карточка «Исключения по продуктам» (только tour-date-auto-closure) ────────────── */
+    overridesCard: {
+      title: 'Исключения по продуктам',
+      hint:
+        'Для отдельного тура можно задать свой порог вместо общего — например 8 часов вместо общих 36. Отсчёт всегда идёт от самого позднего времени старта в этот день: не успели — закрывается весь день целиком, отдельные времена не гасятся по одному.',
+      colTour: 'Тур',
+      colHours: 'Часов до старта',
+      empty: 'Исключений нет — для всех туров действует общий порог выше.',
+      addTourPlaceholder: 'Выберите тур',
+      addTourAria: 'Тур для нового исключения',
+      addHoursPlaceholder: 'Часов',
+      addHoursAria: 'Порог в часах для нового исключения',
+      addButton: 'Добавить исключение',
+      allToursAdded: 'Все туры уже добавлены в исключения.',
+      hoursError: 'Введите целое число часов больше нуля',
+      hoursFieldAria: (tourName: string) => `Порог в часах для тура «${tourName}»`,
+      removeAria: (tourName: string) => `Убрать исключение для тура «${tourName}»`,
+      tourFallback: (tourId: number) => `Тур #${tourId}`,
+    },
+
     /* ── Только просмотр / сообщения ────────────────────────────────────────────────────── */
     readOnlyHint: 'У вашей роли нет права изменять фоновые задачи — доступен только просмотр.',
     savedBanner: 'Настройки задачи сохранены.',
@@ -190,7 +217,9 @@ export const jobsCopy = defineCopy(
       'login-history-cleanup':
         'Удаляет записи журнала входов старше настроенного числа дней.',
       'tour-date-auto-closure':
-        'Закрывает календарный день для новых броней, если до его начала осталось меньше настроенного числа часов.',
+        'Закрывает календарный день для новых броней, если до самого позднего времени старта в этот день осталось меньше настроенного числа часов. День гасится целиком, вместе со всеми слотами. Для отдельных продуктов порог можно переопределить ниже.',
+      'closure-rule-cleanup':
+        'Удаляет блокировки, срок действия которых прошёл: точечные даты в прошлом и повторяющиеся правила с истёкшей датой окончания. Повторяющиеся правила без даты окончания не удаляются.',
     } as Record<string, string>,
     /** Только для страницы отчёта, которая грузит один прогон напрямую и не тянет весь список
      * задач ради подписи в шапке (`JobRunReportPage`) — тот же приём, что и у `jobHelpTextByKey`:
@@ -198,7 +227,8 @@ export const jobsCopy = defineCopy(
     jobDisplayNameByKey: {
       'order-auto-cancellation': 'Автоотмена неподтверждённых заказов',
       'login-history-cleanup': 'Очистка журнала входов',
-      'tour-date-auto-closure': 'Автозакрытие дат перед началом дня',
+      'tour-date-auto-closure': 'Автозакрытие дат перед стартом',
+      'closure-rule-cleanup': 'Удаление истёкших блокировок',
     } as Record<string, string>,
 
     /* ── Словарь по ключу параметра (SiteSettingKeys) ───────────────────────────────────── */
@@ -207,8 +237,8 @@ export const jobsCopy = defineCopy(
         label: 'Закрывать день за',
         summaryLabel: 'Порог закрытия',
         hint:
-          'День перестаёт принимать новые брони, когда до его начала остаётся меньше этого числа часов. Должно быть больше порога автоотмены заказов.',
-        unit: 'часов до начала дня',
+          'День перестаёт принимать новые брони, когда до самого позднего времени старта в этот день остаётся меньше этого числа часов. Закрывается день целиком, вместе с ранними слотами. У трансферов времени старта нет, для них отсчёт идёт от начала дня. Должно быть больше порога автоотмены заказов.',
+        unit: 'часов до последнего старта дня',
         unitShort: 'ч',
       },
       'jobs.orderAutoCancel.deadlineHours': {
@@ -226,12 +256,20 @@ export const jobsCopy = defineCopy(
         unit: 'дней',
         unitShort: 'дней',
       },
+      'jobs.runHistory.retentionDays': {
+        label: 'Хранить историю прогонов',
+        summaryLabel: 'Срок хранения истории',
+        hint: 'Строки истории прогонов старше указанного числа дней удаляются автоматически. Относится ко всем задачам сразу, а не к одной: ссылка на отчёт о прогоне перестаёт открываться, когда прогон выпал за этот срок.',
+        unit: 'дней',
+        unitShort: 'дней',
+      },
     } as Record<string, { label: string; summaryLabel: string; hint: string; unit: string; unitShort: string }>,
   },
   {
     title: 'Background jobs',
     titleHint:
       'Tasks the server runs on its own, on a schedule. The set is fixed in code — jobs cannot be added or removed from the admin panel.',
+    subtitle: 'Schedule, state, and shared parameters of the server jobs.',
     breadcrumbsLabel: 'Breadcrumbs',
     backToList: 'Background jobs',
 
@@ -319,6 +357,30 @@ export const jobsCopy = defineCopy(
     parameterNumberError: 'Enter a non-negative whole number',
     parameterUnknownTypeHint: 'The frontend does not know this field type — the value is editable as plain text.',
 
+    screenParametersCardTitle: 'Screen parameters',
+    screenParametersCardHint:
+      'Settings that belong to every job at once rather than to a single one — the scheduler itself reads them. A single job’s own thresholds are edited on its card.',
+    screenParametersSavedBanner: 'The screen parameters have been saved.',
+
+    overridesCard: {
+      title: 'Per-product exceptions',
+      hint:
+        'A single tour can have its own threshold instead of the shared one — e.g. 8 hours instead of a shared 36. The countdown always runs from the latest start time on that day: miss it and the whole day closes at once, individual times are never closed one by one.',
+      colTour: 'Tour',
+      colHours: 'Hours before start',
+      empty: 'No exceptions — every tour uses the shared threshold above.',
+      addTourPlaceholder: 'Choose a tour',
+      addTourAria: 'Tour for the new exception',
+      addHoursPlaceholder: 'Hours',
+      addHoursAria: 'Threshold in hours for the new exception',
+      addButton: 'Add exception',
+      allToursAdded: 'Every tour already has an exception.',
+      hoursError: 'Enter a whole number of hours greater than zero',
+      hoursFieldAria: (tourName: string) => `Threshold in hours for "${tourName}"`,
+      removeAria: (tourName: string) => `Remove the exception for "${tourName}"`,
+      tourFallback: (tourId: number) => `Tour #${tourId}`,
+    },
+
     readOnlyHint: 'Your role has no permission to change background jobs — view only.',
     savedBanner: 'The job settings have been saved.',
     runStartedBanner: 'The job has been started. The result will appear in the history in a few seconds.',
@@ -370,12 +432,15 @@ export const jobsCopy = defineCopy(
         'Cancels an order that stayed unconfirmed longer than the configured number of hours since creation.',
       'login-history-cleanup': 'Deletes login-history entries older than the configured number of days.',
       'tour-date-auto-closure':
-        'Closes a calendar day to new bookings once less than the configured number of hours remain before it starts.',
+        'Closes a calendar day to new bookings once less than the configured number of hours remain before the latest start time of that day. The whole day is closed, all slots with it. Individual products can override the threshold below.',
+      'closure-rule-cleanup':
+        'Deletes closures whose validity has passed: specific dates in the past and recurring rules with an expired end date. Recurring rules without an end date are kept.',
     } as Record<string, string>,
     jobDisplayNameByKey: {
       'order-auto-cancellation': 'Auto-cancel unconfirmed orders',
       'login-history-cleanup': 'Login history cleanup',
       'tour-date-auto-closure': 'Auto-close tour dates before start',
+      'closure-rule-cleanup': 'Expired closure cleanup',
     } as Record<string, string>,
 
     parameters: {
@@ -383,8 +448,8 @@ export const jobsCopy = defineCopy(
         label: 'Close a day',
         summaryLabel: 'Closing threshold',
         hint:
-          'A day stops accepting new bookings once fewer than this many hours remain before it starts. Must be greater than the order auto-cancel threshold.',
-        unit: 'hours before the day starts',
+          'A day stops accepting new bookings once fewer than this many hours remain before the latest start time of that day. The whole day closes, early slots with it. Transfers have no start times, so for them the countdown runs from the start of the day. Must be greater than the order auto-cancel threshold.',
+        unit: 'hours before the latest start',
         unitShort: 'h',
       },
       'jobs.orderAutoCancel.deadlineHours': {
@@ -399,6 +464,13 @@ export const jobsCopy = defineCopy(
         label: 'Keep login history for',
         summaryLabel: 'History retention',
         hint: 'Login-history entries older than the configured number of days are deleted automatically on every run of this job.',
+        unit: 'days',
+        unitShort: 'd',
+      },
+      'jobs.runHistory.retentionDays': {
+        label: 'Keep run history for',
+        summaryLabel: 'Run-history retention',
+        hint: 'Run-history rows older than the configured number of days are deleted automatically. This applies to every job at once, not to a single one: a link to a run report stops opening once that run has fallen out of this window.',
         unit: 'days',
         unitShort: 'd',
       },

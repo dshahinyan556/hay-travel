@@ -94,3 +94,30 @@ export interface UpdateJobCronModel {
 export interface UpdateJobParametersModel {
   values: Record<string, string>
 }
+
+/**
+ * Одно исключение по продукту для задачи `tour-date-auto-closure` (checklist
+ * `checklist-autoclose-per-tour-2026-08-29.txt`, Р2/Р4). `tourName` приходит с сервера уже
+ * готовой строкой (какой язык — решает бэк, см. `JobsController.cs`) — используется только как
+ * запасной вариант отображения, если тур не нашёлся среди загруженных `TourInfoModel` (см.
+ * `jobsModel.ts#tourTitleResolver`); основной путь — резолвить название по интерфейсному языку,
+ * тем же приёмом, что и `AddLineModal`.
+ */
+export interface TourAutoCloseOverrideInfoModel {
+  tourId: number
+  tourName: string
+  leadTimeHours: number
+}
+
+/** `ATTours.Common/DTO/Request/UpdateTourAutoCloseOverridesModel.cs`'s ONE entry — не самой
+ * модели: PUT принимает массив таких пар обёрнутым в `{ overrides: [...] }`
+ * (`UpdateTourAutoCloseOverridesModel` ниже), заменяя набор целиком (B8). */
+export interface TourAutoCloseOverrideModel {
+  tourId: number
+  leadTimeHours: number
+}
+
+/** `ATTours.Common/DTO/Request/UpdateTourAutoCloseOverridesModel.cs`. */
+export interface UpdateTourAutoCloseOverridesModel {
+  overrides: TourAutoCloseOverrideModel[]
+}

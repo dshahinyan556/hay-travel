@@ -13,7 +13,8 @@ import type {
   NotificationEventUpdateModel,
 } from '@/features/admin/types/notifications'
 
-/** GET все 4 события с платформами/шаблонами/получателями — список раздела. */
+/** GET все 5 событий с платформами/получателями (шаблон — по ссылке `templateId`, см.
+ * `types/notificationTemplates.ts`) — список раздела. */
 export function getNotificationEvents(): Promise<NotificationEventInfoModel[]> {
   return authFetch<NotificationEventInfoModel[]>('api/NotificationSettings')
 }

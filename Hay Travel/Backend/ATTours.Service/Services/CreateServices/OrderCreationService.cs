@@ -34,19 +34,25 @@ namespace ATTours.BusinessServices.Services.CreateServices
 
         private readonly int userId;
         private readonly List<OrderCreateLineModel> lines;
+        private readonly List<OrderContactCreateModel> contacts;
 
-        public OrderCreationService(List<OrderCreateLineModel> lines, int userId, CancellationToken cancellationToken = default)
+        // Принимается модель целиком, а не отдельные списки (батч «Контакты», 2026-08-29):
+        // у сервиса два конструктора, и второй позиционный List<...> рядом с первым был бы
+        // приглашением перепутать их местами.
+        public OrderCreationService(OrderCreateModel model, int userId, CancellationToken cancellationToken = default)
             : base(new Order(), CommonSettings.Instance.ATToursConnectionString, cancellationToken)
         {
             this.userId = userId;
-            this.lines = lines ?? [];
+            this.lines = model?.Lines ?? [];
+            this.contacts = model?.Contacts ?? [];
         }
 
-        public OrderCreationService(List<OrderCreateLineModel> lines, int userId, IApplicationDbContext context, CancellationToken cancellationToken = default)
+        public OrderCreationService(OrderCreateModel model, int userId, IApplicationDbContext context, CancellationToken cancellationToken = default)
             : base(new Order(), context, cancellationToken)
         {
             this.userId = userId;
-            this.lines = lines ?? [];
+            this.lines = model?.Lines ?? [];
+            this.contacts = model?.Contacts ?? [];
         }
 
         protected override IEntityValidation GetEntityValidation()
@@ -80,6 +86,11 @@ namespace ATTours.BusinessServices.Services.CreateServices
             // клиенте, и по нему же собирается пер-строчный отчёт об ошибке.
             foreach (var requestedLine in lines)
                 order.Lines.Add(BuildLine(requestedLine, tourPricing, transferPricing));
+
+            // Контакты — снимок значений (ADR 032). Отказ при 0/>3/не-одном основном
+            // принимает OrderValidationService, здесь только сборка.
+            foreach (var contact in OrderContactBuilder.Build(contacts))
+                order.Contacts.Add(contact);
 
             // Флоу заказов (B12, дополнено B14): Open, если ни одна строка не требует
             // предоплаты; иначе PendingPayment. Бронь с сайта сейчас никогда сама не просит

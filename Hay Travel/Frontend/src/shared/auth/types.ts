@@ -315,6 +315,41 @@ export interface LoginHistoryEntryModel {
   loggedInAtUtc: string
 }
 
+/**
+ * One LIVE session — an unrevoked, unexpired `RefreshToken` row (spec 017 §4). Returned by both
+ * `GET api/Auth/Sessions` (your own) and `GET api/Users/{id}/Sessions` (an admin looking at
+ * somebody else's), in the same shape, newest first.
+ *
+ * NOT the same thing as `LoginHistoryEntryModel`, even though the two read alike: that one is an
+ * immutable audit record of a sign-in that already happened, this one is a CAPABILITY that still
+ * exists and can be taken away. Which is also why this one is not admin-only — the visitor sees
+ * their own list on `/account`, whereas the login history deliberately stays inside the panel.
+ *
+ * `id` is the revoke handle (the row's primary key); the token hash never leaves the server.
+ * `createdByUserAgent` is nullable because rows created before spec 017 have none, and the three geo
+ * fields are nullable for the same reason as on `LoginHistoryEntryModel` — the geo database is
+ * optional server-side and private addresses resolve to nothing.
+ */
+export interface SessionModel {
+  id: number
+  createdByIp: string
+  countryCode: string | null
+  countryName: string | null
+  city: string | null
+  createdByUserAgent: string | null
+  /** ISO-8601, UTC, no zone suffix guaranteed — parse with `shared/lib/date`'s helpers. */
+  createdAtUtc: string
+  /** When this session dies on its own. Sliding for a «запомнить меня»-less login (ADR 029), so it
+   * moves forward on every refresh. */
+  expiresAtUtc: string
+  /**
+   * Is this the session the request itself came from? Computed server-side by hashing the caller's
+   * own refresh cookie, so it is meaningful ONLY in the self-service list — the admin view always
+   * reports `false` (the admin is not that user, and there is nothing to compare against).
+   */
+  isCurrent: boolean
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Resolved permissions (GET api/Auth/MyPermissions)                          */
 /* -------------------------------------------------------------------------- */

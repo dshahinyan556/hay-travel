@@ -29,11 +29,8 @@ const ru = {
   subtitle: 'Содержимое главного экрана, контакты, соцсети, логотип и SEO публичного сайта.',
   /** Shown when the role may read the settings but not save them (`settings.Update`). */
   readOnlyHint: 'У вашей роли нет права изменять настройки — доступен только просмотр.',
-
-  /** Полоса личности записи (шаблон C): экран НЕ список — вторую запись создать невозможно. */
-  identityBadge: 'единственная запись',
-  identitySections: (count: number) =>
-    `${count} ${pluralizeRu(count, ['раздел', 'раздела', 'разделов'])}`,
+  /** Тултип недоступного «Сохранить» тулбара — та же формулировка, что у заказа. */
+  noPermissionHint: 'Недостаточно прав',
 
   emptyTitle: 'Настроек пока нет',
   emptyText:
@@ -50,6 +47,9 @@ const ru = {
   savedAt: (time: string) => `Сохранено в ${time}.`,
   changedFields: (count: number) =>
     `Изменено ${count} ${pluralizeRu(count, ['поле', 'поля', 'полей'])}.`,
+  /** Счётчик рядом с тулбаром. */
+  unsavedChanges: (count: number) =>
+    `${count} ${pluralizeRu(count, ['несохранённое изменение', 'несохранённых изменения', 'несохранённых изменений'])}`,
 
   /** Opens the link the admin just typed in a new tab, without retyping it into the address bar. */
   openLink: 'Открыть ↗',
@@ -199,10 +199,7 @@ const en: { [K in keyof typeof ru]: (typeof ru)[K] } = {
   title: 'Settings',
   subtitle: 'Home-screen content, contacts, social links, logo and SEO of the public site.',
   readOnlyHint: 'Your role cannot change the settings — view only.',
-
-  identityBadge: 'a single record',
-  identitySections: (count: number) =>
-    `${count} ${pluralizeEn(count, ['section', 'sections'])}`,
+  noPermissionHint: 'Not enough permissions',
 
   emptyTitle: 'No settings yet',
   emptyText:
@@ -218,6 +215,7 @@ const en: { [K in keyof typeof ru]: (typeof ru)[K] } = {
   savedAt: (time: string) => `Saved at ${time}.`,
   changedFields: (count: number) =>
     `${count} ${pluralizeEn(count, ['field', 'fields'])} changed.`,
+  unsavedChanges: (count: number) => `${count} unsaved ${pluralizeEn(count, ['change', 'changes'])}`,
 
   openLink: 'Open ↗',
   unknownOption: (value: string) => `${value} — unknown value`,

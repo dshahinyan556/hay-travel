@@ -1,5 +1,6 @@
 import { redirect, useLoaderData } from 'react-router'
 import { SetupFormLayout, UnsavedChangesModal } from '@/shared/ui'
+import { AlertIcon } from '@/shared/ui/icons'
 import { useUnsavedChangesGuard } from '@/shared/hooks'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import {
@@ -9,7 +10,6 @@ import {
   useScreenPermission,
 } from '@/shared/auth'
 import { getAllSiteSettings } from '@/features/admin/api/adminSiteSettings'
-import { SingleRecordIdentity } from '@/features/admin/ui/SingleRecordIdentity'
 import { useSettingsForm } from './hooks/useSettingsForm'
 import { settingsCopy } from './lib/settingsCopy'
 import { SettingsForm } from './components/SettingsForm'
@@ -36,8 +36,12 @@ export async function settingsLoader() {
  *
  * Template C — «Форма настройки» (`SetupFormLayout`). This screen is the archetype's own reference
  * example: exactly one record, forever — there is no list route and no `/:id`, the screen IS the
- * record. Hence no control zone at the top at all (Add/Delete do not exist here), the identity
- * strip instead, and the single Save pinned in the layout's `footer`.
+ * record. Add/Delete do not exist here, so the pinned control zone at the top carries only
+ * Отмена/Сохранить (`AdminToolbar`, решение Давида 2026-10-11 — раньше это была нижняя панель
+ * `footer`) plus the "N несохранённых изменений" counter.
+ *
+ * The template's identity strip is deliberately NOT rendered (removed 2026-08-29): with the tabs
+ * right below it, "единственная запись · N разделов" restated what the screen already showed.
  *
  * State is seeded from the loader once, via the hook's lazy initializer, and lives locally
  * afterwards — saving replaces it with the server's own response, so the loader is never
@@ -51,6 +55,7 @@ export function SettingsPage() {
     state,
     actions,
     dirtyCount,
+    reset,
     validation,
     canSubmit,
     hasAttemptedSubmit,
@@ -63,41 +68,47 @@ export function SettingsPage() {
   const guard = useUnsavedChangesGuard(dirtyCount > 0 && !isSubmitting)
 
   const isEmpty = state.sections.length === 0
+  const showInvalidWarning = hasAttemptedSubmit && !validation.isValid
 
   return (
     <SetupFormLayout
       title={copy.title}
       subtitle={copy.subtitle}
-      identity={
-        <SingleRecordIdentity
-          name={copy.title}
-          badge={copy.identityBadge}
-          note={copy.identitySections(state.sections.length)}
-        />
+      /* Nothing to save when the server returned no settings at all — the toolbar would only
+         offer permanently dead buttons under an empty state that already explains itself. */
+      controlZone={
+        !isEmpty && (
+          <SettingsActions
+            dirtyCount={dirtyCount}
+            canSubmit={canSubmit}
+            canUpdate={permission.canUpdate}
+            isSubmitting={isSubmitting}
+            savedAt={savedAt}
+            onSubmit={submit}
+            onCancel={reset}
+          />
+        )
       }
       /* The fields stay editable-looking but «Сохранить» never enables — a read-only settings
          screen is still worth opening, and an explanation beats a mysteriously dead button. */
       message={
-        !permission.canUpdate && (
-          <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
-            {copy.readOnlyHint}
-          </p>
-        )
-      }
-      /* Nothing to save when the server returned no settings at all — the bar would only offer a
-         permanently dead button under an empty state that already explains itself. */
-      footer={
-        isEmpty ? undefined : (
-          <SettingsActions
-            dirtyCount={dirtyCount}
-            isValid={validation.isValid}
-            hasAttemptedSubmit={hasAttemptedSubmit}
-            canSubmit={canSubmit && permission.canUpdate}
-            isSubmitting={isSubmitting}
-            error={error}
-            savedAt={savedAt}
-            onSubmit={submit}
-          />
+        (!permission.canUpdate || error || showInvalidWarning) && (
+          <>
+            {!permission.canUpdate && (
+              <p className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
+                {copy.readOnlyHint}
+              </p>
+            )}
+            {(error || showInvalidWarning) && (
+              <div
+                role="alert"
+                className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+              >
+                <AlertIcon size={16} className="mt-0.5 shrink-0" />
+                <span>{error ?? copy.invalidForm}</span>
+              </div>
+            )}
+          </>
         )
       }
     >

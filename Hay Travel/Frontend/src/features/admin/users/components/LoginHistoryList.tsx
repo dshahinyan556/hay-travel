@@ -1,9 +1,10 @@
 import type { LoginHistoryEntryModel } from '@/shared/auth'
 import { countryFlagEmoji, countryDisplayName } from '@/shared/lib/country'
+import { formatUtcDateTime } from '@/shared/lib/date'
 import type { Locale } from '@/shared/lib/locale'
+import { describeUserAgent } from '@/shared/lib/userAgent'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import { useCopy } from '@/shared/i18n/defineCopy'
-import { describeUserAgent } from '../lib/userAgent'
 import { userCopy } from '../lib/userCopy'
 
 interface LoginHistoryListProps {
@@ -15,12 +16,6 @@ interface LoginHistoryListProps {
 /** The server caps the response at 100 rows; the footnote is only honest when we are actually at
  * the cap, so it is conditional rather than always printed. */
 const SERVER_LIMIT = 100
-
-/** One formatter per interface locale, built once. `en-GB` per Spec 009 §5 (day-month-year). */
-const DATE_TIME: Record<Locale, Intl.DateTimeFormat> = {
-  ru: new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }),
-  en: new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }),
-}
 
 /**
  * Login history for one account (C2, 2026-08-09) — admin-only by explicit product decision; the
@@ -79,7 +74,7 @@ function LoginHistoryRow({ entry, locale }: { entry: LoginHistoryEntryModel; loc
     <li className="flex flex-col gap-1 px-4 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <span className="text-sm font-semibold text-neutral-900">
-          {formatMoment(entry.loggedInAtUtc, locale)}
+          {formatUtcDateTime(entry.loggedInAtUtc, locale)}
         </span>
         {place && <span className="text-sm text-neutral-600">{place}</span>}
       </div>
@@ -95,18 +90,6 @@ function LoginHistoryRow({ entry, locale }: { entry: LoginHistoryEntryModel; loc
       </div>
     </li>
   )
-}
-
-/**
- * The column is UTC but the value may arrive without a zone suffix, in which case `new Date()`
- * would read it as LOCAL time and silently shift every timestamp. Appending `Z` when there is no
- * offset is what keeps that honest.
- */
-function formatMoment(loggedInAtUtc: string, locale: Locale): string {
-  const normalised = /[Zz]|[+-]\d{2}:?\d{2}$/.test(loggedInAtUtc) ? loggedInAtUtc : `${loggedInAtUtc}Z`
-  const date = new Date(normalised)
-  if (Number.isNaN(date.getTime())) return loggedInAtUtc
-  return DATE_TIME[locale].format(date)
 }
 
 /** «🇦🇲 Армения, Ереван» — degrades gracefully: geo data is optional on the backend, so any part of

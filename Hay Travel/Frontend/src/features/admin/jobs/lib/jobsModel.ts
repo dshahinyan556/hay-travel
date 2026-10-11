@@ -4,6 +4,9 @@
  * page (`JobDetailPage`) and its components, and by nothing outside `features/admin/jobs`.
  */
 
+import { LanguageCode, TourTranslationType } from '@/features/admin/lib/enums'
+import { LANGUAGE_CODE_BY_LOCALE, type Locale } from '@/shared/lib/locale'
+import type { TourInfoModel } from '@/shared/types/attours'
 import { JobRunStatus } from '@/features/admin/types/jobs'
 import type { JobsCopy } from './jobsCopy'
 
@@ -236,6 +239,23 @@ export function isValidParameterNumber(raw: string): boolean {
   return /^\d+$/.test(raw.trim())
 }
 
+/** «Значение параметра не изменилось» в том виде, в каком его поймёт сервер: у числового — по
+ * числу (`"7"` и `" 07"` — одно и то же, валидатор тоже тримит и парсит), у строкового — побайтно.
+ * Невалидное число сравнивается как строка: такая правка грязная и подсветится ошибкой. */
+export function parameterValuesEqual(a: string, b: string, isNumber: boolean): boolean {
+  if (isNumber && isValidParameterNumber(a) && isValidParameterNumber(b)) return Number(a) === Number(b)
+  return a === b
+}
+
+/** Каноническая форма cron для сравнения «изменилось ли расписание»: пресет → его же строка
+ * (`"05 03 * * *"` → `"5 3 * * *"`), своё выражение — с одиночными пробелами. Нужна потому, что
+ * `Select` вызывает `onChange` и при выборе ТОГО ЖЕ пункта, а `presetToCron` пишет строку заново. */
+export function canonicalCron(cron: string): string {
+  const preset = cronToPreset(cron)
+  if (preset.kind === 'custom') return preset.expression.trim().split(/\s+/).join(' ')
+  return presetToCron(preset)
+}
+
 /** Cyrillic-safe: plain `toUpperCase`/`toLowerCase` on the first code point works the same for
  * Cyrillic as for Latin, no locale-specific casing table needed here. */
 export function capitalizeFirst(text: string): string {
@@ -264,4 +284,60 @@ export function scheduleFrequencyLabel(preset: CronPreset, copy: JobsCopy): stri
     case 'custom':
       return copy.frequency.custom
   }
+}
+
+/* ── «Исключения по продуктам» (tour-date-auto-closure) ─────────────────────────────────────
+ * checklist-autoclose-per-tour-2026-08-29.txt, Р2–Р4/F1–F3: одна карточка, живущая ТОЛЬКО на
+ * этой задаче — ключ задан здесь один раз, а не разбросан по `JobDetailPage`/loader строковым
+ * литералом в каждом месте.
+ */
+export const AUTO_CLOSURE_JOB_KEY = 'tour-date-auto-closure'
+
+/** Одна строка черновика карточки исключений. `tourName` держится ПРЯМО в строке (а не
+ * резолвится заново из списка туров при каждом рендере таблицы): она берётся один раз, в момент
+ * выбора тура в пикере (`tourTitleResolver` ниже) или из уже сохранённого `tourName` бэка —
+ * так строка остаётся читаемой, даже если тур позже архивировали и он выпал из списка `tours`,
+ * который грузит `jobDetailLoader` (`getAllTours` отдаёт только неархивные). */
+export interface TourAutoCloseOverrideDraftRow {
+  tourId: number
+  tourName: string
+  leadTimeHours: string
+}
+
+/** Положительное целое — строже `isValidParameterNumber` (порог = 0 часов ничего не закрывал бы,
+ * что для точечного исключения смысла не несёт, checklist Р2/F... «часы > 0»). */
+export function isValidLeadTimeHours(raw: string): boolean {
+  return isValidParameterNumber(raw) && Number(raw) > 0
+}
+
+/** Черновик «грязный», если набор строк отличается от загруженного по СОДЕРЖИМОМУ — сравнение по
+ * `tourId`→`leadTimeHours`, без учёта порядка (порядок в UI — порядок добавления, серверу он не
+ * нужен: PUT заменяет набор целиком, не список позиций). */
+export function overrideRowsEqual(a: TourAutoCloseOverrideDraftRow[], b: TourAutoCloseOverrideDraftRow[]): boolean {
+  if (a.length !== b.length) return false
+  const sortById = (rows: TourAutoCloseOverrideDraftRow[]) => [...rows].sort((x, y) => x.tourId - y.tourId)
+  const left = sortById(a)
+  const right = sortById(b)
+  return left.every(
+    (row, index) =>
+      row.tourId === right[index].tourId &&
+      parameterValuesEqual(row.leadTimeHours, right[index].leadTimeHours, true),
+  )
+}
+
+/** Same shape as `orders/lib/ordersModel.ts`'s `tourTitleResolver` — kept as a small, deliberate
+ * duplication rather than a cross-feature import (a feature does not reach into another feature's
+ * `lib`), used here to label the «добавить исключение» picker's options with the same
+ * interface-language-first/Russian-fallback title a tour shows everywhere else in the admin. */
+export function tourTitleResolver(tours: TourInfoModel[], locale: Locale, copy: JobsCopy): (tourId: number) => string {
+  const preferred = LANGUAGE_CODE_BY_LOCALE[locale]
+  const titles = new Map<number, string>()
+  for (const tour of tours) {
+    const candidates = tour.translations.filter((t) => t.type === TourTranslationType.Title)
+    const title =
+      candidates.find((t) => t.languageCode === preferred)?.value?.trim() ||
+      candidates.find((t) => t.languageCode === LanguageCode.Russian)?.value?.trim()
+    if (title) titles.set(tour.id, title)
+  }
+  return (tourId: number) => titles.get(tourId) ?? copy.overridesCard.tourFallback(tourId)
 }

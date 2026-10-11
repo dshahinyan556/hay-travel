@@ -60,7 +60,7 @@ namespace ATTours.DataLayer
         public DbSet<OrderPayment> OrderPayments { get; set; }
         public DbSet<OrderEvent> OrderEvents { get; set; }
         public DbSet<ClosureRule> ClosureRules { get; set; }
-        public DbSet<EmailTemplate> EmailTemplates { get; set; }
+        public DbSet<NotificationTemplate> NotificationTemplates { get; set; }
         public DbSet<NotificationChannel> NotificationChannels { get; set; }
         public DbSet<NotificationRecipient> NotificationRecipients { get; set; }
         public DbSet<ScheduledJob> ScheduledJobs { get; set; }
@@ -73,5 +73,8 @@ namespace ATTours.DataLayer
         public DbSet<TransferPrice> TransferPrices { get; set; }
         public DbSet<CustomTransferDetails> CustomTransferDetails { get; set; }
         public DbSet<CustomTransferStop> CustomTransferStops { get; set; }
+        public DbSet<UserContactMethod> UserContactMethods { get; set; }
+        public DbSet<OrderContact> OrderContacts { get; set; }
+        public DbSet<TourAutoCloseOverride> TourAutoCloseOverrides { get; set; }
     }
 }

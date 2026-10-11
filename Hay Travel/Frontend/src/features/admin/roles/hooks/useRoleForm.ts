@@ -43,6 +43,8 @@ export interface UseRoleFormResult {
   canImpersonate: boolean
   setCanImpersonate: (value: boolean) => void
   isDirty: boolean
+  /** Revert every field to the last saved state (toolbar «Отмена»). */
+  reset: () => void
   /** Only shown after the first save attempt — validating as you type is nagging. */
   nameError: string | null
   canSubmit: boolean
@@ -75,21 +77,29 @@ export function useRoleForm({ role, screens, existingNames }: UseRoleFormArgs): 
     name: string
     canManageAdmins: boolean
     canImpersonate: boolean
+    /** Kept alongside `permissions` so «Отмена» can restore the matrix as-is. */
+    rows: PermissionMatrixRow[]
     permissions: ScreenPermissionModel[]
-  }>(() => ({
-    name: role?.name ?? '',
-    canManageAdmins: role?.canManageAdmins ?? false,
-    canImpersonate: role?.canImpersonate ?? false,
-    permissions: rowsToPermissions(buildRoleMatrixRows(role, screens, screensCopy)),
-  }))
+  }>(() => {
+    const rows = buildRoleMatrixRows(role, screens, screensCopy)
+    return {
+      name: role?.name ?? '',
+      canManageAdmins: role?.canManageAdmins ?? false,
+      canImpersonate: role?.canImpersonate ?? false,
+      rows,
+      permissions: rowsToPermissions(rows),
+    }
+  })
   const [attempted, setAttempted] = useState(false)
   const [isSubmitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showLagHint, setShowLagHint] = useState(false)
 
   const permissions = useMemo(() => rowsToPermissions(rows), [rows])
+  // Name compared trimmed on BOTH sides — the payload trims, so a stored name with stray edge
+  // whitespace must not read as an edit the moment the card opens.
   const isDirty =
-    name.trim() !== baseline.name ||
+    name.trim() !== baseline.name.trim() ||
     canManageAdmins !== baseline.canManageAdmins ||
     canImpersonate !== baseline.canImpersonate ||
     isMatrixDirty(permissions, baseline.permissions)
@@ -130,6 +140,15 @@ export function useRoleForm({ role, screens, existingNames }: UseRoleFormArgs): 
     setRows((prev) => applyLevelChange(prev, screenKey, value))
   }, [])
 
+  function reset(): void {
+    setName(baseline.name)
+    setCanManageAdmins(baseline.canManageAdmins)
+    setCanImpersonate(baseline.canImpersonate)
+    setRows(baseline.rows)
+    setAttempted(false)
+    setError(null)
+  }
+
   function submit(): void {
     if (isSubmitting) return
     setAttempted(true)
@@ -154,6 +173,7 @@ export function useRoleForm({ role, screens, existingNames }: UseRoleFormArgs): 
           name: saved.name,
           canManageAdmins: saved.canManageAdmins,
           canImpersonate: saved.canImpersonate,
+          rows: savedRows,
           permissions: rowsToPermissions(savedRows),
         })
         setName(saved.name)
@@ -197,6 +217,7 @@ export function useRoleForm({ role, screens, existingNames }: UseRoleFormArgs): 
     canImpersonate,
     setCanImpersonate,
     isDirty,
+    reset,
     nameError,
     canSubmit: isDirty && !isSubmitting,
     submit,

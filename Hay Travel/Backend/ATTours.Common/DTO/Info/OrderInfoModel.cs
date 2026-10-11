@@ -17,6 +17,11 @@ namespace ATTours.Common.DTO.Info
         // языковую версию письма без второго похода в БД.
         public LanguageCode UserPreferredLanguage { get; set; }
 
+        // Chat id клиента — по той же причине, что и язык: резолверу получателя «Клиент
+        // заказа» он нужен на платформе Telegram, а второго похода в БД на отправке нет.
+        // null — клиент не проходил /start; отсекается на отправке, с логом.
+        public long? UserTelegramChatId { get; set; }
+
         public OrderStatus Status { get; set; }
         public string RejectReason { get; set; }
         public DateTime CreatedAtUtc { get; set; }
@@ -24,6 +29,10 @@ namespace ATTours.Common.DTO.Info
         public string Currency { get; set; }
 
         public List<OrderLineInfoModel> Lines { get; set; } = [];
+
+        // Контакты для связи, ОСНОВНОЙ ПЕРВЫМ (порядок задаёт маппинг, фронт не сортирует).
+        // Пустой список у заказов, созданных до батча 2026-08-29 — их не бэкфиллили.
+        public List<OrderContactInfoModel> Contacts { get; set; } = [];
 
         // Агрегаты по строкам, посчитанные в мапере — фронту не нужно суммировать грид самому
         // на КАЖДОМ рендере деталей заказа (см. summary-strip мокапа).

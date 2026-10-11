@@ -32,7 +32,12 @@ import type { CurrencyCode, CurrencyRate, CurrencyState, ExchangeRatesModel, Rat
 const STORAGE_KEY_CURRENCY = 'hay-travel-currency'
 const STORAGE_KEY_RATES = 'hay-travel-rates'
 
-const BASE_CURRENCY_CODE = 'AMD'
+/**
+ * Базовая валюта каталога. Экспортируется, потому что «личного выбора валюты нет» в предпочтениях
+ * аккаунта (`preferredCurrency: null`) означает именно её, и синхронизация с аккаунтом обязана
+ * называть ту же валюту, что и стор, а не держать свою копию строки.
+ */
+export const BASE_CURRENCY_CODE = 'AMD'
 
 /**
  * The ONLY currency constant hardcoded on the frontend.
@@ -251,6 +256,30 @@ export function setCurrency(code: CurrencyCode): void {
   if (!state.rates.some((rate) => rate.code === code)) return
   writeStoredCurrency(code)
   setState({ ...state, selectedCode: code, active: resolveActive(state.rates, code) })
+}
+
+/**
+ * Забыть предпочтение и вернуться к базовой валюте.
+ *
+ * Существует ради выхода из аккаунта: предпочтения залогиненного зеркалятся в этот же ключ (иначе
+ * первый кадр следующего захода был бы в чужой валюте), и после выхода они не должны достаться
+ * следующему гостю на этом устройстве.
+ *
+ * Ключ именно УДАЛЯЕТСЯ, а не переписывается на `AMD`: «выбора нет» и «выбран AMD» — разные вещи,
+ * и второе пришлось бы потом отличать от первого.
+ */
+export function clearCurrencyPreference(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY_CURRENCY)
+  } catch {
+    /* ignore — the reset below still applies for this tab */
+  }
+  if (state.selectedCode === BASE_CURRENCY_CODE) return
+  setState({
+    ...state,
+    selectedCode: BASE_CURRENCY_CODE,
+    active: resolveActive(state.rates, BASE_CURRENCY_CODE),
+  })
 }
 
 /* -------------------------------------------------------------------------- */

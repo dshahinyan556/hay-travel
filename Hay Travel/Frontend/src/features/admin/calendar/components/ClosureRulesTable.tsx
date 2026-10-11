@@ -1,5 +1,4 @@
-import { useMemo, useRef, useState, useEffect } from 'react'
-import { Button, Modal } from '@/shared/ui'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDownIcon } from '@/shared/ui/icons'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
@@ -11,23 +10,32 @@ import {
   type DayOfWeekCode,
 } from '@/shared/types/booking'
 import { calendarCopy, type CalendarCopy } from '../lib/calendarCopy'
+import { isDraftRuleId } from '../lib/calendarDraft'
 import {
   groupClosureRules,
   tourTitleResolver,
   tourTypeScopeLabel,
   type ClosureRuleGroup,
 } from '../lib/calendarModel'
+import { DraftTag } from './DraftTag'
 
 export interface ClosureRulesTableProps {
+  /** Saved rules AND the draft's new ones (negative ids, see `draftRuleInfo`). */
   rules: ClosureRuleInfoModel[]
   tours: TourInfoModel[]
   pending: boolean
-  /** Fires with every id to delete — a whole group (2026-08-14: checkbox selection replaces the
-   * old one-button-per-row delete) or an arbitrary multi-select, the caller does not need to
-   * know which. */
-  onDeleteSelected: (ids: number[]) => void
+  /** Saved rules marked for deletion in the draft — drawn struck through with «Вернуть». */
+  deletedIds: ReadonlySet<number>
+  /** Selected rule ids. Owned by the PAGE, because the «Удалить» button lives in its toolbar; the
+   * table only draws and edits it. */
+  selected: ReadonlySet<number>
+  onSelectedChange: (next: Set<number>) => void
+  /** «Вернуть»: unmark rules from deletion. */
+  onRestore: (ids: number[]) => void
+  /** «Убрать»: drop NEW draft rules (ids are the negative ones from `draftRuleInfo`). */
+  onDiscardNew: (ids: number[]) => void
   /** `calendar.Delete`. Without it the table is still worth showing — it is the only place the
-   * closure rules can be READ — so the selection column and the delete bar are what disappear. */
+   * closure rules can be READ — so the selection column is what disappears. */
   canDelete: boolean
 }
 
@@ -120,13 +128,94 @@ function RowCheckbox({ checked, indeterminate = false, onChange, ariaLabel, disa
   )
 }
 
+/** Text button of a draft row («Вернуть» / «Убрать») — the same look as «Вернуть» in the products
+ * list: an underlined link-button, at least 44px tall on a phone. */
+function DraftAction({
+  label,
+  ariaLabel,
+  disabled,
+  onClick,
+}: {
+  label: string
+  ariaLabel: string
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      className="min-h-11 shrink-0 cursor-pointer px-1 text-xs font-semibold text-neutral-700 underline underline-offset-2 hover:text-neutral-950 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0"
+    >
+      {label}
+    </button>
+  )
+}
+
+/** Shared by single rows and group summaries: what the DRAFT says about these rules. */
+interface DraftState {
+  total: number
+  newCount: number
+  deletedCount: number
+}
+
+function DraftStatusCell({
+  state,
+  pending,
+  ariaSubject,
+  onRestore,
+  onDiscard,
+}: {
+  state: DraftState
+  pending: boolean
+  ariaSubject: string
+  onRestore: () => void
+  onDiscard: () => void
+}) {
+  const copy = useCopy(calendarCopy)
+  const allNew = state.newCount === state.total
+  const allDeleted = state.deletedCount === state.total
+  return (
+    <td className="px-4 py-2.5">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {state.newCount > 0 && (
+          <DraftTag tone="info">{allNew ? copy.draftNew : copy.draftNewCount(state.newCount)}</DraftTag>
+        )}
+        {state.deletedCount > 0 && (
+          <DraftTag tone="removed">
+            {allDeleted ? copy.draftWillDelete : copy.draftDeleteCount(state.deletedCount)}
+          </DraftTag>
+        )}
+        {allNew && (
+          <DraftAction
+            label={copy.draftDiscard}
+            ariaLabel={`${copy.draftDiscard}: ${ariaSubject}`}
+            disabled={pending}
+            onClick={onDiscard}
+          />
+        )}
+        {allDeleted && (
+          <DraftAction
+            label={copy.draftUndo}
+            ariaLabel={`${copy.draftUndo}: ${ariaSubject}`}
+            disabled={pending}
+            onClick={onRestore}
+          />
+        )}
+      </div>
+    </td>
+  )
+}
+
 /**
  * Every closure rule, grouped by the `BatchId` one `CreateRules` call shares (F16, 2026-08-14):
  * a single toggle or a whole bulk operation reads as ONE row with an expand chevron, instead of
- * N visually identical ones. Rows carry a checkbox instead of a per-row delete button — deleting
- * now always goes through the selection + the one «Удалить выбранное» action below the table,
- * whether that selection is a whole group (its own checkbox selects every child at once) or an
- * arbitrary multi-select across groups.
+ * N visually identical ones. Rows carry a checkbox; deleting goes through the selection + «Удалить»
+ * in the PAGE toolbar, and — since the page keeps a draft — it only MARKS saved rules «удалится»
+ * (with «Вернуть») until «Сохранить». Rules added through «Добавить» show up here as «новое» and
+ * can be removed again.
  *
  * Below `sm` this table scrolls HORIZONTALLY inside its own frame, same recipe as `UsersTable`.
  */
@@ -134,14 +223,16 @@ export function ClosureRulesTable({
   rules,
   tours,
   pending,
-  onDeleteSelected,
+  deletedIds,
+  selected,
+  onSelectedChange,
+  onRestore,
+  onDiscardNew,
   canDelete,
 }: ClosureRulesTableProps) {
   const copy = useCopy(calendarCopy)
   const { locale } = useLocale()
-  const [selected, setSelected] = useState<Set<number>>(new Set())
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [confirming, setConfirming] = useState(false)
   const tourTitle = useMemo(() => tourTitleResolver(tours, locale, copy), [tours, locale, copy])
 
   const groups = useMemo(
@@ -149,36 +240,26 @@ export function ClosureRulesTable({
     [rules, tourTitle, locale],
   )
 
-  // A rule that's since been deleted elsewhere (another tab, a group delete) must not linger in
-  // the selection — otherwise the count badge and the confirm dialog would lie about what's left.
-  const knownIds = useMemo(() => new Set(rules.map((rule) => rule.id)), [rules])
-  useEffect(() => {
-    setSelected((prev) => {
-      const next = new Set([...prev].filter((id) => knownIds.has(id)))
-      return next.size === prev.size ? prev : next
-    })
-  }, [knownIds])
+  /** Rows that can be selected: already-marked ones are done, there is nothing left to delete. */
+  const isSelectable = (rule: ClosureRuleInfoModel): boolean => canDelete && !deletedIds.has(rule.id)
 
   function toggleRule(id: number) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+    const next = new Set(selected)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    onSelectedChange(next)
   }
 
   function toggleGroup(group: ClosureRuleGroup) {
-    const ids = group.rules.map((rule) => rule.id)
+    const ids = group.rules.filter(isSelectable).map((rule) => rule.id)
+    if (ids.length === 0) return
     const allSelected = ids.every((id) => selected.has(id))
-    setSelected((prev) => {
-      const next = new Set(prev)
-      for (const id of ids) {
-        if (allSelected) next.delete(id)
-        else next.add(id)
-      }
-      return next
-    })
+    const next = new Set(selected)
+    for (const id of ids) {
+      if (allSelected) next.delete(id)
+      else next.add(id)
+    }
+    onSelectedChange(next)
   }
 
   function toggleExpanded(key: string) {
@@ -190,10 +271,23 @@ export function ClosureRulesTable({
     })
   }
 
-  function confirmDelete() {
-    onDeleteSelected([...selected])
-    setSelected(new Set())
-    setConfirming(false)
+  /** «Вернуть» / «Убрать» also drop the affected rows from the selection — a restored or discarded
+   * rule must not keep counting towards the toolbar's «Удалить». */
+  function dropFromSelection(ids: number[]) {
+    if (!ids.some((id) => selected.has(id))) return
+    const next = new Set(selected)
+    for (const id of ids) next.delete(id)
+    onSelectedChange(next)
+  }
+
+  function restore(ids: number[]) {
+    onRestore(ids)
+    dropFromSelection(ids)
+  }
+
+  function discard(ids: number[]) {
+    onDiscardNew(ids)
+    dropFromSelection(ids)
   }
 
   if (rules.length === 0) {
@@ -206,97 +300,56 @@ export function ClosureRulesTable({
   }
 
   return (
-    <>
-      <div className="flex flex-col gap-3">
-        {selected.size > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-300 bg-neutral-100 px-4 py-2.5">
-            <span className="text-sm font-semibold text-neutral-900">
-              {copy.rulesSelectedCount(selected.size)}
-            </span>
-            <Button
-              type="button"
-              variant="danger"
-              size="sm"
-              disabled={pending}
-              onClick={() => setConfirming(true)}
-              className="min-h-11"
-            >
-              {copy.rulesDeleteSelected}
-            </Button>
-          </div>
-        )}
-
-        <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
-          <table className="w-full min-w-[760px] border-collapse">
-            <thead>
-              <tr className="bg-neutral-50 text-left text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-                <th className="w-10 px-4 py-2.5" />
-                <th className="px-2 py-2.5 font-semibold">{copy.rulesScope}</th>
-                <th className="w-[130px] px-4 py-2.5 font-semibold">{copy.rulesType}</th>
-                <th className="w-[190px] px-4 py-2.5 font-semibold">{copy.rulesWhen}</th>
-                <th className="w-[190px] px-4 py-2.5 font-semibold">{copy.rulesPeriod}</th>
-                <th className="w-[110px] px-4 py-2.5 font-semibold">{copy.rulesAction}</th>
-                <th className="px-4 py-2.5 font-semibold">{copy.rulesReason}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {groups.map((group) =>
-                group.rules.length === 1 ? (
-                  <RuleRow
-                    key={group.key}
-                    rule={group.rules[0]}
-                    tourTitle={tourTitle}
-                    selected={selected.has(group.rules[0].id)}
-                    onToggle={() => toggleRule(group.rules[0].id)}
-                    selectable={canDelete}
-                  />
-                ) : (
-                  <GroupRows
-                    key={group.key}
-                    group={group}
-                    tourTitle={tourTitle}
-                    selected={selected}
-                    expanded={expanded.has(group.key)}
-                    onToggleExpanded={() => toggleExpanded(group.key)}
-                    onToggleGroup={() => toggleGroup(group)}
-                    onToggleRule={toggleRule}
-                    selectable={canDelete}
-                  />
-                ),
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <Modal
-        open={confirming}
-        onClose={() => setConfirming(false)}
-        title={copy.rulesDeleteTitle(selected.size)}
-      >
-        <p className="text-sm text-neutral-600">{copy.rulesDeleteBody}</p>
-        <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => setConfirming(false)}
-            disabled={pending}
-            className="min-h-11 w-full sm:w-auto"
-          >
-            {copy.bulkCancel}
-          </Button>
-          <Button
-            type="button"
-            variant="danger"
-            disabled={pending}
-            onClick={confirmDelete}
-            className="min-h-11 w-full sm:w-auto"
-          >
-            {pending ? copy.rulesDeleting : copy.rulesDeleteConfirm}
-          </Button>
-        </div>
-      </Modal>
-    </>
+    <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
+      <table className="w-full min-w-[900px] border-collapse">
+        <thead>
+          <tr className="bg-neutral-50 text-left text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+            <th className="w-10 px-4 py-2.5" />
+            <th className="px-2 py-2.5 font-semibold">{copy.rulesScope}</th>
+            <th className="w-[130px] px-4 py-2.5 font-semibold">{copy.rulesType}</th>
+            <th className="w-[190px] px-4 py-2.5 font-semibold">{copy.rulesWhen}</th>
+            <th className="w-[190px] px-4 py-2.5 font-semibold">{copy.rulesPeriod}</th>
+            <th className="w-[110px] px-4 py-2.5 font-semibold">{copy.rulesAction}</th>
+            <th className="px-4 py-2.5 font-semibold">{copy.rulesReason}</th>
+            <th className="w-[150px] px-4 py-2.5" />
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map((group) =>
+            group.rules.length === 1 ? (
+              <RuleRow
+                key={group.key}
+                rule={group.rules[0]}
+                tourTitle={tourTitle}
+                selected={selected.has(group.rules[0].id)}
+                deleted={deletedIds.has(group.rules[0].id)}
+                pending={pending}
+                onToggle={() => toggleRule(group.rules[0].id)}
+                selectable={canDelete}
+                onRestore={() => restore([group.rules[0].id])}
+                onDiscard={() => discard([group.rules[0].id])}
+              />
+            ) : (
+              <GroupRows
+                key={group.key}
+                group={group}
+                tourTitle={tourTitle}
+                selected={selected}
+                deletedIds={deletedIds}
+                pending={pending}
+                expanded={expanded.has(group.key)}
+                onToggleExpanded={() => toggleExpanded(group.key)}
+                onToggleGroup={() => toggleGroup(group)}
+                onToggleRule={toggleRule}
+                selectable={canDelete}
+                onRestore={restore}
+                onDiscard={discard}
+              />
+            ),
+          )}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -304,28 +357,48 @@ interface RuleRowProps {
   rule: ClosureRuleInfoModel
   tourTitle: (id: number) => string
   selected: boolean
+  /** Saved rule marked for deletion in the draft. */
+  deleted: boolean
+  pending: boolean
   onToggle: () => void
   /** `calendar.Delete` — selection exists only to delete, so without it the box is inert. */
   selectable: boolean
+  onRestore: () => void
+  onDiscard: () => void
   /** Nested inside an expanded group — slightly indented/muted so it reads as a child, not a
    * peer of the group summary row above it. */
   nested?: boolean
 }
 
-function RuleRow({ rule, tourTitle, selected, onToggle, selectable, nested = false }: RuleRowProps) {
+function RuleRow({
+  rule,
+  tourTitle,
+  selected,
+  deleted,
+  pending,
+  onToggle,
+  selectable,
+  onRestore,
+  onDiscard,
+  nested = false,
+}: RuleRowProps) {
   const copy = useCopy(calendarCopy)
   const isDate = rule.type === ClosureRuleType.SpecificDate
+  const isNew = isDraftRuleId(rule.id)
+  // Struck-through and muted: the row stays where it was so «Вернуть» puts it back in place.
+  const struck = deleted ? 'line-through opacity-55' : ''
+  const subject = copy.formatTableDate(rule.date) ?? String(rule.id)
   return (
     <tr className={`border-t border-neutral-100 text-sm ${nested ? 'bg-neutral-50/60' : ''}`}>
       <td className="px-4 py-2.5">
         <RowCheckbox
-          checked={selected}
+          checked={selected && !deleted}
           onChange={onToggle}
-          disabled={!selectable}
-          ariaLabel={copy.rulesSelectAria(copy.formatTableDate(rule.date) ?? String(rule.id))}
+          disabled={!selectable || deleted || pending}
+          ariaLabel={copy.rulesSelectAria(subject)}
         />
       </td>
-      <td className={`px-2 py-2.5 text-neutral-900 ${nested ? 'pl-8' : ''}`}>
+      <td className={`px-2 py-2.5 text-neutral-900 ${nested ? 'pl-8' : ''} ${struck}`}>
         {/* Полужирным — области шире одного продукта: глобальная и «весь тип продукта». Строка
             про конкретный продукт остаётся обычной и обрезается по ширине колонки. */}
         {rule.tourId === null ? (
@@ -336,78 +409,106 @@ function RuleRow({ rule, tourTitle, selected, onToggle, selectable, nested = fal
           </span>
         )}
       </td>
-      <td className="px-4 py-2.5 text-neutral-700">
+      <td className={`px-4 py-2.5 text-neutral-700 ${struck}`}>
         {isDate ? copy.rulesTypeDate : copy.rulesTypeWeekly}
       </td>
-      <td className="px-4 py-2.5 tabular-nums text-neutral-700">
+      <td className={`px-4 py-2.5 tabular-nums text-neutral-700 ${struck}`}>
         {isDate
           ? (copy.formatTableDate(rule.date) ?? copy.dash)
           : rule.dayOfWeek !== null
             ? copy.weekdayEvery[rule.dayOfWeek]
             : copy.dash}
       </td>
-      <td className="px-4 py-2.5 tabular-nums text-neutral-700">{describePeriod(rule, copy)}</td>
-      <td className="px-4 py-2.5">
-        <span
-          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-            rule.action === ClosureAction.Close
-              ? 'bg-neutral-900 text-white'
-              : 'bg-neutral-100 text-neutral-700 border border-neutral-300'
-          }`}
-        >
-          {rule.action === ClosureAction.Close ? copy.rulesActionClose : copy.rulesActionOpen}
-        </span>
+      <td className={`px-4 py-2.5 tabular-nums text-neutral-700 ${struck}`}>{describePeriod(rule, copy)}</td>
+      <td className={`px-4 py-2.5 ${struck}`}>
+        <ActionBadge action={rule.action} />
       </td>
-      <td className="max-w-[260px] px-4 py-2.5 text-neutral-500">
+      <td className={`max-w-[260px] px-4 py-2.5 text-neutral-500 ${struck}`}>
         <span className="block truncate" title={rule.reason ?? undefined}>
           {rule.reason ?? copy.dash}
         </span>
       </td>
+      <DraftStatusCell
+        state={{ total: 1, newCount: isNew ? 1 : 0, deletedCount: deleted ? 1 : 0 }}
+        pending={pending}
+        ariaSubject={subject}
+        onRestore={onRestore}
+        onDiscard={onDiscard}
+      />
     </tr>
+  )
+}
+
+function ActionBadge({ action }: { action: ClosureAction }) {
+  const copy = useCopy(calendarCopy)
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+        action === ClosureAction.Close
+          ? 'bg-neutral-900 text-white'
+          : 'bg-neutral-100 text-neutral-700 border border-neutral-300'
+      }`}
+    >
+      {action === ClosureAction.Close ? copy.rulesActionClose : copy.rulesActionOpen}
+    </span>
   )
 }
 
 interface GroupRowsProps {
   group: ClosureRuleGroup
   tourTitle: (id: number) => string
-  selected: Set<number>
+  selected: ReadonlySet<number>
+  deletedIds: ReadonlySet<number>
+  pending: boolean
   expanded: boolean
   onToggleExpanded: () => void
   onToggleGroup: () => void
   onToggleRule: (id: number) => void
   /** `calendar.Delete` — see `RuleRowProps.selectable`. */
   selectable: boolean
+  onRestore: (ids: number[]) => void
+  onDiscard: (ids: number[]) => void
 }
 
 function GroupRows({
   group,
   tourTitle,
   selected,
+  deletedIds,
+  pending,
   expanded,
   onToggleExpanded,
   onToggleGroup,
   onToggleRule,
   selectable,
+  onRestore,
+  onDiscard,
 }: GroupRowsProps) {
   const copy = useCopy(calendarCopy)
   const first = group.rules[0]
   const isDate = first.type === ClosureRuleType.SpecificDate
   const ids = group.rules.map((rule) => rule.id)
-  const selectedCount = ids.filter((id) => selected.has(id)).length
+  const selectableIds = ids.filter((id) => !deletedIds.has(id))
+  const selectedCount = selectableIds.filter((id) => selected.has(id)).length
+  const deletedCount = ids.length - selectableIds.length
+  const newCount = ids.filter(isDraftRuleId).length
+  const allDeleted = deletedCount === ids.length
+  const struck = allDeleted ? 'line-through opacity-55' : ''
+  const summary = describeGroupScope(group, tourTitle, copy)
 
   return (
     <>
       <tr className="border-t border-neutral-100 bg-neutral-50/40 text-sm">
         <td className="px-4 py-2.5">
           <RowCheckbox
-            checked={selectedCount === ids.length}
-            indeterminate={selectedCount > 0 && selectedCount < ids.length}
+            checked={selectableIds.length > 0 && selectedCount === selectableIds.length}
+            indeterminate={selectedCount > 0 && selectedCount < selectableIds.length}
             onChange={onToggleGroup}
-            disabled={!selectable}
+            disabled={!selectable || selectableIds.length === 0 || pending}
             ariaLabel={copy.rulesSelectGroupAria(ids.length)}
           />
         </td>
-        <td className="px-2 py-2.5 text-neutral-900">
+        <td className={`px-2 py-2.5 text-neutral-900 ${struck}`}>
           <button
             type="button"
             onClick={onToggleExpanded}
@@ -419,33 +520,32 @@ function GroupRows({
               size={15}
               className={`shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
             />
-            <span className="truncate">{describeGroupScope(group, tourTitle, copy)}</span>
+            <span className="truncate">{summary}</span>
             <span className="shrink-0 rounded-full bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-600">
               {ids.length}
             </span>
           </button>
         </td>
-        <td className="px-4 py-2.5 text-neutral-700">
+        <td className={`px-4 py-2.5 text-neutral-700 ${struck}`}>
           {isDate ? copy.rulesTypeDate : copy.rulesTypeWeekly}
         </td>
-        <td className="px-4 py-2.5 tabular-nums text-neutral-700">{describeGroupWhen(group, copy)}</td>
-        <td className="px-4 py-2.5 tabular-nums text-neutral-700">{describePeriod(first, copy)}</td>
-        <td className="px-4 py-2.5">
-          <span
-            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-              first.action === ClosureAction.Close
-                ? 'bg-neutral-900 text-white'
-                : 'bg-neutral-100 text-neutral-700 border border-neutral-300'
-            }`}
-          >
-            {first.action === ClosureAction.Close ? copy.rulesActionClose : copy.rulesActionOpen}
-          </span>
+        <td className={`px-4 py-2.5 tabular-nums text-neutral-700 ${struck}`}>{describeGroupWhen(group, copy)}</td>
+        <td className={`px-4 py-2.5 tabular-nums text-neutral-700 ${struck}`}>{describePeriod(first, copy)}</td>
+        <td className={`px-4 py-2.5 ${struck}`}>
+          <ActionBadge action={first.action} />
         </td>
-        <td className="max-w-[260px] px-4 py-2.5 text-neutral-500">
+        <td className={`max-w-[260px] px-4 py-2.5 text-neutral-500 ${struck}`}>
           <span className="block truncate" title={first.reason ?? undefined}>
             {first.reason ?? copy.dash}
           </span>
         </td>
+        <DraftStatusCell
+          state={{ total: ids.length, newCount, deletedCount }}
+          pending={pending}
+          ariaSubject={summary}
+          onRestore={() => onRestore(ids.filter((id) => deletedIds.has(id)))}
+          onDiscard={() => onDiscard(ids.filter(isDraftRuleId))}
+        />
       </tr>
       {expanded &&
         group.rules.map((rule) => (
@@ -454,8 +554,12 @@ function GroupRows({
             rule={rule}
             tourTitle={tourTitle}
             selected={selected.has(rule.id)}
+            deleted={deletedIds.has(rule.id)}
+            pending={pending}
             onToggle={() => onToggleRule(rule.id)}
             selectable={selectable}
+            onRestore={() => onRestore([rule.id])}
+            onDiscard={() => onDiscard([rule.id])}
             nested
           />
         ))}

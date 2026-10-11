@@ -51,6 +51,24 @@ export function readStoredTheme(): Theme {
   }
 }
 
+/**
+ * Явный выбор посетителя, если он вообще был сделан. `null` — «выбора нет, следуй дефолту сайта».
+ *
+ * Двойник `readStoredTheme()`, но с ДРУГИМ контрактом, и подменять их друг другом нельзя.
+ * `readStoredTheme` обязан вернуть конкретную тему — им красят экран. Здесь же важно ровно
+ * обратное: различить «выбрал светлую» и «не выбирал ничего». На этом различии держатся сразу
+ * две вещи — админский `theme.defaultMode` (ADR 018) и `preferredTheme: null` в предпочтениях
+ * аккаунта, где `null` тоже значит «следуй сайту», а не «пусто».
+ */
+export function readThemeChoice(): Theme | null {
+  try {
+    const chosen = localStorage.getItem(THEME_STORAGE_KEY)
+    return chosen === 'light' || chosen === 'dark' ? chosen : null
+  } catch {
+    return null
+  }
+}
+
 /** Persists the theme preference. Silently no-ops if storage is unavailable. */
 export function persistTheme(theme: Theme): void {
   try {
@@ -58,6 +76,36 @@ export function persistTheme(theme: Theme): void {
   } catch {
     // Storage may be unavailable (private mode / blocked) — theme still applies for this tab.
   }
+}
+
+/**
+ * Снимает явный выбор посетителя: сайт снова следует за `theme.defaultMode`.
+ *
+ * Ключ серверного дефолта при этом НЕ трогается — он не выбор и не принадлежит посетителю.
+ * Нужен в двух местах: аккаунт вернул `preferredTheme: null`, и человек вышел из аккаунта
+ * (его тема не должна достаться следующему гостю на этом устройстве).
+ */
+export function clearStoredTheme(): void {
+  try {
+    localStorage.removeItem(THEME_STORAGE_KEY)
+  } catch {
+    // Same as `persistTheme`: a blocked store just means there was nothing to clear.
+  }
+}
+
+/**
+ * Сказать всем смонтированным `useTheme` перечитать состояние из хранилища.
+ *
+ * `storage` в своей же вкладке не срабатывает, поэтому запись в `localStorage` из кода сама по
+ * себе никого не разбудит: `useSiteDesign` уже пользуется этим событием для серверного дефолта,
+ * а теперь им же пользуются переключатель темы (чтобы вторая копия `useTheme` — в разделе
+ * «Предпочтения» — не разъезжалась с шапкой) и синхронизация с аккаунтом.
+ *
+ * Вызывать ТОЛЬКО из обработчика события или из эффекта: `dispatchEvent` синхронно дёрнет
+ * `setState` в чужих компонентах, и из фазы рендера это была бы ошибка React.
+ */
+export function notifyThemeChanged(): void {
+  window.dispatchEvent(new Event(THEME_SYNC_EVENT))
 }
 
 /**

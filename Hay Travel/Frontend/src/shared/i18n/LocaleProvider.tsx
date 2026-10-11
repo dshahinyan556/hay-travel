@@ -1,5 +1,11 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { getStoredLocale, setStoredLocale, type Locale } from '@/shared/lib/locale'
+import {
+  getStoredLocale,
+  LOCALE_CHANGE_EVENT,
+  notifyLocaleChanged,
+  setStoredLocale,
+  type Locale,
+} from '@/shared/lib/locale'
 import { translate } from './translate'
 import type { TranslationKey } from './dictionary'
 
@@ -36,9 +42,34 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     document.documentElement.lang = locale
   }, [locale])
 
+  /**
+   * Язык, выбранный ВНЕ провайдера, — сегодня это одно место: предпочтения аккаунта приехали с
+   * сервера и записали `hay-travel-locale` напрямую (`shared/lib/accountPreferences`). Событие, а
+   * не `storage`: в своей же вкладке `storage` не срабатывает. `storage` слушается рядом и делает
+   * то же самое для соседней вкладки — сегодня это единственный способ узнать, что язык сменили
+   * там (раньше вкладки просто расходились до перезагрузки).
+   */
+  useEffect(() => {
+    function resync() {
+      setLocaleState(getStoredLocale())
+    }
+    window.addEventListener(LOCALE_CHANGE_EVENT, resync)
+    window.addEventListener('storage', resync)
+    return () => {
+      window.removeEventListener(LOCALE_CHANGE_EVENT, resync)
+      window.removeEventListener('storage', resync)
+    }
+  }, [])
+
+  /**
+   * `notifyLocaleChanged` рассылается ПОСЛЕ записи и состояния: на него подписана синхронизация с
+   * аккаунтом, которая для залогиненного отправляет язык на сервер (он же язык писем о заказах).
+   * Гостя это не касается — стор ничего не делает без сессии.
+   */
   const setLocale = (next: Locale) => {
     setStoredLocale(next)
     setLocaleState(next)
+    notifyLocaleChanged()
   }
 
   const value: LocaleContextValue = {

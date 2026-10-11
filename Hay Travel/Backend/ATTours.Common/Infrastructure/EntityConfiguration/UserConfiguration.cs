@@ -1,4 +1,6 @@
+using ATTours.Common.Constants;
 using ATTours.Common.Entities;
+using ATTours.Common.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -97,6 +99,30 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
             builder.HasIndex(x => x.TelegramChatId)
                 .IsUnique()
                 .HasFilter("[TelegramChatId] IS NOT NULL");
+
+            // Личные предпочтения интерфейса (2026-08-29). Три строковых поля НЕ получают
+            // HasDefaultValue намеренно: NULL здесь — значащее состояние («личного выбора
+            // нет, брать дефолт сайта»), и дефолт на уровне БД навсегда отвязал бы такие
+            // строки от админской смены theme.defaultMode/theme.activePalette (см.
+            // комментарий в User).
+            builder.Property(x => x.PreferredTheme)
+                .HasMaxLength(UserPreferenceLimits.MaxThemeLength);
+
+            builder.Property(x => x.PreferredPalette)
+                .HasMaxLength(UserPreferenceLimits.MaxPaletteLength);
+
+            // Ровно три символа, а не «до трёх»: ISO-4217 код фиксированной ширины.
+            builder.Property(x => x.PreferredCurrency)
+                .HasMaxLength(UserPreferenceLimits.CurrencyCodeLength)
+                .IsFixedLength();
+
+            // NotificationChannels настраивать не нужно (int по конвенции, NOT NULL как
+            // не-nullable enum) — ровно та же ситуация, что у PreferredLanguage выше: дефолт
+            // для уже существующих строк задаётся МИГРАЦИЕЙ (defaultValue: 1 = Email), а не
+            // HasDefaultValue здесь. Разница не косметическая: HasDefaultValue пометил бы
+            // колонку ValueGeneratedOnAdd, и EF ругался бы на отсутствие sentinel-значения
+            // (предупреждение 20601) — CLR-дефолт этого enum'а как раз None, то есть
+            // запрещённое значение.
 
             builder.HasOne(x => x.Role)
                 .WithMany(x => x.Users)

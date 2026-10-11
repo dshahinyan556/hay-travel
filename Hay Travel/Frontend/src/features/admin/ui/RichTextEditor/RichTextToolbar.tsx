@@ -18,8 +18,27 @@ interface RichTextToolbarProps {
   image?: RichTextImageOptions
 }
 
-const HEADING_LEVELS = [1, 2, 3] as const
-const FONT_SIZES = ['12px', '20px', '28px'] as const
+const HEADING_LEVELS = [1, 2, 3, 4, 5, 6] as const
+
+// Курируемый диапазон 8-72pt (Notification Templates, 2026-08-31) — тот же список, что в
+// большинстве текстовых редакторов (Word/Google Docs). Значения хранятся как CSS `pt`
+// (HtmlContentPolicy.NormalizeFontSize принимает и px, и pt) — конвертация не нужна.
+const FONT_SIZES = [
+  '8pt', '9pt', '10pt', '10.5pt', '11pt', '12pt', '14pt', '16pt', '18pt',
+  '20pt', '24pt', '28pt', '36pt', '48pt', '60pt', '72pt',
+] as const
+
+// Web-safe шрифты, которые реально доживают до email-клиента (не системные экзотические
+// вроде Comic Sans/Impact) — точное совпадение со списком backend `FontFamilyKeywords`
+// (HtmlContentPolicy.cs), санитайзер отклонит любое другое значение.
+const FONT_FAMILIES = [
+  { value: 'arial', label: 'Arial' },
+  { value: 'georgia', label: 'Georgia' },
+  { value: "'times new roman'", label: 'Times New Roman' },
+  { value: "'courier new'", label: 'Courier New' },
+  { value: 'verdana', label: 'Verdana' },
+  { value: 'tahoma', label: 'Tahoma' },
+] as const
 
 function Separator() {
   return <span aria-hidden="true" className="mx-1 h-6 w-px shrink-0 bg-neutral-200" />
@@ -110,6 +129,22 @@ function UndoIcon() {
     </ToolbarIcon>
   )
 }
+function TableIcon() {
+  return (
+    <ToolbarIcon>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" />
+      <path d="M3.5 10h17M3.5 15h17M9.5 4.5v15M14.5 4.5v15" />
+    </ToolbarIcon>
+  )
+}
+function CodeIcon() {
+  return (
+    <ToolbarIcon>
+      <path d="M9 7 4 12l5 5" />
+      <path d="M15 7l5 5-5 5" />
+    </ToolbarIcon>
+  )
+}
 function RedoIcon() {
   return (
     <ToolbarIcon>
@@ -152,6 +187,10 @@ export function RichTextToolbar({ editor, toolset, disabled, placeholders, image
       alignRight: instance.isActive({ textAlign: 'right' }),
       headingLevel: (instance.getAttributes('heading').level as number | undefined) ?? 0,
       fontSize: (instance.getAttributes('textStyle').fontSize as string | undefined) ?? '',
+      fontFamily: (instance.getAttributes('textStyle').fontFamily as string | undefined) ?? '',
+      color: (instance.getAttributes('textStyle').color as string | undefined) ?? null,
+      highlightColor: (instance.getAttributes('highlight').color as string | undefined) ?? null,
+      code: instance.isActive('code'),
       link: instance.isActive('link'),
       canUndo: instance.can().undo(),
       canRedo: instance.can().redo(),
@@ -170,9 +209,11 @@ export function RichTextToolbar({ editor, toolset, disabled, placeholders, image
   ]
   const fontSizeOptions = [
     { value: '', label: copy.fontSizeNormal },
-    { value: FONT_SIZES[0], label: copy.fontSizeSmall },
-    { value: FONT_SIZES[1], label: copy.fontSizeLarge },
-    { value: FONT_SIZES[2], label: copy.fontSizeXLarge },
+    ...FONT_SIZES.map((size) => ({ value: size, label: size })),
+  ]
+  const fontFamilyOptions = [
+    { value: '', label: copy.fontFamilyNormal },
+    ...FONT_FAMILIES.map((font) => ({ value: font.value, label: font.label })),
   ]
 
   const textGroup = (has('bold') || has('italic') || has('underline') || has('strike')) && (
@@ -200,7 +241,7 @@ export function RichTextToolbar({ editor, toolset, disabled, placeholders, image
     </div>
   )
 
-  const blockGroup = (has('heading') || has('align') || has('bulletList') || has('orderedList') || has('blockquote')) && (
+  const blockGroup = (has('heading') || has('align') || has('bulletList') || has('orderedList') || has('blockquote') || has('code')) && (
     <div className="flex shrink-0 items-center gap-1.5">
       {has('heading') && (
         <Select
@@ -231,6 +272,11 @@ export function RichTextToolbar({ editor, toolset, disabled, placeholders, image
           <BlockquoteIcon />
         </button>
       )}
+      {has('code') && (
+        <button type="button" disabled={disabled} onClick={() => editor.chain().focus().toggleCode().run()} title={copy.codeTitle} aria-label={copy.codeTitle} aria-pressed={state.code} className={toolbarButtonClass(state.code)}>
+          <CodeIcon />
+        </button>
+      )}
       {has('align') && (
         <>
           <button type="button" disabled={disabled} onClick={() => editor.chain().focus().setTextAlign('left').run()} title={copy.alignLeftTitle} aria-label={copy.alignLeftTitle} aria-pressed={state.alignLeft} className={toolbarButtonClass(state.alignLeft)}>
@@ -247,12 +293,26 @@ export function RichTextToolbar({ editor, toolset, disabled, placeholders, image
     </div>
   )
 
-  const styleGroup = (has('fontSize') || has('color')) && (
+  const styleGroup = (has('fontFamily') || has('fontSize') || has('color') || has('highlight')) && (
     <div className="flex shrink-0 items-center gap-1.5">
+      {has('fontFamily') && (
+        <Select
+          surface="admin"
+          className="w-36 shrink-0"
+          value={state.fontFamily}
+          onChange={(value) => {
+            if (value === '') editor.chain().focus().unsetFontFamily().run()
+            else editor.chain().focus().setFontFamily(value).run()
+          }}
+          options={fontFamilyOptions}
+          disabled={disabled}
+          aria-label={copy.fontFamilyLabel}
+        />
+      )}
       {has('fontSize') && (
         <Select
           surface="admin"
-          className="w-32 shrink-0"
+          className="w-24 shrink-0"
           value={state.fontSize}
           onChange={(value) => {
             if (value === '') editor.chain().focus().unsetFontSize().run()
@@ -263,11 +323,30 @@ export function RichTextToolbar({ editor, toolset, disabled, placeholders, image
           aria-label={copy.fontSizeLabel}
         />
       )}
-      {has('color') && <ColorPicker editor={editor} disabled={disabled} />}
+      {has('color') && (
+        <ColorPicker
+          value={state.color}
+          onChange={(hex) => editor.chain().focus().setTextColor(hex).run()}
+          onReset={() => editor.chain().focus().unsetTextColor().run()}
+          disabled={disabled}
+          title={copy.colorTitle}
+          variant="text"
+        />
+      )}
+      {has('highlight') && (
+        <ColorPicker
+          value={state.highlightColor}
+          onChange={(hex) => editor.chain().focus().setHighlight({ color: hex }).run()}
+          onReset={() => editor.chain().focus().unsetHighlight().run()}
+          disabled={disabled}
+          title={copy.colorFillTitle}
+          variant="fill"
+        />
+      )}
     </div>
   )
 
-  const insertGroup = (has('link') || has('image')) && (
+  const insertGroup = (has('link') || has('image') || has('table')) && (
     <div className="flex shrink-0 items-center gap-1.5">
       {has('link') && (
         <>
@@ -284,6 +363,22 @@ export function RichTextToolbar({ editor, toolset, disabled, placeholders, image
           </button>
           <ImageDialog editor={editor} open={imageOpen} onClose={() => setImageOpen(false)} anchorRef={imageButtonRef} options={image ?? {}} />
         </>
+      )}
+      {has('table') && (
+        // Фиксированная стартовая сетка 3×3 с шапкой — правку размера (добавить/убрать
+        // строку/столбец) делают контекстные команды TipTap при клике внутри таблицы; своей
+        // сетки-пикера строк/столбцов (как в Word) в этой версии нет — можно добавить
+        // отдельной задачей, если понадобится точный размер сразу при вставке.
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+          title={copy.tableTitle}
+          aria-label={copy.tableTitle}
+          className={toolbarButtonClass(false)}
+        >
+          <TableIcon />
+        </button>
       )}
     </div>
   )

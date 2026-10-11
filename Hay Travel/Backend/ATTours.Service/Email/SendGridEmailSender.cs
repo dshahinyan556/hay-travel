@@ -26,30 +26,6 @@ namespace ATTours.BusinessServices.Email
 
         public bool ExposesTokenToCaller => false;
 
-        public Task SendEmailVerificationAsync(string toEmail, string toName, string token, CancellationToken cancellationToken = default)
-            => SendAsync(toEmail, toName,
-                         EmailMessageFactory.VerifySubject,
-                         EmailMessageFactory.BuildVerifyBody(toName, EmailMessageFactory.BuildVerifyUrl(settings, token)),
-                         cancellationToken);
-
-        public Task SendPasswordResetAsync(string toEmail, string toName, string token, CancellationToken cancellationToken = default)
-            => SendAsync(toEmail, toName,
-                         EmailMessageFactory.ResetSubject,
-                         EmailMessageFactory.BuildResetBody(toName, EmailMessageFactory.BuildResetUrl(settings, token)),
-                         cancellationToken);
-
-        public Task SendEmailChangeOldEmailCodeAsync(string toEmail, string toName, string code, CancellationToken cancellationToken = default)
-            => SendAsync(toEmail, toName,
-                         EmailMessageFactory.EmailChangeCodeSubject,
-                         EmailMessageFactory.BuildEmailChangeCodeBody(toName, code),
-                         cancellationToken);
-
-        public Task SendEmailChangeConfirmationAsync(string toEmail, string toName, string token, CancellationToken cancellationToken = default)
-            => SendAsync(toEmail, toName,
-                         EmailMessageFactory.EmailChangeConfirmSubject,
-                         EmailMessageFactory.BuildEmailChangeConfirmBody(toName, EmailMessageFactory.BuildEmailChangeConfirmUrl(settings, token)),
-                         cancellationToken);
-
         // Однополучательская перегрузка сведена к общей: одна форма payload'а вместо двух,
         // которые пришлось бы синхронно править при любой смене схемы SendGrid.
         public Task SendTransactionalAsync(string toEmail, string toName, string subject, string bodyHtml,
@@ -121,24 +97,6 @@ namespace ATTours.BusinessServices.Email
                 email = address.Email,
                 name = string.IsNullOrWhiteSpace(address.Name) ? address.Email : address.Name
             })];
-
-        // Auth-письма остаются plaintext: их тексты живут в коде (EmailMessageFactory),
-        // админ ими не управляет, и менять форму работающего в проде payload'а незачем.
-        private Task SendAsync(string toEmail, string toName, string subject, string body, CancellationToken cancellationToken)
-        {
-            var payload = new
-            {
-                personalizations = new[]
-                {
-                    new { to = new[] { new { email = toEmail, name = toName } } }
-                },
-                from = new { email = settings.FromEmail, name = settings.FromName },
-                subject,
-                content = new[] { new { type = "text/plain", value = body } }
-            };
-
-            return PostAsync(payload, toEmail, cancellationToken);
-        }
 
         // Сбой провайдера не должен ронять запрос: регистрация/восстановление/назначение уже
         // записаны в БД, а повторная отправка достигается повторным вызовом эндпоинта.

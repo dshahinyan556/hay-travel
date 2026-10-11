@@ -1,9 +1,12 @@
+using ATTours.BusinessServices.Services.CreateServices;
+using ATTours.BusinessServices.Services.DeleteServices;
 using ATTours.BusinessServices.Services.InfoServices;
 using ATTours.BusinessServices.Services.UpdateServices;
 using ATTours.BusinessServices.Telegram;
 using ATTours.ClientAPI.Extensions;
 using ATTours.Common.DTO.Account;
 using ATTours.Common.DTO.Auth;
+using ATTours.Common.Entities;
 using ATTours.Common.Settings;
 using ATTours.Exceptions;
 using ATTours.Helper.Enums;
@@ -59,6 +62,42 @@ namespace ATTours.ClientAPI.Controllers
             return mapper.Map<UserInfoModel>(user);
         }
 
+        // Личные предпочтения (2026-08-29): тема, палитра, валюта, язык, каналы уведомлений.
+        // У гостя они живут в localStorage и привязаны к браузеру — у залогиненного источник
+        // правды здесь, чтобы выбор переезжал на другое устройство.
+        //
+        // Отдаёт СЫРЫЕ значения, включая null: дефолты сайта не подмешиваются намеренно —
+        // фронт получает их из публичных настроек и обязан отличать «выбрано dark» от
+        // «выбора нет» (иначе экран перестанет следовать за админской сменой дефолта).
+        [HttpGet]
+        [Route("Preferences")]
+        public async Task<UserPreferencesModel> GetPreferencesAsync(CancellationToken cancellationToken)
+        {
+            using var info = new UserInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
+
+            var user = await info.GetByIdAsync(User.GetUserId(), cancellationToken)
+                       ?? throw new ErrorModelException(GlobalErrorCode.RelationalEntityNotFound, HttpStatusCode.NotFound,
+                           "User not found.");
+
+            return mapper.Map<UserPreferencesModel>(user);
+        }
+
+        // PUT, а не PATCH: тело содержит ВСЕ пять значений и перезаписывает их целиком,
+        // null = «сбросить к дефолту сайта» (см. UpdatePreferencesModel). Фронт всегда
+        // держит полный набор в памяти, поэтому дробить это на пять патчей незачем.
+        [HttpPut]
+        [Route("Preferences")]
+        public async Task<UserPreferencesModel> UpdatePreferencesAsync([FromBody] UpdatePreferencesModel model,
+            CancellationToken cancellationToken)
+        {
+            using var updateService = new UserPreferencesUpdateService(cancellationToken);
+            var user = await updateService.UpdateAsync(model, User.GetUserId());
+
+            // Возвращается сохранённое состояние, а не эхо запроса: фронт кладёт ответ в
+            // свой стор и так видит результат нормализации (например "usd" -> "USD").
+            return mapper.Map<UserPreferencesModel>(user);
+        }
+
         // Привязка Telegram (ADR 031). Все три эндпоинта self-service: id — только из токена,
         // как и у остального AccountController, поэтому чужую привязку ими не достать.
         //
@@ -71,10 +110,13 @@ namespace ATTours.ClientAPI.Controllers
             => telegramLinkService.GetStatusAsync(User.GetUserId(), cancellationToken);
 
         // POST, а не GET: каждый вызов выпускает новый код и обесценивает предыдущий.
+        //
+        // BuildRequestContext() — тот же аудит-контракт, что у auth-флоу: код ложится в
+        // UserToken, где RequestIp NOT NULL, поэтому без него INSERT падает (см. сервис).
         [HttpPost]
         [Route("Telegram/LinkCode")]
         public Task<TelegramLinkCodeModel> IssueTelegramLinkCodeAsync(CancellationToken cancellationToken)
-            => telegramLinkService.IssueLinkCodeAsync(User.GetUserId(), cancellationToken);
+            => telegramLinkService.IssueLinkCodeAsync(User.GetUserId(), HttpContext.BuildRequestContext(), cancellationToken);
 
         [HttpDelete]
         [Route("Telegram")]
@@ -82,6 +124,72 @@ namespace ATTours.ClientAPI.Controllers
         {
             await telegramLinkService.UnlinkAsync(User.GetUserId(), cancellationToken);
             return NoContent();
+        }
+
+        // Справочник способов связи (батч 2026-08-29). Self-service, как и остальной
+        // AccountController: userId только из токена, поэтому чужой контакт этими
+        // эндпоинтами не достать. Правка/удаление строки НЕ меняют уже созданные заказы —
+        // там лежит снимок значений (ADR 032).
+        [HttpGet]
+        [Route("Contacts")]
+        public async Task<List<ContactMethodInfoModel>> GetContactsAsync(CancellationToken cancellationToken)
+        {
+            using var info = new UserContactMethodInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
+
+            // Порядок (основной первым) задаёт сервис, а не фронт: тот же справочник в том
+            // же порядке предзаполняет форму заказа.
+            return mapper.Map<List<ContactMethodInfoModel>>(await info.GetByUserAsync(User.GetUserId(), cancellationToken));
+        }
+
+        [HttpPost]
+        [Route("Contacts")]
+        public async Task<ContactMethodInfoModel> CreateContactAsync([FromBody] ContactMethodCreateModel model,
+            CancellationToken cancellationToken)
+        {
+            var entity = mapper.Map<UserContactMethod>(model);
+
+            // UserId, нормализация значения и снятие флага «основной» у остальных строк —
+            // всё внутри сервиса: контроллер доменных решений не принимает.
+            using var creationService = new UserContactMethodCreationService(entity, User.GetUserId(), cancellationToken);
+            await creationService.ExecuteEntityChangesAsync();
+
+            return mapper.Map<ContactMethodInfoModel>(creationService.Entities.Single());
+        }
+
+        [HttpPut]
+        [Route("Contacts")]
+        public async Task<ContactMethodInfoModel> UpdateContactAsync([FromBody] ContactMethodUpdateModel model,
+            CancellationToken cancellationToken)
+        {
+            using var updateService = new UserContactMethodUpdateService(cancellationToken);
+            var contact = await updateService.UpdateAsync(model, User.GetUserId());
+
+            return mapper.Map<ContactMethodInfoModel>(contact);
+        }
+
+        [HttpDelete]
+        [Route("Contacts")]
+        public async Task<IActionResult> DeleteContactAsync([FromQuery] int id, CancellationToken cancellationToken)
+        {
+            using var deletionService = new UserContactMethodDeletionService(cancellationToken);
+            await deletionService.DeleteAsync(id, User.GetUserId());
+
+            return NoContent();
+        }
+
+        // Отдаёт справочник ЦЕЛИКОМ, а не одну строку: смена основного меняет флаг сразу у
+        // двух записей и порядок всего списка — второй round-trip «а кто теперь основной»
+        // экрану не нужен.
+        [HttpPatch]
+        [Route("Contacts/SetPrimary")]
+        public async Task<List<ContactMethodInfoModel>> SetPrimaryContactAsync([FromQuery] int id,
+            CancellationToken cancellationToken)
+        {
+            using (var updateService = new UserContactMethodUpdateService(cancellationToken))
+                await updateService.SetPrimaryAsync(id, User.GetUserId());
+
+            using var info = new UserContactMethodInfo(CommonSettings.Instance.ATToursConnectionString, cancellationToken);
+            return mapper.Map<List<ContactMethodInfoModel>>(await info.GetByUserAsync(User.GetUserId(), cancellationToken));
         }
     }
 }

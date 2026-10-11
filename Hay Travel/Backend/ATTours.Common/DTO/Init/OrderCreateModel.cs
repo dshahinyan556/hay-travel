@@ -9,5 +9,9 @@ namespace ATTours.Common.DTO.Init
     public class OrderCreateModel
     {
         public List<OrderCreateLineModel> Lines { get; set; } = [];
+
+        // Контакты для связи: 1..3, ровно один основной. Пустой список — отказ
+        // (OrderContactRequired): менеджер не должен гадать, по какому номеру звонить.
+        public List<OrderContactCreateModel> Contacts { get; set; } = [];
     }
 }

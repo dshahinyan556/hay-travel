@@ -41,6 +41,12 @@ namespace ATTours.ClientAPI.DependencyInjection
             // давала бы каждому запросу пустую копию, и отзыв не работал бы вообще.
             services.AddSingleton<IAccessTokenRevocationRegistry, AccessTokenRevocationRegistry>();
 
+            // Мгновенный отзыв ОДНОЙ сессии — «Завершить сеанс» в клиентском кабинете
+            // (David, 2026-08-31). Отдельный синглтон от реестра выше: тот бьёт по всем
+            // токенам пользователя разом (единственно верно для impersonation), этот —
+            // по TokenHash конкретной сессии.
+            services.AddSingleton<ISessionRevocationRegistry, SessionRevocationRegistry>();
+
             services.AddHttpClient(nameof(SendGridEmailSender));
             services.AddHttpClient(nameof(BrevoEmailSender));
             services.AddSingleton<IEmailSender>(serviceProvider =>

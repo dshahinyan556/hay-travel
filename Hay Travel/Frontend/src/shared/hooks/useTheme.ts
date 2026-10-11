@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   applyTheme,
+  notifyThemeChanged,
   persistTheme,
   readStoredTheme,
   THEME_SYNC_EVENT,
@@ -55,13 +56,34 @@ export function useTheme() {
     }
   }, [])
 
-  const toggleTheme = useCallback(() => {
-    setTheme((current) => {
-      const next = current === 'dark' ? 'light' : 'dark'
-      persistTheme(next)
-      return next
-    })
+  /**
+   * Зеркало состояния для обработчиков. Нужно, потому что выбор темы больше не может жить внутри
+   * `setTheme(current => …)`: рядом с записью надо разослать `THEME_SYNC_EVENT`, а рассылка из
+   * функции-обновителя — это `setState` чужого компонента во время рендера.
+   */
+  const themeRef = useRef(theme)
+  useEffect(() => {
+    themeRef.current = theme
+  }, [theme])
+
+  /**
+   * Явный выбор темы. Кроме записи рассылает `THEME_SYNC_EVENT`, и это не «на всякий случай»:
+   *  - `useTheme` теперь монтируется ДВАЖДЫ (переключатель в шапке и сегмент в разделе
+   *    «Предпочтения»), а `storage` в своей же вкладке не срабатывает — без события вторая копия
+   *    осталась бы на прежней теме;
+   *  - на это же событие подписана синхронизация с аккаунтом (`shared/lib/accountPreferences`),
+   *    которая отправляет выбор на сервер.
+   */
+  const chooseTheme = useCallback((next: Theme) => {
+    themeRef.current = next
+    persistTheme(next)
+    setTheme(next)
+    notifyThemeChanged()
   }, [])
 
-  return { theme, toggleTheme }
+  const toggleTheme = useCallback(() => {
+    chooseTheme(themeRef.current === 'dark' ? 'light' : 'dark')
+  }, [chooseTheme])
+
+  return { theme, toggleTheme, chooseTheme }
 }

@@ -85,7 +85,13 @@ export function TourCard({ tour }: { tour: Tour }) {
   const route = tour.transferRoute ?? []
 
   return (
-    <article className="card-lift group h-full">
+    // `min-w-0`: every caller wraps this in a `grid` item (`<div>`/`<li className="reveal-item
+    // grid">`) to keep `.reveal-item`'s and `.card-lift`'s own `transform` off the same element —
+    // that makes THIS article a nested grid item too, and a grid item defaults to `min-width:
+    // auto` same as a flex item. Confirmed overflowing `TransferCard` (identical wrapper
+    // convention) on a phone before this was added there (David, 2026-08-31); applied here too
+    // since every grid of these cards shares the same structure.
+    <article className="card-lift group h-full min-w-0">
       <Link
         to={isTransfer ? `/transfers/${tour.id}` : `/tours/${tour.id}`}
         className="relative flex h-full flex-col overflow-hidden rounded-2xl bg-gradient-to-b from-panel-raised to-panel ring-1 ring-edge transition-shadow duration-[var(--dur-micro)] ease-[var(--ease-in-out-soft)] hover:ring-gold-line focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"

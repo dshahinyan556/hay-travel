@@ -35,7 +35,8 @@ namespace ATTours.BusinessServices.Security
             signingCredentials = new SigningCredentials(new SymmetricSecurityKey(keyBytes), SecurityAlgorithms.HmacSha256);
         }
 
-        public AccessTokenModel CreateAccessToken(User user, ResolvedPermissionSet permissions, int? impersonatedByUserId = null)
+        public AccessTokenModel CreateAccessToken(User user, ResolvedPermissionSet permissions, string sessionTokenHash,
+            int? impersonatedByUserId = null)
         {
             var expiresInSeconds = settings.AccessTokenMinutes * 60;
             var issuedAtUtc = DateTime.UtcNow;
@@ -53,7 +54,12 @@ namespace ATTours.BusinessServices.Security
                 // полагаться на «библиотека добавит» здесь нельзя.
                 new(JwtRegisteredClaimNames.Iat,
                     EpochTime.GetIntDate(issuedAtUtc).ToString(CultureInfo.InvariantCulture),
-                    ClaimValueTypes.Integer64)
+                    ClaimValueTypes.Integer64),
+                // Session id — TokenHash родившего этот access-токен refresh-токена
+                // (David, 2026-08-31). Мгновенный отзыв ОДНОЙ сессии (ISessionRevocationRegistry)
+                // бьёт по нему, а не по userId — иначе завершение чужой сессии выбивало бы и
+                // ту, с которой это завершение вызвали.
+                new("sid", sessionTokenHash)
             };
 
             // Роль обязана быть загружена вызывающим (Include(Role)). Role-claim добавляется

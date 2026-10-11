@@ -10,6 +10,7 @@ import type { Locale } from '@/shared/lib/locale'
 import { LanguageCode, TourTranslationType, TourType } from '@/features/admin/lib/enums'
 import type { TourInfoModel } from '@/shared/types/attours'
 import type { CalendarCopy } from './calendarCopy'
+import type { DayDraftInfo } from './calendarDraft'
 import {
   ClosureRuleType,
   OrderStatus,
@@ -32,8 +33,11 @@ export interface CalendarGridDay {
   inMonth: boolean
   isToday: boolean
   isPast: boolean
-  /** The server's row for this day; `null` for tail cells outside the loaded month. */
+  /** The server's row for this day; `null` for tail cells outside the loaded month. With a page
+   * draft (`applyDraftToGrid`) it is the row WITH the unsaved day toggles laid over it. */
   day: CalendarDayModel | null
+  /** What the unsaved draft changes in this day; `null` — nothing. Set by `applyDraftToGrid`. */
+  draft?: DayDraftInfo | null
 }
 
 /**

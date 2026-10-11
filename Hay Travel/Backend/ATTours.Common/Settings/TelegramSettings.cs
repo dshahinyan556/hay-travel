@@ -13,7 +13,7 @@ namespace ATTours.Common.Settings
 
         public string BotToken => Section[nameof(BotToken)];
 
-        public string BotUsername => Section[nameof(BotUsername)] ?? "HayTravelNotificationsBot";
+        public string BotUsername => Section[nameof(BotUsername)] ?? "haytravelbot";
 
         // Значение заголовка X-Telegram-Bot-Api-Secret-Token, задаётся при setWebhook.
         public string WebhookSecret => Section[nameof(WebhookSecret)];

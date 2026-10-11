@@ -1,8 +1,9 @@
-import { Card, Checkbox, DatePicker, Field, Input } from '@/shared/ui'
+import { Card, Checkbox, DatePicker, Field, Input, Tooltip } from '@/shared/ui'
 import { HelpButton } from '@/shared/ui/HelpButton'
 import { HelpRevealZone } from '@/shared/ui/HelpReveal'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
+import { MAX_FEATURED_TOURS } from '@/features/admin/api/adminTours'
 import { TourFormat, TourType } from '@/features/admin/lib/enums'
 import type { TourFormState } from '@/features/admin/types/form'
 import type { TourFormActions } from '@/features/admin/tour-form/hooks/useTourForm'
@@ -39,6 +40,9 @@ interface TourFormHeaderProps {
   regions: RegionInfoModel[]
   /** The tag catalog, for the tag picker. */
   tags: TagInfoModel[]
+  /** Why «Показывать в избранном» is locked (no `products.Update` — `SetFeatured` would 403), or
+   * `null`/omitted when it is editable. Shown as a tooltip on the still-visible checkbox. */
+  featureHint?: string | null
 }
 
 /**
@@ -70,6 +74,7 @@ export function TourFormHeader({
   typeLocked,
   regions,
   tags,
+  featureHint = null,
 }: TourFormHeaderProps) {
   const { locale } = useLocale()
   const copy = useCopy(tourFormCopy).header
@@ -196,6 +201,21 @@ export function TourFormHeader({
             checked={state.isActive}
             onChange={(e) => actions.setIsActive(e.target.checked)}
           />
+          {/* Часть того же черновика, что и «Активен»: коммитится общим Save, а `useTourForm`
+              досылает `SetFeatured`, только если значение отличается от сохранённого. */}
+          <HelpRevealZone className="flex items-center gap-2">
+            <Tooltip enabled={featureHint !== null} content={featureHint} cursor="not-allowed">
+              <Checkbox
+                label={copy.isFeatured}
+                checked={state.isFeatured}
+                disabled={featureHint !== null}
+                onChange={(e) => actions.setIsFeatured(e.target.checked)}
+              />
+            </Tooltip>
+            <HelpButton surface="admin" title={copy.isFeatured}>
+              {copy.isFeaturedHint(MAX_FEATURED_TOURS)}
+            </HelpButton>
+          </HelpRevealZone>
         </div>
 
         <div className="flex flex-col gap-1.5">

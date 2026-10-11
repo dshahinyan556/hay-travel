@@ -25,10 +25,6 @@ import {
 } from '@/features/admin/types/notifications'
 import type { NotificationsCopy } from './notificationsCopy'
 
-/** Пустой документ WYSIWYG-редактора. `RichTextEditor` отдаёт `''`, но пришедший с сервера
- * шаблон вполне может содержать именно такой абзац — считаем его пустым в обе стороны. */
-const EMPTY_DOCUMENT = '<p></p>'
-
 export interface RecipientDraft {
   /** Стабильный ключ строки на время жизни формы: `row-<id>` для пришедших с сервера,
    * `new-<n>` для добавленных. НЕ уходит на сервер. */
@@ -50,12 +46,12 @@ export interface PlatformDraft {
   platform: NotificationPlatform
   isEnabled: boolean
   isImplemented: boolean
-  /** Пустые строки у Telegram — в PUT для него всё равно поедет `null`. */
-  subject: string
-  subjectEn: string
-  bodyHtml: string
-  bodyHtmlEn: string
-  availablePlaceholders: string[]
+  /** Ссылка на шаблон из библиотеки Notification Templates (2026-08-31) — заменяет встроенные
+   * subject/body. `templateName`/`templateSubject` денормализованы для отображения в пикере
+   * без похода на второй эндпоинт. */
+  templateId: number | null
+  templateName: string | null
+  templateSubject: string | null
   recipients: RecipientDraft[]
 }
 
@@ -64,9 +60,6 @@ export interface EventDraft {
   /** Порядок как пришёл с сервера: Email, затем Telegram. */
   platforms: PlatformDraft[]
 }
-
-/** Поля шаблона — единственная группа, которую патчат одним вызовом. */
-export type TemplatePatch = Partial<Pick<PlatformDraft, 'subject' | 'subjectEn' | 'bodyHtml' | 'bodyHtmlEn'>>
 
 /** Счётчик ключей новых строк. Модульный, а не пер-форменный: `rowKey` должен быть уникален
  * только внутри одной формы, а монотонность гарантируется дешевле любого проброса состояния. */
@@ -92,11 +85,9 @@ function toPlatformDraft(platform: NotificationPlatformInfoModel): PlatformDraft
     platform: platform.platform,
     isEnabled: platform.isEnabled,
     isImplemented: platform.isImplemented,
-    subject: platform.template?.subject ?? '',
-    subjectEn: platform.template?.subjectEn ?? '',
-    bodyHtml: platform.template?.bodyHtml ?? '',
-    bodyHtmlEn: platform.template?.bodyHtmlEn ?? '',
-    availablePlaceholders: platform.template?.availablePlaceholders ?? [],
+    templateId: platform.templateId,
+    templateName: platform.templateName,
+    templateSubject: platform.templateSubject,
     // ВСЕ строки, пришедшие с сервера, включая источники, которых нет в UI-чек-листе
     // (`AdminMailbox`): PUT — declarative sync, потерянная здесь строка будет удалена.
     recipients: platform.recipients.map(toRecipientDraft),
@@ -108,17 +99,6 @@ export function toDraft(event: NotificationEventInfoModel): EventDraft {
     eventKey: event.eventKey,
     platforms: event.platforms.map(toPlatformDraft),
   }
-}
-
-/** `''` / `'<p></p>'` → `null`: иначе сервер сохранит пустой абзац как «перевод есть» и сломает
- * фолбэк на русскую версию. */
-function htmlOrNull(value: string): string | null {
-  const trimmed = value.trim()
-  return trimmed === '' || trimmed === EMPTY_DOCUMENT ? null : value
-}
-
-export function isEmptyHtml(value: string): boolean {
-  return htmlOrNull(value) === null
 }
 
 function toRecipientUpdate(row: RecipientDraft, index: number, platform: NotificationPlatform): NotificationRecipientUpdateModel {
@@ -143,47 +123,49 @@ function toRecipientUpdate(row: RecipientDraft, index: number, platform: Notific
 export function toUpdateModel(draft: EventDraft): NotificationEventUpdateModel {
   return {
     eventKey: draft.eventKey,
-    platforms: draft.platforms.map((platform) => {
-      const isEmail = platform.platform === NotificationPlatform.Email
-      return {
-        platform: platform.platform,
-        isEnabled: platform.isEnabled,
-        // Для Email поля шаблона уходят ВСЕГДА, даже когда вкладка скрыта выключенным
-        // рубильником: `ValidateTemplate` не смотрит на `IsEnabled`, и `null` тут = 400.
-        subject: isEmail ? platform.subject.trim() : null,
-        subjectEn: isEmail ? (platform.subjectEn.trim() || null) : null,
-        bodyHtml: isEmail ? platform.bodyHtml : null,
-        bodyHtmlEn: isEmail ? htmlOrNull(platform.bodyHtmlEn) : null,
-        recipients: platform.recipients.map((row, index) =>
-          toRecipientUpdate(row, index, platform.platform),
-        ),
-      }
-    }),
+    platforms: draft.platforms.map((platform) => ({
+      platform: platform.platform,
+      isEnabled: platform.isEnabled,
+      templateId: platform.templateId,
+      recipients: platform.recipients.map((row, index) =>
+        toRecipientUpdate(row, index, platform.platform),
+      ),
+    })),
   }
 }
 
-function isRecipientEqual(a: RecipientDraft, b: RecipientDraft): boolean {
-  return (
-    a.id === b.id &&
-    a.isActive === b.isActive &&
-    a.type === b.type &&
-    a.sourceType === b.sourceType &&
-    a.userId === b.userId &&
-    a.orderLinkedRole === b.orderLinkedRole &&
-    a.customEmail === b.customEmail
-  )
+/** Равенство строк в том виде, в каком они уйдут на сервер (`toRecipientUpdate`): поля, не
+ * относящиеся к источнику строки, обнуляются при сохранении и в сравнении не участвуют, адрес —
+ * после `trim`, `type` у Telegram не существует. Иначе ввод+стирание пробела или хвост от
+ * прежнего источника считались бы правкой. */
+function isRecipientEqual(a: RecipientDraft, b: RecipientDraft, platform: NotificationPlatform): boolean {
+  if (
+    a.id !== b.id ||
+    a.isActive !== b.isActive ||
+    a.sourceType !== b.sourceType ||
+    (platform !== NotificationPlatform.Telegram && a.type !== b.type)
+  ) {
+    return false
+  }
+  switch (a.sourceType) {
+    case NotificationRecipientSource.User:
+      return a.userId === b.userId
+    case NotificationRecipientSource.OrderLinked:
+      return a.orderLinkedRole === b.orderLinkedRole
+    case NotificationRecipientSource.CustomEmail:
+      return a.customEmail.trim() === b.customEmail.trim()
+    case NotificationRecipientSource.AdminMailbox:
+      return true
+  }
 }
 
 function isPlatformEqual(a: PlatformDraft, b: PlatformDraft): boolean {
   return (
     a.platform === b.platform &&
     a.isEnabled === b.isEnabled &&
-    a.subject === b.subject &&
-    a.subjectEn === b.subjectEn &&
-    a.bodyHtml === b.bodyHtml &&
-    a.bodyHtmlEn === b.bodyHtmlEn &&
+    a.templateId === b.templateId &&
     a.recipients.length === b.recipients.length &&
-    a.recipients.every((row, index) => isRecipientEqual(row, b.recipients[index]))
+    a.recipients.every((row, index) => isRecipientEqual(row, b.recipients[index], a.platform))
   )
 }
 
@@ -254,7 +236,10 @@ export function recipientRowError(
 export interface DraftValidation {
   /** Пер-строчные ошибки всех платформ, ключ — `rowKey`. */
   rowErrors: Record<string, string>
-  /** Ошибка шаблона Email или `null`. Проверяется НЕЗАВИСИМО от `isEnabled`. */
+  /** Шаблон не назначен у включённой платформы. Раньше проверялось независимо от `isEnabled`
+   * (Email всегда требовал subject/body) — теперь платформа со скрытой вкладкой (выключена)
+   * не обязана иметь шаблон: ссылка на пустое место, а не черновик с реальным контентом,
+   * который можно было бы молча потерять. */
   templateError: string | null
 }
 
@@ -263,10 +248,8 @@ export function validateDraft(draft: EventDraft, copy: NotificationsCopy): Draft
   let templateError: string | null = null
 
   for (const platform of draft.platforms) {
-    if (platform.platform === NotificationPlatform.Email) {
-      if (platform.subject.trim() === '' || isEmptyHtml(platform.bodyHtml)) {
-        templateError = copy.errorTemplateInvalid
-      }
+    if (platform.isEnabled && platform.templateId === null) {
+      templateError = copy.errorTemplateInvalid
     }
 
     const seen = new Set<string>()

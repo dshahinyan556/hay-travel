@@ -16,6 +16,10 @@ export const EmailActionKey = {
   OrderAssignEmployee: 2,
   OrderUnassignEmployee: 3,
   OrderSendToClient: 4,
+  // Добавлено вместе с Notification Templates (2026-08-31) — на бэке существует с батча
+  // автозакрытия (ADR/2026-08-28), но фронт про него не знал: реального 5-го события в
+  // списке не было видно. Чинится тем же заходом, раз уж этот файл трогаем.
+  OrderAutoCancelled: 5,
 } as const
 export type EmailActionKey = (typeof EmailActionKey)[keyof typeof EmailActionKey]
 
@@ -25,6 +29,7 @@ export const EMAIL_ACTION_KEY_ORDER: readonly EmailActionKey[] = [
   EmailActionKey.OrderAssignEmployee,
   EmailActionKey.OrderUnassignEmployee,
   EmailActionKey.OrderSendToClient,
+  EmailActionKey.OrderAutoCancelled,
 ]
 
 /** Гейт лоадера карточки: набор событий закрыт кодом, чужой ключ — 400 ещё до запроса. */
@@ -60,16 +65,6 @@ export type OrderLinkedRecipient = (typeof OrderLinkedRecipient)[keyof typeof Or
 
 /* ---------------------------------- Info (GET) --------------------------------- */
 
-export interface NotificationTemplateInfoModel {
-  subject: string
-  /** `null` — перевод не сделан; письмо англоязычному получателю уйдёт RU-версией. */
-  subjectEn: string | null
-  bodyHtml: string
-  bodyHtmlEn: string | null
-  /** Уже в фигурных скобках — вставляются в редактор как есть. */
-  availablePlaceholders: string[]
-}
-
 export interface NotificationRecipientInfoModel {
   id: number
   isActive: boolean
@@ -85,13 +80,19 @@ export interface NotificationRecipientInfoModel {
   sortOrder: number
 }
 
+/** Ссылка на шаблон из библиотеки Notification Templates (`features/admin/types/
+ * notificationTemplates.ts`), 2026-08-31 — заменяет встроенный `template` (был только у
+ * Email, у Telegram `null`). Обе платформы теперь устроены одинаково: `templateId`
+ * обязателен, когда `isEnabled === true`. `templateName`/`templateSubject` — денормализация
+ * для отображения без похода на второй эндпоинт; полное содержимое — на карточке шаблона. */
 export interface NotificationPlatformInfoModel {
   platform: NotificationPlatform
   isEnabled: boolean
   /** `false` у Telegram: канал настраивается, отправки пока нет. */
   isImplemented: boolean
-  /** Только у Email; у Telegram `null`. */
-  template: NotificationTemplateInfoModel | null
+  templateId: number | null
+  templateName: string | null
+  templateSubject: string | null
   recipients: NotificationRecipientInfoModel[]
 }
 
@@ -117,16 +118,13 @@ export interface NotificationRecipientUpdateModel {
   sortOrder: number
 }
 
-/** Шаблонные поля для Telegram игнорируются сервером, но для Email присылаются ВСЕГДА,
- * даже когда вкладка Email скрыта выключенным рубильником: `ValidateTemplate` требует непустые
- * `subject`/`bodyHtml` независимо от `IsEnabled`, и `null` тут = 400 (`EmailTemplateInvalid`). */
+/** `templateId` обязателен, когда `isEnabled === true` (у обеих платформ одинаково,
+ * `NotificationSettingsValidationService.ValidateTemplateReferenceAsync`) — `null` тут при
+ * включённом канале = 400 (`NotificationTemplateInvalid`). */
 export interface NotificationPlatformUpdateModel {
   platform: NotificationPlatform
   isEnabled: boolean
-  subject: string | null
-  subjectEn: string | null
-  bodyHtml: string | null
-  bodyHtmlEn: string | null
+  templateId: number | null
   /** ПОЛНЫЙ набор строк грида: чего нет в списке — сервер удалит. */
   recipients: NotificationRecipientUpdateModel[]
 }

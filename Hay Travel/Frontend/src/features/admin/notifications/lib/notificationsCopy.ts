@@ -12,8 +12,10 @@
 import { ApiError } from '@/shared/lib/http'
 import { defineCopy } from '@/shared/i18n/defineCopy'
 
-/** Пустая тема/тело письма ИЛИ неизвестный ключ события. */
-const EMAIL_TEMPLATE_INVALID = 2030
+/** Шаблон не назначен у включённой платформы, ссылается на несуществующий id, либо канал
+ * шаблона не совпадает с платформой (2071, Notification Templates 2026-08-31) — а также
+ * неизвестный ключ события (осталось от прежнего 2030, коды не переиспользуются). */
+const NOTIFICATION_TEMPLATE_INVALID = 2071
 /** Невалидная строка получателя или дубликат внутри платформы. */
 const NOTIFICATION_RECIPIENT_INVALID = 2038
 
@@ -84,24 +86,18 @@ const ru = {
   orderLinkedEmployeeNote: 'Письмо уйдёт каждому исполнителю строки заказа отдельно.',
 
   /* --------------------------------- Шаблон ------------------------------------ */
-  templateTitle: 'Текст письма',
-  subjectLabel: 'Тема письма',
-  bodyLabel: 'Текст письма',
-  bodyPlaceholder: 'Текст письма. Вставьте нужные поля через «Вставить поле».',
-  bodyInLangAria: (lang: string) => `Текст письма, ${lang}`,
-  placeholdersHint: 'Доступные поля — через «Вставить поле» в панели редактора.',
-  translationFallbackHint:
-    'Если английская версия пуста, англоязычному получателю уйдёт русская — по каждому полю ' +
-    'отдельно.',
-  langRu: 'Русский',
-  langEn: 'English',
+  templatePickerLabel: 'Шаблон',
+  templatePickerPlaceholder: 'Выберите шаблон…',
+  templatePickerEmpty: 'Подходящих шаблонов ещё нет.',
+  templatePickerOpenLink: 'Открыть шаблон',
+  templatePickerCreateLink: 'Создать шаблон',
 
   /* --------------------------------- Ошибки ------------------------------------ */
   errorActions: {
     saveEvent: (name: string) => `сохранить событие «${name}»`,
   },
   errorInvalidEventKey: 'Неизвестное событие уведомления.',
-  errorTemplateInvalid: 'Тема и текст письма не могут быть пустыми.',
+  errorTemplateInvalid: 'У включённой платформы должен быть выбран шаблон.',
   errorRecipientInvalid: 'Один из получателей заполнен неверно или повторяется.',
   errorFixRowsBeforeSave: 'Исправьте отмеченные строки — до этого сохранить не получится.',
   rowErrorTypeRequired: 'Укажите тип адреса: Кому, Копия или Скрытая копия.',
@@ -175,23 +171,17 @@ const en: { [K in keyof typeof ru]: (typeof ru)[K] } = {
   userUnavailable: 'User unavailable',
   orderLinkedEmployeeNote: 'The email goes to every employee of the order line separately.',
 
-  templateTitle: 'Email body',
-  subjectLabel: 'Email subject',
-  bodyLabel: 'Email body',
-  bodyPlaceholder: 'Email body. Insert the fields you need with “Insert a field”.',
-  bodyInLangAria: (lang: string) => `Email body, ${lang}`,
-  placeholdersHint: 'Available fields — through “Insert a field” in the editor toolbar.',
-  translationFallbackHint:
-    'When the English version is empty, an English-speaking recipient gets the Russian one — ' +
-    'field by field.',
-  langRu: 'Русский',
-  langEn: 'English',
+  templatePickerLabel: 'Template',
+  templatePickerPlaceholder: 'Choose a template…',
+  templatePickerEmpty: 'No matching templates yet.',
+  templatePickerOpenLink: 'Open template',
+  templatePickerCreateLink: 'Create template',
 
   errorActions: {
     saveEvent: (name: string) => `save the “${name}” event`,
   },
   errorInvalidEventKey: 'Unknown notification event.',
-  errorTemplateInvalid: 'The subject and the body of the email cannot be empty.',
+  errorTemplateInvalid: 'An enabled platform must have a template selected.',
   errorRecipientInvalid: 'One of the recipients is filled in incorrectly or listed twice.',
   errorFixRowsBeforeSave: 'Fix the marked rows — saving is blocked until then.',
   rowErrorTypeRequired: 'Pick the address type: To, Cc or Bcc.',
@@ -224,7 +214,7 @@ export function notificationsErrorMessage(
 ): string {
   if (err instanceof ApiError) {
     const code = errorCodeOf(err.body)
-    if (code === EMAIL_TEMPLATE_INVALID) return copy.errorTemplateInvalid
+    if (code === NOTIFICATION_TEMPLATE_INVALID) return copy.errorTemplateInvalid
     if (code === NOTIFICATION_RECIPIENT_INVALID) return copy.errorRecipientInvalid
     if (err.status === 403) return copy.errorForbidden(action)
     return copy.errorServer(action, err.status)

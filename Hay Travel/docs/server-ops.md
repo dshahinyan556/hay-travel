@@ -100,7 +100,43 @@ ssh -i ~/.ssh/haytravel-netcup/id_ed25519 root@152.53.239.184 \
 ```
 EF-миграции применяются **автоматически при старте бэкенда** — отдельно накатывать не нужно.
 
+**Грабля (2026-08-29): `up -d --build` может НЕ пересоздать контейнер.** Образ собирается новый,
+а контейнер продолжает крутить старый — compose считает сервис актуальным и печатает
+`Container haytravel-backend-1 Running` вместо `Recreated`. Внешне деплой выглядит успешным,
+но на проде остаётся прежний код. Проверять после каждого выката бэкенда:
+```
+cd /opt/haytravel
+docker inspect $(docker compose ps -q backend) --format '{{.Image}}'   # что крутится
+docker image inspect haytravel-backend:latest --format '{{.Id}}'       # что собрано
+```
+Если sha разные — `docker compose up -d --force-recreate backend`. Дополнительный признак:
+`docker compose ps` показывает у бэкенда аптайм больше, чем прошло с момента сборки.
+
+**Грабля (2026-08-29): `docker-compose.yml` НЕ едет с деплоем.** tar-команды выше переносят
+только `Backend/` и `Frontend/`. Если в фиче появилась новая переменная окружения, её надо
+руками добавить в `/opt/haytravel/docker-compose.yml` — иначе приложение стартует со
+значением по умолчанию из `appsettings.json` и фича тихо не работает. Так на 08-28 сломался
+Telegram-бот: `Telegram__BotToken`/`Telegram__WebhookSecret` и `Email__PublicMediaBaseUrl`
+были только в копии репозитория. Проверка после деплоя:
+```
+cd /opt/haytravel && diff <(grep -oE '^ +[A-Za-z_]+__[A-Za-z]+' docker-compose.yml | sort) \
+  <(grep -oE '^ +[A-Za-z_]+__[A-Za-z]+' /path/to/repo/docker-compose.yml | sort)
+docker exec $(docker compose ps -q backend) printenv | sort   # что реально видит приложение
+```
+
 ## Как выкатить новый код фронтенда
+
+**Сначала — сверка на устаревшие файлы.** tar переносит добавления и изменения, но НЕ удаления:
+файл, удалённый локально, остаётся на сервере и участвует в сборке. Перед выкатом:
+```
+cd "Hay Travel/Frontend" && find src -type f | LC_ALL=C sort > /tmp/local.txt
+ssh -i ~/.ssh/haytravel-netcup/id_ed25519 root@152.53.239.184 \
+  "cd /opt/haytravel/Frontend && find src -type f | LC_ALL=C sort" | tr -d '\r' > /tmp/server.txt
+comm -13 /tmp/local.txt /tmp/server.txt   # то, что есть только на сервере — удалить руками
+```
+`LC_ALL=C` обязателен с обеих сторон: без него `sort` даёт разный порядок и `comm` ругается на
+несортированный вход. То же самое для `Backend` (там в выхлоп попадает мусор `.vs/` — его можно
+игнорировать).
 
 ```
 cd "Hay Travel"
@@ -130,6 +166,38 @@ EOF
 
 Поменять значение → отредактировать `/opt/haytravel/.env` → `docker compose up -d`
 (пересоздаст только бэкенд, БД не тронет).
+
+## Telegram-бот (webhook)
+
+Бот — `@haytravelbot` (`BotUsername` в `appsettings.json`; из него собирается deep-link
+`https://t.me/<username>?start=<код>`, поэтому значение обязано совпадать с ответом `getMe`).
+
+Транспорт — webhook, не polling. Регистрация в Telegram — **одноразовый ручной шаг**, он не
+делается автоматически при старте бэкенда и не переживает смену домена или секрета:
+```
+cd /opt/haytravel && set -a; . .env; set +a
+curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+  --data-urlencode "url=https://haytravel.duckdns.org/api/telegram/webhook" \
+  --data-urlencode "secret_token=$TELEGRAM_WEBHOOK_SECRET" \
+  --data-urlencode "allowed_updates=[\"message\"]"
+```
+
+**Диагностика** (тоже с сервера, после `set -a; . .env; set +a`):
+```
+curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getWebhookInfo"   # url + last_error
+curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getMe"           # реальный username
+
+# эндпоинт жив и секрет совпадает?
+curl -s -o /dev/null -w "%{http_code}\n" -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Telegram-Bot-Api-Secret-Token: $TELEGRAM_WEBHOOK_SECRET" \
+  -d '{"update_id":1}' https://haytravel.duckdns.org/api/telegram/webhook
+```
+Ожидаемое: 200 с верным секретом, **404 с неверным**. 404 — не «роут отсутствует», а
+намеренный ответ `TelegramWebhookController`: посторонний не должен по коду ответа узнать,
+что эндпоинт существует. Тот же 404 приходит, когда `Telegram__WebhookSecret` не задан в
+контейнере, — значит при 404 с верным секретом смотреть надо на переменные окружения
+(см. граблю про `docker-compose.yml`), а не на nginx.
 
 ## DuckDNS (домен, пока нет своего)
 

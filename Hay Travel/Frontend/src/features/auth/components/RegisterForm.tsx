@@ -9,10 +9,10 @@ import {
   validatePassword,
   validateUsername,
 } from '../lib/passwordRules'
-import { useDefaultPhoneCountry } from '../hooks/useDefaultPhoneCountry'
+import { useDefaultPhoneCountry } from '@/shared/hooks/useDefaultPhoneCountry'
 import { Reveal } from '@/shared/ui'
 import { AuthField } from './AuthField'
-import { PhoneField } from './PhoneField'
+import { PhoneField } from '@/shared/ui/PhoneField'
 import { AuthError, AuthSubmitButton } from './AuthShell'
 
 interface RegisterFormProps {

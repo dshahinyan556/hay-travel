@@ -19,33 +19,6 @@ namespace ATTours.BusinessServices.Email
 
         public bool ExposesTokenToCaller => true;
 
-        public Task SendEmailVerificationAsync(string toEmail, string toName, string token, CancellationToken cancellationToken = default)
-        {
-            logger.LogInformation("[DevEmailSender] Verify email for {Email}: {Url}",
-                toEmail, EmailMessageFactory.BuildVerifyUrl(settings, token));
-            return Task.CompletedTask;
-        }
-
-        public Task SendPasswordResetAsync(string toEmail, string toName, string token, CancellationToken cancellationToken = default)
-        {
-            logger.LogInformation("[DevEmailSender] Password reset for {Email}: {Url}",
-                toEmail, EmailMessageFactory.BuildResetUrl(settings, token));
-            return Task.CompletedTask;
-        }
-
-        public Task SendEmailChangeOldEmailCodeAsync(string toEmail, string toName, string code, CancellationToken cancellationToken = default)
-        {
-            logger.LogInformation("[DevEmailSender] Email change code for {Email}: {Code}", toEmail, code);
-            return Task.CompletedTask;
-        }
-
-        public Task SendEmailChangeConfirmationAsync(string toEmail, string toName, string token, CancellationToken cancellationToken = default)
-        {
-            logger.LogInformation("[DevEmailSender] Email change confirmation for {Email}: {Url}",
-                toEmail, EmailMessageFactory.BuildEmailChangeConfirmUrl(settings, token));
-            return Task.CompletedTask;
-        }
-
         public Task SendTransactionalAsync(string toEmail, string toName, string subject, string bodyHtml,
             EmailAttachment? attachment = null, CancellationToken cancellationToken = default)
         {

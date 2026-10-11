@@ -26,7 +26,6 @@ import {
   type EventDraft,
   type PlatformDraft,
   type RecipientDraft,
-  type TemplatePatch,
 } from '../lib/notificationEventModel'
 import { notificationsCopy, notificationsErrorMessage } from '../lib/notificationsCopy'
 
@@ -40,8 +39,8 @@ export interface UseNotificationEventFormResult {
   draft: EventDraft
   /** Рубильник платформы (вкладка «Платформы»). */
   setPlatformEnabled: (platform: NotificationPlatform, isEnabled: boolean) => void
-  /** Патч шаблона Email (subject/subjectEn/bodyHtml/bodyHtmlEn). */
-  patchTemplate: (platform: NotificationPlatform, patch: TemplatePatch) => void
+  /** Выбор шаблона из библиотеки Notification Templates для этой платформы. */
+  setTemplateId: (platform: NotificationPlatform, templateId: number | null) => void
   addRecipient: (platform: NotificationPlatform) => void
   removeRecipient: (platform: NotificationPlatform, rowKey: string) => void
   patchRecipient: (
@@ -91,22 +90,19 @@ export function useNotificationEventForm({
    * Общая точка правки одной платформы черновика: единственное место, где живёт поиск по
    * `platform`, чтобы четыре сеттера ниже не повторяли его каждый по-своему.
    *
-   * Патч, ничего не меняющий, возвращает ПРЕЖНИЙ черновик. Это не микрооптимизация: после
-   * сохранения в `RichTextEditor` приезжает санитизированный сервером HTML, редактор
-   * перевыставляет документ и отвечает `onChange` с тем же значением — без этой проверки такой
-   * эхо-патч считался бы правкой пользователя.
+   * Патч применяется всегда, даже «пустой»: «грязно» решает `isEventDraftEqual` против baseline
+   * (с нормализацией — см. `isRecipientEqual`), а не факт вызова сеттера. Прежний guard
+   * «нормализованно равно → вернуть старый черновик» здесь бы мешал: он глотал бы ввод, который
+   * нормализация считает пустым (например, пробел в конце адреса посреди набора).
    */
   const patchPlatform = useCallback(
     (platform: NotificationPlatform, patch: (current: PlatformDraft) => PlatformDraft) => {
-      setDraft((prev) => {
-        const next = {
-          ...prev,
-          platforms: prev.platforms.map((candidate) =>
-            candidate.platform === platform ? patch(candidate) : candidate,
-          ),
-        }
-        return isEventDraftEqual(next, prev) ? prev : next
-      })
+      setDraft((prev) => ({
+        ...prev,
+        platforms: prev.platforms.map((candidate) =>
+          candidate.platform === platform ? patch(candidate) : candidate,
+        ),
+      }))
     },
     [],
   )
@@ -118,9 +114,9 @@ export function useNotificationEventForm({
     [patchPlatform],
   )
 
-  const patchTemplate = useCallback(
-    (platform: NotificationPlatform, patch: TemplatePatch) => {
-      patchPlatform(platform, (current) => ({ ...current, ...patch }))
+  const setTemplateId = useCallback(
+    (platform: NotificationPlatform, templateId: number | null) => {
+      patchPlatform(platform, (current) => ({ ...current, templateId }))
     },
     [patchPlatform],
   )
@@ -203,7 +199,7 @@ export function useNotificationEventForm({
   return {
     draft,
     setPlatformEnabled,
-    patchTemplate,
+    setTemplateId,
     addRecipient,
     removeRecipient,
     patchRecipient,
@@ -216,7 +212,7 @@ export function useNotificationEventForm({
     isSubmitting,
     error,
     // Появившаяся правка гасит плашку сама — отдельного `setSavedAt(null)` в каждом сеттере для
-    // этого не нужно (и он бы срабатывал на эхо-патч редактора, см. `patchPlatform`).
+    // этого не нужно (и он бы срабатывал на «пустой» патч, который dirty не меняет).
     savedAt: isDirty ? null : savedAt,
   }
 }

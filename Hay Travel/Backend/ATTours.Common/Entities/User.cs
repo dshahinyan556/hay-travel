@@ -69,6 +69,40 @@ namespace ATTours.Common.Entities
         // которым уже размечен весь переводимый контент сайта.
         public LanguageCode PreferredLanguage { get; set; } = LanguageCode.Russian;
 
+        // ---- Личные предпочтения интерфейса (2026-08-29) ----
+        // У гостя тема/палитра/валюта живут в localStorage и привязаны к браузеру; у
+        // залогиненного источник правды — эти четыре колонки, чтобы выбор переезжал на
+        // другое устройство.
+        //
+        // ВАЖНО ПРО NULL (общее для трёх строковых полей ниже): null означает ровно одно —
+        // «личного выбора нет, брать дефолт сайта», и никогда «дефолт, записанный в БД».
+        // Проставить сюда дефолтные значения строкам — значит навсегда отвязать этих
+        // пользователей от админской смены дефолта: смена theme.defaultMode/
+        // theme.activePalette перестанет на них действовать. Та же грабля описана во
+        // фронте (shared/lib/theme.ts, THEME_DEFAULT_STORAGE_KEY).
+
+        // "dark" / "light". Дефолт сайта — ключ настроек theme.defaultMode.
+        // null = выбора нет (см. блок выше).
+        public string PreferredTheme { get; set; }
+
+        // Id пресета палитры. Допустимые значения — только ThemePaletteCatalog.IsKnown
+        // (второго списка пресетов в проекте не существует и заводить его нельзя).
+        // Дефолт сайта — ключ theme.activePalette. null = выбора нет.
+        public string PreferredPalette { get; set; }
+
+        // ISO-4217 в ВЕРХНЕМ регистре ("USD"/"EUR"/...). Допустимые коды — те же, из которых
+        // сайт строит переключатель валют (CurrencyCatalog, он же источник для
+        // ExchangeRateController): выдуманный код здесь означал бы, что весь прайс на экране
+        // не в чем считать. null = выбора нет, берётся базовая валюта каталога.
+        public string PreferredCurrency { get; set; }
+
+        // Каналы служебных уведомлений. НЕ nullable, в отличие от трёх полей выше:
+        // «канала нет» — не состояние, уведомление всё равно должно куда-то уйти, поэтому
+        // дефолт — Email (HasDefaultValue в UserConfiguration бэкфиллит и старые строки).
+        // Пустое множество запрещено, а бит Telegram требует привязанного TelegramChatId —
+        // оба правила в UserPreferencesValidationService.
+        public NotificationChannelFlags NotificationChannels { get; set; } = NotificationChannelFlags.Email;
+
         // Привязанный чат HayTravelNotificationsBot (ADR 031 §5). null = не привязан.
         // Заполняется webhook'ом при /start <код>. Один чат ↔ один пользователь
         // (filtered-unique-индекс в UserConfiguration).

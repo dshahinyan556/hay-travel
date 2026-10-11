@@ -83,6 +83,13 @@ let sessionEpoch = 0
  */
 const SESSION_HINT_KEY = 'att.session'
 
+/**
+ * Name of the cross-tab Web Lock that serialises `POST api/Auth/RefreshToken` — see
+ * `withRefreshLock`. Namespaced like `SESSION_HINT_KEY`: the lock space is per-ORIGIN, shared with
+ * anything else that ever runs here.
+ */
+const REFRESH_LOCK_NAME = 'att.auth.refresh'
+
 /* -------------------------------------------------------------------------- */
 /*  Store primitives                                                           */
 /* -------------------------------------------------------------------------- */
@@ -125,7 +132,16 @@ setAuthTokenProvider(getAccessToken)
 // The permission store must wait for the session before asking the server "what may I do?", but it
 // may not import this module (that would invert the documented direction into a cycle — see its
 // doc comment). So the wait is injected, exactly like the token provider above.
-setPermissionSessionProbe(async () => (await ensureAuthReady()).user !== null)
+//
+// The answer is read from the LIVE state after the wait, not from the value `ensureAuthReady()`
+// resolves with: that promise is cached per page load and holds the snapshot from when it settled.
+// `applyLoginResult` fires a permission reload BEFORE it swaps the cached promise, so a probe that
+// trusted the cached value saw the pre-login "anonymous" and committed an empty set — the admin
+// then opened on «Недостаточно прав» until a reload.
+setPermissionSessionProbe(async () => {
+  await ensureAuthReady()
+  return state.user !== null
+})
 
 /** Refresh this many ms before the token actually expires, so a request can't die in flight
  * because the token aged out between the check and the server reading it. */
@@ -417,11 +433,48 @@ export function ensureAuthReady(): Promise<AuthState> {
 }
 
 /**
+ * Serialise the refresh CALL across every tab of this browser (Web Locks API).
+ *
+ * WHY this exists at all: the refresh cookie is one-time and rotates on use, and the backend reads
+ * a second use of an already-rotated token as token THEFT — the reuse branch revokes the whole
+ * family, i.e. signs the account out everywhere. Two tabs of the same browser hit that by accident
+ * routinely: both hold their own `refreshPromise` (which is per-module, so per-tab), both notice the
+ * shared access-token expiry within the same second, and both POST `RefreshToken` with the same
+ * cookie. One wins, the other looks exactly like an attacker replaying a stolen token.
+ *
+ * The lock makes the loser WAIT and then re-run the request with the cookie the winner has just
+ * rotated in, which is an ordinary successful refresh. (The backend's own defence for the case a
+ * lock cannot cover — two different DEVICES, no shared lock space — is the rotation grace period in
+ * `docs/adr/033-refresh-token-rotation-grace-period.md`. The two fixes are independent: this one is
+ * the primary answer for same-browser multi-tab races and does not depend on that one shipping.)
+ *
+ * `navigator.locks` is secure-context-only and absent in older/embedded browsers, so its absence
+ * degrades to today's behaviour rather than to a broken session.
+ */
+function withRefreshLock<T>(run: () => Promise<T>): Promise<T> {
+  if (typeof navigator === 'undefined' || !navigator.locks) return run()
+  // `LockManager.request` is typed `Promise<Awaited<T>>`, which is the same type as `Promise<T>`
+  // for every caller here (`T` is a plain DTO, never itself a promise) — TS just cannot prove that
+  // for an unconstrained generic.
+  return navigator.locks.request(REFRESH_LOCK_NAME, run) as Promise<T>
+}
+
+/**
  * Swap the refresh cookie for a new access token.
  *
  * NEVER throws — callers (`authFetch`, `ensureAuthReady`) treat `null` as "the session is gone"
  * and there is no useful distinction between "cookie expired", "user was locked since login" and
- * "network died" at this level. Single-flight: a burst of 401s produces one refresh, not N.
+ * "network died" at this level.
+ *
+ * TWO layers of single-flight, and they are not redundant:
+ *  - `refreshPromise` — within THIS tab, a burst of 401s produces one refresh, not N;
+ *  - `withRefreshLock` — across every tab of this browser, see its doc comment.
+ *
+ * Only the network call is inside the lock. Every state write stays outside it, and `epoch` is
+ * captured BEFORE the lock is acquired on purpose: a tab that sat in the lock queue for a while may
+ * come back to a session that a login/logout has replaced meanwhile, and the epoch check is what
+ * makes it drop its now-stale result instead of resurrecting the old one. `logout()` takes no lock
+ * either — signing out must never queue behind somebody else's slow refresh.
  */
 export function refreshAccessToken(): Promise<string | null> {
   if (refreshPromise) return refreshPromise
@@ -430,7 +483,7 @@ export function refreshAccessToken(): Promise<string | null> {
 
   refreshPromise = (async () => {
     try {
-      const result = await refreshRequest()
+      const result = await withRefreshLock(refreshRequest)
       // Superseded by a login/logout that happened while this was in flight — drop the result
       // rather than overwrite a newer session with an older one.
       if (epoch !== sessionEpoch) return accessToken

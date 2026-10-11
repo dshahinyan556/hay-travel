@@ -660,11 +660,41 @@ const ru = {
   'account.telegramCopied': 'Скопировано',
   'account.telegramCopyAria': 'Скопировать код привязки',
   'account.telegramRefreshHint':
-    'После подтверждения в Telegram обновите страницу — статус изменится.',
+    'Страница обновится сама — возвращаться и нажимать F5 не нужно.',
+  'account.telegramWaiting': 'Ждём ответ от Telegram…',
+  'account.telegramWaitingHint':
+    'Нажмите «Старт» в чате с ботом и возвращайтесь — мы сразу покажем результат.',
+  'account.telegramNotYet':
+    'Пока не видим подключения. Если вы уже нажали «Старт», подождите пару секунд — проверка идёт.',
+  'account.telegramJustLinked': 'Telegram подключён.',
   'account.telegramLinkedAccount': 'Аккаунт Telegram',
   'account.telegramLinkedHint': 'Уведомления о заказах приходят в этот чат.',
   'account.telegramDisconnect': 'Отключить',
   'account.telegramDisconnected': 'Telegram отключён.',
+
+  // Активные сеансы (spec 017 §4). Раздел свёрнут по умолчанию и грузит список только при первом
+  // раскрытии — см. `SessionsSection`.
+  'account.sessions': 'Активные сеансы',
+  'account.sessionsAria': 'Показать активные сеансы',
+  'account.sessionsShow': 'Показать',
+  'account.sessionsSummary': 'Устройства, на которых выполнен вход',
+  'account.sessionsIntro':
+    'Здесь видно, откуда выполнен вход в ваш аккаунт. Если какое-то устройство вам незнакомо — ' +
+    'завершите его сеанс и смените пароль.',
+  'account.sessionsLoading': 'Загружаем список устройств…',
+  'account.sessionsLoadFailed': 'Не удалось загрузить список устройств.',
+  'account.sessionsRetry': 'Повторить',
+  'account.sessionsEmpty': 'Других активных сеансов нет.',
+  'account.sessionsCurrent': 'Это устройство',
+  'account.sessionsUnknownDevice': 'Устройство не определено',
+  'account.sessionsSignedInAt': 'Вход: {moment}',
+  'account.sessionsExpiresAt': 'Действует до {moment}',
+  'account.sessionsRevoke': 'Завершить',
+  'account.sessionsRevoking': 'Завершаем…',
+  'account.sessionsRevokeAria': 'Завершить сеанс: {device}',
+  'account.sessionsRevokeOthers': 'Выйти на других устройствах',
+  'account.sessionsRevokedOne': 'Сеанс завершён.',
+  'account.sessionsRevokedOthers': 'Сеансы на других устройствах завершены.',
 
   'account.error.codeInvalid': 'Код неверный или уже истёк.',
   'account.error.linkInvalid': 'Ссылка недействительна или устарела.',
@@ -672,6 +702,126 @@ const ru = {
   'account.error.emailTaken': 'Этот email уже занят другим аккаунтом.',
   'account.error.telegramNotConfigured':
     'Telegram-бот пока не настроен на сервере — привязка временно недоступна.',
+
+  // ── Кабинет · Способы связи (батч 2026-08-29) ────────────────────────────────────────────
+  // Заголовок раздела — общий `account.sectionContacts` (он же подпись в рельсе): две строки с
+  // одним смыслом рано или поздно разъезжаются, и тогда рельс и заголовок называют разное.
+  'account.contacts.desc':
+    'Мы используем их при оформлении заказа — вам не придётся вводить контакты заново. ' +
+    'Можно указать и не свой контакт.',
+  'account.contacts.listLabel': 'Сохранённые способы связи',
+  'account.contacts.add': 'Добавить контакт',
+  'account.contacts.primaryBadge': 'Основной',
+  'account.contacts.makePrimary': 'Сделать основным',
+  'account.contacts.makePrimaryAria': 'Сделать основным контактом: {contact}',
+  'account.contacts.edit': 'Изменить',
+  'account.contacts.editAria': 'Изменить контакт: {contact}',
+  'account.contacts.delete': 'Удалить',
+  'account.contacts.deleteAria': 'Удалить контакт: {contact}',
+  'account.contacts.primaryNote':
+    'Основной контакт всегда один. Назначая основным другой, вы снимаете метку с прежнего — ' +
+    'отдельно этого делать не нужно.',
+  'account.contacts.limitNote': 'В профиле уже {max} контактов — больше добавить нельзя.',
+
+  'account.contacts.formTitleNew': 'Новый контакт',
+  'account.contacts.formTitleEdit': 'Изменение контакта',
+  'account.contacts.fillFromProfile': 'Заполнить из профиля',
+  'account.contacts.firstName': 'Имя',
+  'account.contacts.lastName': 'Фамилия',
+  'account.contacts.method': 'Способ связи',
+  'account.contacts.valueLabelPhone': 'Номер телефона',
+  'account.contacts.valueLabelEmail': 'Адрес почты',
+  'account.contacts.valueLabelTelegram': 'Имя пользователя Telegram',
+  'account.contacts.hintPhone': 'Международный формат: + и от 8 до 15 цифр.',
+  'account.contacts.hintEmail': 'Например, name@example.com.',
+  'account.contacts.hintTelegram': '@имя_пользователя или номер телефона с «+».',
+  'account.contacts.isPrimaryField': 'Сделать основным контактом',
+  'account.contacts.isPrimaryLocked':
+    'Это основной контакт — метка снимется, когда вы назначите основным другой.',
+  'account.contacts.save': 'Сохранить контакт',
+  'account.contacts.saving': 'Сохраняем…',
+  'account.contacts.saved': 'Контакт «{contact}» сохранён.',
+  'account.contacts.primaryChanged': 'Основной контакт — «{contact}».',
+  'account.contacts.removed': 'Контакт «{contact}» удалён.',
+
+  'account.contacts.methodPhone': 'Телефон',
+  'account.contacts.methodWhatsApp': 'WhatsApp',
+  'account.contacts.methodTelegram': 'Telegram',
+  'account.contacts.methodViber': 'Viber',
+  'account.contacts.methodEmail': 'Почта',
+
+  'account.contacts.errorPhone':
+    'Номер должен начинаться с «+» и содержать от 8 до 15 цифр — например, +374 91 23 45 67.',
+  'account.contacts.errorEmail': 'Введите адрес почты — например, name@example.com.',
+  'account.contacts.errorTelegram': 'Укажите @имя_пользователя или номер телефона с «+».',
+  'account.contacts.errorFirstName': 'Укажите имя.',
+  'account.contacts.errorLastName': 'Укажите фамилию.',
+
+  'account.contacts.emptyTitle': 'Контактов пока нет',
+  'account.contacts.emptyBody':
+    'Добавьте способ связи — при оформлении заказа он подставится сам, и вводить его каждый ' +
+    'раз не придётся.',
+  'account.contacts.emptyManual': 'Добавить вручную',
+  'account.contacts.loadFailedTitle': 'Не удалось загрузить контакты',
+  'account.contacts.loadFailedBody':
+    'Проверьте соединение и попробуйте ещё раз. Остальные разделы кабинета при этом работают.',
+  'account.contacts.retry': 'Повторить',
+
+  'account.contacts.deleteTitle': 'Удалить контакт?',
+  'account.contacts.deleteBody':
+    '{contact}. Контакт исчезнет из подсказок при оформлении заказа. На уже созданные заказы ' +
+    'это не влияет.',
+  'account.contacts.deleteConfirm': 'Удалить',
+  'account.contacts.deleting': 'Удаляем…',
+
+  'account.error.contactValueInvalid': 'Значение не подходит выбранному способу связи.',
+  'account.error.contactLimit': 'В профиле не может быть больше {max} контактов.',
+  'account.error.contactNotFound': 'Контакт не найден — возможно, он уже удалён.',
+
+  // ── Кабинет · Мои заказы (батч 2026-08-29) ───────────────────────────────────────────────
+  'account.orders.desc': 'Заказы и заявки, оформленные под этим аккаунтом. Новые — сверху.',
+  'account.orders.listLabel': 'Мои заказы и заявки',
+  'account.orders.number': '№ {number}',
+  'account.orders.created': 'создан {date}',
+  'account.orders.totalLabel': 'Итого',
+  'account.orders.priceNegotiated': 'Цена согласовывается',
+  'account.orders.colService': 'Услуга',
+  'account.orders.colDate': 'Дата',
+  'account.orders.colGuests': 'Гостей',
+  'account.orders.colEmployee': 'Исполнитель',
+  'account.orders.linesLabel': 'Состав заказа № {number}',
+  'account.orders.employeeNone': 'Ещё не назначен',
+  'account.orders.employeePending': 'Назначим после согласования',
+  'account.orders.employeeNotAssigned': '—',
+  'account.orders.roundTrip': 'Туда-обратно',
+  'account.orders.requestNotice':
+    'Мы получили заявку и считаем стоимость. Менеджер свяжется по основному контакту — {contact}.',
+  'account.orders.requestNoticeNoContact':
+    'Мы получили заявку и считаем стоимость. Менеджер свяжется с вами в ближайшее время.',
+
+  'account.orders.statusOpen': 'Открыт',
+  'account.orders.statusHold': 'На удержании',
+  'account.orders.statusApproved': 'Одобрен',
+  'account.orders.statusRejected': 'Отклонён',
+  'account.orders.statusReadyForAssignment': 'Готов к назначению',
+  'account.orders.statusPendingPayment': 'Ждёт оплаты',
+  'account.orders.statusCompleted': 'Завершён',
+  'account.orders.statusRequest': 'Заявка',
+
+  'account.orders.roleDriver': 'водитель',
+  'account.orders.roleGuide': 'гид',
+  'account.orders.roleDriverGuide': 'водитель-гид',
+
+  'account.orders.emptyTitle': 'Заказов пока нет',
+  'account.orders.emptyBody':
+    'Здесь появятся ваши бронирования и заявки на трансфер — с номером, статусом и составом поездки.',
+  'account.orders.emptyTrips': 'Смотреть туры',
+  'account.orders.emptyTransfer': 'Заказать трансфер',
+  'account.orders.loadFailedTitle': 'Не удалось загрузить заказы',
+  'account.orders.loadFailedBody':
+    'Сервер не ответил. Ваши заказы никуда не делись — попробуйте обновить список.',
+  'account.orders.retry': 'Повторить',
+  'account.orders.loading': 'Загружаем заказы',
 
   // Errors
   'auth.error.invalidCredentials': 'Неверный логин или пароль.',
@@ -718,6 +868,155 @@ const ru = {
   'ui.sortable.dragOver': '«{item}» перемещён на позицию {index} из {total}.',
   'ui.sortable.dragEnd': 'Перемещение завершено. «{item}» теперь на позиции {index} из {total}.',
   'ui.sortable.dragCancel': 'Перемещение отменено. «{item}» остался на позиции {index} из {total}.',
+
+  // ── Кабинет: разделы (мокап «Личный кабинет», 2026-08-29) ─────────────────────────────────
+  'account.eyebrow': 'Аккаунт',
+  'account.navAria': 'Разделы личного кабинета',
+  /* Полные подписи — для вертикального рельса на десктопе. Короткие — для полосы разделов на
+     телефоне: шесть пунктов не влезают в 375 px ни при каком размере шрифта, полоса прокручивается,
+     и «Способы связи» съедали бы треть экрана, удлиняя эту прокрутку без пользы. */
+  'account.sectionProfile': 'Профиль',
+  'account.sectionContacts': 'Способы связи',
+  'account.sectionContactsShort': 'Контакты',
+  'account.sectionOrders': 'Мои заказы',
+  'account.sectionOrdersShort': 'Заказы',
+  'account.sectionPreferences': 'Предпочтения',
+  'account.sectionConnections': 'Подключения',
+  'account.sectionSecurity': 'Безопасность',
+  'account.profileDesc':
+    'Данные аккаунта. Имя и логин меняет менеджер — напишите нам, если в них ошибка.',
+  /** Предупреждение вместо красной строки в карточке: цвет без действия рядом ничего не решает. */
+  'account.emailUnverifiedTitle': 'Почта не подтверждена',
+  'account.emailUnverifiedBody':
+    'Без подтверждения мы не сможем прислать подтверждение заказа. Письмо уходит на {email}.',
+  'account.emailVerifySend': 'Отправить письмо',
+  'account.securityDesc':
+    'Данные для входа в аккаунт. Это не способы связи для заказа — их редактируют в разделе «Способы связи».',
+  'account.connectionsDesc':
+    'Внешние сервисы, через которые мы можем с вами связаться. Это не способ входа в аккаунт.',
+  // ── Кабинет: «Предпочтения» (§7 мокапа «Личный кабинет», 2026-08-29) ──────────────────────
+  /* Главное, что раздел обязан сообщить: это НЕ «настройки страницы», а «мои настройки» — они
+     переезжают на другое устройство, и те же переключатели стоят в шапке сайта. */
+  'account.pref.description':
+    'Сохраняются в аккаунте — на другом устройстве вы увидите то же самое. Переключатели в шапке сайта меняют эти же настройки.',
+  'account.pref.loading': 'Загружаем настройки',
+  'account.pref.loadFailedTitle': 'Настройки не загрузились',
+  'account.pref.loadFailedBody':
+    'Мы не смогли получить ваши предпочтения. Проверьте связь и попробуйте ещё раз.',
+  'account.pref.retry': 'Повторить',
+
+  'account.pref.theme': 'Тема',
+  'account.pref.themeHintDark': 'Сейчас на сайте по умолчанию тёмная.',
+  'account.pref.themeHintLight': 'Сейчас на сайте по умолчанию светлая.',
+  'account.pref.themeDark': 'Тёмная',
+  'account.pref.themeLight': 'Светлая',
+
+  'account.pref.palette': 'Палитра',
+  'account.pref.paletteHint': 'Личный выбор. Не тронете — останется та, что выбрана на сайте.',
+  /* Названия пресетов живут здесь, а не приходят с сервера: `GetPublic` отдаёт
+     `theme.activePalette` одним id, каталога названий у него нет. Новый пресет — новая пара. */
+  'account.pref.paletteObsidian': 'Обсидиан + золото',
+  'account.pref.paletteBasalt': 'Базальт и медь',
+  'account.pref.paletteDefaultChip': 'по умолчанию',
+  'account.pref.paletteFollowsSite': 'Текущая палитра сайта',
+  'account.pref.palettePersonal': 'Личный выбор',
+
+  'account.pref.currency': 'Валюта',
+  'account.pref.currencyHint': 'Цены пересчитываются по курсу; счёт всё равно в драмах.',
+
+  'account.pref.language': 'Язык',
+  'account.pref.languageHint': 'На этом же языке приходят письма и сообщения о заказах.',
+
+  'account.pref.notifications': 'Уведомления о заказах',
+  'account.pref.notificationsHint': 'Хотя бы один канал должен остаться включённым.',
+  'account.pref.channelEmail': 'Email',
+  'account.pref.channelTelegram': 'Telegram',
+  'account.pref.telegramNotLinked': 'Аккаунт не привязан — включать нечего.',
+  'account.pref.telegramUnknown': 'Не удалось проверить привязку — попробуйте обновить страницу.',
+  'account.pref.telegramConnect': 'Подключить Telegram',
+  /* Заказчик решил, что настройка каналов распространяется и на служебные письма. Человек обязан
+     узнать об этом В МОМЕНТ выключения email, а не через месяц, когда забудет пароль. */
+  'account.pref.emailOffTitle': 'Тогда и вход в аккаунт пойдёт через Telegram',
+  'account.pref.emailOffBody':
+    'Письмо для сброса пароля и подтверждение почты придут в Telegram, а не на email. Потеряете доступ к мессенджеру — восстановить аккаунт будет нечем.',
+  'account.pref.lastChannel':
+    'Нельзя выключить оба канала — иначе вы не узнаете о собственном заказе.',
+
+  'account.pref.saved': 'Настройки сохранены.',
+  'account.pref.saveFailed': 'Не удалось сохранить — проверьте связь и попробуйте ещё раз.',
+  'account.pref.errorNoChannels':
+    'Сервер не принял пустой набор каналов: хотя бы один должен остаться включённым.',
+  'account.pref.errorTelegramUnavailable':
+    'Telegram не привязан к аккаунту — включить этот канал не получится.',
+  'account.pref.errorUnknownValue':
+    'Сервер не знает такую настройку — обновите страницу и попробуйте ещё раз.',
+
+  // ── Контакт для связи по заказу (OrderContactsPicker, батч 2026-08-29) ───────────────────
+  // Один блок на корзину и на конструктор трансфера, поэтому копия НЕ под `cart.*`.
+  'orderContacts.title': 'Контакт для связи',
+  'orderContacts.subtitle':
+    'По этим контактам менеджер свяжется именно по этому заказу — можно указать местный номер, а не тот, что в профиле.',
+  'orderContacts.count': 'Выбрано: {count} из {max}',
+  'orderContacts.primaryBadge': 'Основной',
+  'orderContacts.primaryNote': 'Основному контакту позвонят первым.',
+  'orderContacts.makePrimary': 'Сделать основным',
+  'orderContacts.makePrimaryAria': 'Сделать основным контактом заказа: {contact}',
+  'orderContacts.remove': 'Убрать',
+  'orderContacts.removeAria': 'Убрать контакт из заказа: {contact}',
+  'orderContacts.savedTitle': 'Сохранённые контакты',
+  'orderContacts.pick': 'Добавить',
+  'orderContacts.pickAria': 'Добавить в заказ контакт: {contact}',
+  'orderContacts.addManual': 'Добавить ещё контакт',
+  'orderContacts.formTitle': 'Контакт для этого заказа',
+  'orderContacts.formSubmit': 'Добавить контакт',
+  'orderContacts.loading': 'Загружаем сохранённые контакты…',
+  'orderContacts.loadFailed':
+    'Сохранённые контакты не загрузились — введите контакт вручную, на отправку заявки это не влияет.',
+  'orderContacts.anonymous':
+    'Сохранённые контакты появятся после входа в аккаунт — сейчас впишите контакт вручную.',
+  'orderContacts.directoryEmpty':
+    'В профиле пока нет сохранённых контактов — заполните форму или подставьте данные аккаунта.',
+  'orderContacts.limitReached': 'В одном заказе не больше {max} контактов.',
+  'orderContacts.duplicate': 'Такой контакт уже добавлен в заказ.',
+  // Отказы сервера (2060-2063). Формулировки называют, что именно исправить, — «ошибка 2063»
+  // не подсказывает ничего.
+  'orderContacts.error.required':
+    'Добавьте контакт для связи — без него заявку принять не получится.',
+  'orderContacts.error.tooMany': 'Больше {max} контактов на один заказ — уберите лишние.',
+  'orderContacts.error.primary':
+    'Основным должен быть отмечен ровно один контакт — выберите, кому звонить первым.',
+  'orderContacts.error.value':
+    'Один из контактов не подходит выбранному способу связи — проверьте номер или адрес.',
+  // Отправку блокирует не позиция, а отсутствие контакта — текст ведёт к блоку контактов,
+  // а не к списку, в котором ничего не отмечено.
+  'cart.summary.blockedContacts': 'Добавьте контакт для связи, чтобы отправить заявку',
+  // ── Мастер заявки на трансфер: 3 шага (2026-08-29) ────────────────────────────────────────
+  /* Названия шагов называют РЕЗУЛЬТАТ, а не действие: «Маршрут и время» отвечает на вопрос «что
+     я здесь заполню», а «Заполните маршрут» — команда, которую человек и так выполняет. Они же
+     стоят заголовками групп в сводке на последнем шаге, поэтому обязаны читаться и как
+     существительное. */
+  'transfers.request.wizardStep1': 'Маршрут и время',
+  'transfers.request.wizardStep2': 'Пассажиры и багаж',
+  'transfers.request.wizardStep3': 'Контакты и отправка',
+  'transfers.request.wizardCounter': 'Шаг {current} из {total}',
+  'transfers.request.wizardNext': 'Далее',
+  'transfers.request.wizardBack': 'Назад',
+  'transfers.request.wizardNavAria': 'Шаги заявки',
+  'transfers.request.wizardProgressAria': 'Прогресс заполнения заявки',
+  'transfers.request.wizardGoTo': 'Вернуться к шагу {n}: {title}',
+
+  'transfers.request.summaryTitle': 'Проверьте заявку',
+  'transfers.request.summaryRoute': 'Маршрут',
+  'transfers.request.summaryWhen': 'Когда',
+  'transfers.request.summaryWhenValue': '{date}, {time}',
+  'transfers.request.summaryReturn': 'Обратно',
+  'transfers.request.summaryLuggage': 'Багаж',
+  'transfers.request.summaryLuggageValue': 'средних: {medium}, больших: {large}',
+  'transfers.request.summaryVehicle': 'Класс авто',
+  'transfers.request.summaryComment': 'Комментарий',
+  'transfers.request.summaryEdit': 'Изменить',
+  'transfers.request.summaryEditAria': 'Изменить: {section}',
+
 } as const
 
 export type TranslationKey = keyof typeof ru
@@ -1264,11 +1563,39 @@ const en: Record<TranslationKey, string> = {
   'account.telegramCopied': 'Copied',
   'account.telegramCopyAria': 'Copy the link code',
   'account.telegramRefreshHint':
-    'Once you have confirmed it in Telegram, reload this page — the status will change.',
+    'This page updates itself — there is no need to come back and hit refresh.',
+  'account.telegramWaiting': 'Waiting for Telegram…',
+  'account.telegramWaitingHint':
+    'Press “Start” in the chat with the bot and come back — we will show the result right away.',
+  'account.telegramNotYet':
+    'We do not see the connection yet. If you already pressed “Start”, give it a couple of seconds — we are checking.',
+  'account.telegramJustLinked': 'Telegram connected.',
   'account.telegramLinkedAccount': 'Telegram account',
   'account.telegramLinkedHint': 'Order notifications arrive in this chat.',
   'account.telegramDisconnect': 'Disconnect',
   'account.telegramDisconnected': 'Telegram disconnected.',
+
+  'account.sessions': 'Active sessions',
+  'account.sessionsAria': 'Show active sessions',
+  'account.sessionsShow': 'Show',
+  'account.sessionsSummary': 'Devices you are signed in on',
+  'account.sessionsIntro':
+    'This is where your account is currently signed in from. If you do not recognise a device, ' +
+    'end its session and change your password.',
+  'account.sessionsLoading': 'Loading your devices…',
+  'account.sessionsLoadFailed': 'Could not load your devices.',
+  'account.sessionsRetry': 'Try again',
+  'account.sessionsEmpty': 'There are no other active sessions.',
+  'account.sessionsCurrent': 'This device',
+  'account.sessionsUnknownDevice': 'Unrecognised device',
+  'account.sessionsSignedInAt': 'Signed in: {moment}',
+  'account.sessionsExpiresAt': 'Valid until {moment}',
+  'account.sessionsRevoke': 'End session',
+  'account.sessionsRevoking': 'Ending…',
+  'account.sessionsRevokeAria': 'End session: {device}',
+  'account.sessionsRevokeOthers': 'Sign out on other devices',
+  'account.sessionsRevokedOne': 'Session ended.',
+  'account.sessionsRevokedOthers': 'Sessions on your other devices have been ended.',
 
   'account.error.codeInvalid': 'That code is wrong or has expired.',
   'account.error.linkInvalid': 'This link is invalid or has expired.',
@@ -1276,6 +1603,124 @@ const en: Record<TranslationKey, string> = {
   'account.error.emailTaken': 'That email already belongs to another account.',
   'account.error.telegramNotConfigured':
     'The Telegram bot is not configured on the server yet — linking is temporarily unavailable.',
+
+  'account.contacts.desc':
+    'We use them when you place an order, so you never have to type them in again. ' +
+    'The contact does not have to be your own.',
+  'account.contacts.listLabel': 'Saved contact methods',
+  'account.contacts.add': 'Add a contact',
+  'account.contacts.primaryBadge': 'Primary',
+  'account.contacts.makePrimary': 'Make primary',
+  'account.contacts.makePrimaryAria': 'Make this the primary contact: {contact}',
+  'account.contacts.edit': 'Edit',
+  'account.contacts.editAria': 'Edit contact: {contact}',
+  'account.contacts.delete': 'Delete',
+  'account.contacts.deleteAria': 'Delete contact: {contact}',
+  'account.contacts.primaryNote':
+    'There is always exactly one primary contact. Making another one primary clears the mark ' +
+    'from the previous one — you do not have to do it separately.',
+  'account.contacts.limitNote': 'Your profile already holds {max} contacts — that is the maximum.',
+
+  'account.contacts.formTitleNew': 'New contact',
+  'account.contacts.formTitleEdit': 'Edit contact',
+  'account.contacts.fillFromProfile': 'Fill from profile',
+  'account.contacts.firstName': 'First name',
+  'account.contacts.lastName': 'Last name',
+  'account.contacts.method': 'Contact method',
+  'account.contacts.valueLabelPhone': 'Phone number',
+  'account.contacts.valueLabelEmail': 'Email address',
+  'account.contacts.valueLabelTelegram': 'Telegram username',
+  'account.contacts.hintPhone': 'International format: + and 8 to 15 digits.',
+  'account.contacts.hintEmail': 'For example, name@example.com.',
+  'account.contacts.hintTelegram': '@username or a phone number starting with “+”.',
+  'account.contacts.isPrimaryField': 'Make this the primary contact',
+  'account.contacts.isPrimaryLocked':
+    'This is the primary contact — the mark moves once you make another one primary.',
+  'account.contacts.save': 'Save contact',
+  'account.contacts.saving': 'Saving…',
+  'account.contacts.saved': 'Contact “{contact}” saved.',
+  'account.contacts.primaryChanged': 'Primary contact is now “{contact}”.',
+  'account.contacts.removed': 'Contact “{contact}” deleted.',
+
+  'account.contacts.methodPhone': 'Phone',
+  'account.contacts.methodWhatsApp': 'WhatsApp',
+  'account.contacts.methodTelegram': 'Telegram',
+  'account.contacts.methodViber': 'Viber',
+  'account.contacts.methodEmail': 'Email',
+
+  'account.contacts.errorPhone':
+    'The number must start with “+” and contain 8 to 15 digits — for example, +374 91 23 45 67.',
+  'account.contacts.errorEmail': 'Enter an email address — for example, name@example.com.',
+  'account.contacts.errorTelegram': 'Enter an @username or a phone number starting with “+”.',
+  'account.contacts.errorFirstName': 'Enter a first name.',
+  'account.contacts.errorLastName': 'Enter a last name.',
+
+  'account.contacts.emptyTitle': 'No contacts yet',
+  'account.contacts.emptyBody':
+    'Add a contact method — it will be filled in for you at checkout instead of being typed ' +
+    'in every time.',
+  'account.contacts.emptyManual': 'Add manually',
+  'account.contacts.loadFailedTitle': 'Could not load your contacts',
+  'account.contacts.loadFailedBody':
+    'Check your connection and try again. The rest of the account still works.',
+  'account.contacts.retry': 'Try again',
+
+  'account.contacts.deleteTitle': 'Delete this contact?',
+  'account.contacts.deleteBody':
+    '{contact}. It will no longer be suggested at checkout. Orders you already placed are ' +
+    'not affected.',
+  'account.contacts.deleteConfirm': 'Delete',
+  'account.contacts.deleting': 'Deleting…',
+
+  'account.error.contactValueInvalid': 'That value does not match the selected contact method.',
+  'account.error.contactLimit': 'A profile cannot hold more than {max} contacts.',
+  'account.error.contactNotFound': 'Contact not found — it may have been deleted already.',
+
+  'account.orders.desc': 'Orders and requests placed with this account. Newest first.',
+  'account.orders.listLabel': 'My orders and requests',
+  'account.orders.number': 'No. {number}',
+  'account.orders.created': 'created {date}',
+  'account.orders.totalLabel': 'Total',
+  'account.orders.priceNegotiated': 'Price to be agreed',
+  'account.orders.colService': 'Service',
+  'account.orders.colDate': 'Date',
+  'account.orders.colGuests': 'Guests',
+  'account.orders.colEmployee': 'Assigned to',
+  'account.orders.linesLabel': 'Contents of order no. {number}',
+  'account.orders.employeeNone': 'Not assigned yet',
+  'account.orders.employeePending': 'Assigned once agreed',
+  'account.orders.employeeNotAssigned': '—',
+  'account.orders.roundTrip': 'Round trip',
+  'account.orders.requestNotice':
+    'We have your request and are working out the price. A manager will reach you on your ' +
+    'primary contact — {contact}.',
+  'account.orders.requestNoticeNoContact':
+    'We have your request and are working out the price. A manager will be in touch shortly.',
+
+  'account.orders.statusOpen': 'Open',
+  'account.orders.statusHold': 'On hold',
+  'account.orders.statusApproved': 'Approved',
+  'account.orders.statusRejected': 'Rejected',
+  'account.orders.statusReadyForAssignment': 'Ready to assign',
+  'account.orders.statusPendingPayment': 'Awaiting payment',
+  'account.orders.statusCompleted': 'Completed',
+  'account.orders.statusRequest': 'Request',
+
+  'account.orders.roleDriver': 'driver',
+  'account.orders.roleGuide': 'guide',
+  'account.orders.roleDriverGuide': 'driver-guide',
+
+  'account.orders.emptyTitle': 'No orders yet',
+  'account.orders.emptyBody':
+    'Your bookings and transfer requests will appear here — with their number, status and ' +
+    'what the trip is made of.',
+  'account.orders.emptyTrips': 'Browse tours',
+  'account.orders.emptyTransfer': 'Book a transfer',
+  'account.orders.loadFailedTitle': 'Could not load your orders',
+  'account.orders.loadFailedBody':
+    'The server did not respond. Your orders are safe — try refreshing the list.',
+  'account.orders.retry': 'Try again',
+  'account.orders.loading': 'Loading your orders',
 
   'auth.error.invalidCredentials': 'Wrong username or password.',
   'auth.error.accountLocked':
@@ -1314,6 +1759,133 @@ const en: Record<TranslationKey, string> = {
   'ui.sortable.dragOver': '“{item}” moved to position {index} of {total}.',
   'ui.sortable.dragEnd': 'Move finished. “{item}” is now at position {index} of {total}.',
   'ui.sortable.dragCancel': 'Move cancelled. “{item}” stayed at position {index} of {total}.',
+
+  'account.eyebrow': 'Account',
+  'account.navAria': 'Account sections',
+  'account.sectionProfile': 'Profile',
+  'account.sectionContacts': 'Ways to reach you',
+  'account.sectionContactsShort': 'Contacts',
+  'account.sectionOrders': 'My orders',
+  'account.sectionOrdersShort': 'Orders',
+  'account.sectionPreferences': 'Preferences',
+  'account.sectionConnections': 'Connections',
+  'account.sectionSecurity': 'Security',
+  'account.profileDesc':
+    'Your account details. The name and username are changed by a manager — write to us if anything is wrong.',
+  'account.emailUnverifiedTitle': 'Email is not confirmed',
+  'account.emailUnverifiedBody':
+    'Until it is confirmed we cannot send you an order confirmation. The letter goes to {email}.',
+  'account.emailVerifySend': 'Send the email',
+  'account.securityDesc':
+    'What you sign in with. These are not the contacts for an order — those live in «Ways to reach you».',
+  'account.connectionsDesc':
+    'External services we can reach you through. This is not a way to sign in.',
+  'account.pref.description':
+    'Stored in your account — you will see the same on another device. The switches in the site header change these very settings.',
+  'account.pref.loading': 'Loading your settings',
+  'account.pref.loadFailedTitle': 'Settings did not load',
+  'account.pref.loadFailedBody':
+    'We could not fetch your preferences. Check your connection and try again.',
+  'account.pref.retry': 'Try again',
+
+  'account.pref.theme': 'Theme',
+  'account.pref.themeHintDark': 'The site currently opens in dark by default.',
+  'account.pref.themeHintLight': 'The site currently opens in light by default.',
+  'account.pref.themeDark': 'Dark',
+  'account.pref.themeLight': 'Light',
+
+  'account.pref.palette': 'Palette',
+  'account.pref.paletteHint': 'Your own pick. Leave it alone and the site keeps its own palette.',
+  'account.pref.paletteObsidian': 'Obsidian + gold',
+  'account.pref.paletteBasalt': 'Basalt and copper',
+  'account.pref.paletteDefaultChip': 'default',
+  'account.pref.paletteFollowsSite': 'The palette the site uses now',
+  'account.pref.palettePersonal': 'Your own pick',
+
+  'account.pref.currency': 'Currency',
+  'account.pref.currencyHint':
+    'Prices are converted at the current rate; the invoice is still in drams.',
+
+  'account.pref.language': 'Language',
+  'account.pref.languageHint': 'Emails and order messages arrive in this same language.',
+
+  'account.pref.notifications': 'Order notifications',
+  'account.pref.notificationsHint': 'At least one channel has to stay on.',
+  'account.pref.channelEmail': 'Email',
+  'account.pref.channelTelegram': 'Telegram',
+  'account.pref.telegramNotLinked': 'No account is linked — there is nothing to switch on.',
+  'account.pref.telegramUnknown': 'We could not check the link — try reloading the page.',
+  'account.pref.telegramConnect': 'Connect Telegram',
+  'account.pref.emailOffTitle': 'Signing in will then go through Telegram too',
+  'account.pref.emailOffBody':
+    'The password-reset letter and the email confirmation will arrive in Telegram, not by email. Lose access to the messenger and there is nothing left to recover the account with.',
+  'account.pref.lastChannel':
+    'Both channels cannot be off — you would not hear about your own order.',
+
+  'account.pref.saved': 'Settings saved.',
+  'account.pref.saveFailed': 'Could not save — check your connection and try again.',
+  'account.pref.errorNoChannels':
+    'The server rejected an empty set of channels: at least one has to stay on.',
+  'account.pref.errorTelegramUnavailable':
+    'Telegram is not linked to the account — this channel cannot be switched on.',
+  'account.pref.errorUnknownValue':
+    'The server does not know this setting — reload the page and try again.',
+
+  // ── Order contact (OrderContactsPicker, 2026-08-29) ──────────────────────────────────────
+  'orderContacts.title': 'Contact for this order',
+  'orderContacts.subtitle':
+    'This is how the manager reaches you about THIS order — a local number works, it need not be the one in your profile.',
+  'orderContacts.count': 'Selected: {count} of {max}',
+  'orderContacts.primaryBadge': 'Primary',
+  'orderContacts.primaryNote': 'The primary contact is the one we call first.',
+  'orderContacts.makePrimary': 'Make primary',
+  'orderContacts.makePrimaryAria': 'Make the primary contact of this order: {contact}',
+  'orderContacts.remove': 'Remove',
+  'orderContacts.removeAria': 'Remove this contact from the order: {contact}',
+  'orderContacts.savedTitle': 'Saved contacts',
+  'orderContacts.pick': 'Add',
+  'orderContacts.pickAria': 'Add this contact to the order: {contact}',
+  'orderContacts.addManual': 'Add another contact',
+  'orderContacts.formTitle': 'Contact for this order',
+  'orderContacts.formSubmit': 'Add contact',
+  'orderContacts.loading': 'Loading your saved contacts…',
+  'orderContacts.loadFailed':
+    'Your saved contacts did not load — type a contact in by hand, the request can still be sent.',
+  'orderContacts.anonymous': 'Saved contacts appear once you sign in — for now, type one in by hand.',
+  'orderContacts.directoryEmpty':
+    'No saved contacts yet — fill the form in or pull the details from your account.',
+  'orderContacts.limitReached': 'One order holds {max} contacts at most.',
+  'orderContacts.duplicate': 'That contact is already on this order.',
+  'orderContacts.error.required': 'Add a contact — the request cannot be accepted without one.',
+  'orderContacts.error.tooMany': 'More than {max} contacts on one order — remove the extra ones.',
+  'orderContacts.error.primary':
+    'Exactly one contact has to be marked primary — pick who we should call first.',
+  'orderContacts.error.value':
+    'One of the contacts does not match its contact method — check the number or the address.',
+  'cart.summary.blockedContacts': 'Add a contact so we can reach you about this request',
+  // ── Transfer request wizard: 3 steps (2026-08-29) ─────────────────────────────────────────
+  'transfers.request.wizardStep1': 'Route and time',
+  'transfers.request.wizardStep2': 'Passengers and luggage',
+  'transfers.request.wizardStep3': 'Contacts and sending',
+  'transfers.request.wizardCounter': 'Step {current} of {total}',
+  'transfers.request.wizardNext': 'Next',
+  'transfers.request.wizardBack': 'Back',
+  'transfers.request.wizardNavAria': 'Request steps',
+  'transfers.request.wizardProgressAria': 'Request completion progress',
+  'transfers.request.wizardGoTo': 'Back to step {n}: {title}',
+
+  'transfers.request.summaryTitle': 'Check the request',
+  'transfers.request.summaryRoute': 'Route',
+  'transfers.request.summaryWhen': 'When',
+  'transfers.request.summaryWhenValue': '{date}, {time}',
+  'transfers.request.summaryReturn': 'Return',
+  'transfers.request.summaryLuggage': 'Luggage',
+  'transfers.request.summaryLuggageValue': 'medium: {medium}, large: {large}',
+  'transfers.request.summaryVehicle': 'Vehicle class',
+  'transfers.request.summaryComment': 'Comment',
+  'transfers.request.summaryEdit': 'Edit',
+  'transfers.request.summaryEditAria': 'Edit: {section}',
+
 }
 
 export const DICTIONARIES = { ru, en } satisfies Record<'ru' | 'en', Record<TranslationKey, string>>

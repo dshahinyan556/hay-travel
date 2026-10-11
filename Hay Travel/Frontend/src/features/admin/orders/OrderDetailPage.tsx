@@ -8,9 +8,12 @@ import {
   Button,
   Modal,
   Tabs,
+  UnsavedChangesModal,
   type AdminActionsMenuGroup,
   type TabItem,
 } from '@/shared/ui'
+import { AlertIcon, CheckIcon } from '@/shared/ui/icons'
+import { useUnsavedChangesGuard } from '@/shared/hooks'
 import {
   AdminScreen,
   canView,
@@ -181,6 +184,51 @@ function applyDraft(order: OrderInfoModel, draft: OrderDraft): OrderInfoModel {
   }
 }
 
+/** Пустое и `null` в nullable-текстах заказа — одно и то же: `saveDraft` отправляет `'' → null`. */
+function sameText(a: string | null | undefined, b: string | null | undefined): boolean {
+  return (a ?? '') === (b ?? '')
+}
+
+/** Черновик без патчей, совпадающих с сохранённым заказом. Без этого dirty значил «поле трогали», а
+ * не «значение другое»: двойной клик по галочке, ввод+стирание, `null` vs `''` у пустого поля — и
+ * Save / «сохранить перед отправкой» загорались на заказе, где ничего не изменилось (баг 2026-10-11).
+ * Считается от актуального `order` на каждом рендере, поэтому после ревалидации (Approve и т.п.)
+ * патч, совпавший с новыми данными, тоже перестаёт считаться правкой. */
+function pruneDraft(order: OrderInfoModel, draft: OrderDraft): OrderDraft {
+  const lines: Record<number, LineDraftPatch> = {}
+  for (const line of order.lines) {
+    const patch = draft.lines[line.id]
+    if (!patch) continue
+    const changed: LineDraftPatch = {}
+    if (patch.requiresPrepayment !== undefined && patch.requiresPrepayment !== line.requiresPrepayment) {
+      changed.requiresPrepayment = patch.requiresPrepayment
+    }
+    if (patch.prepaymentAmount !== undefined && patch.prepaymentAmount !== line.prepaymentAmount) {
+      changed.prepaymentAmount = patch.prepaymentAmount
+    }
+    if (patch.lineTotal !== undefined && patch.lineTotal !== line.lineTotal) changed.lineTotal = patch.lineTotal
+    if (Object.keys(changed).length > 0) lines[line.id] = changed
+  }
+
+  const lineEmployees: Record<number, LineEmployeeDraftPatch> = {}
+  for (const employee of order.lines.flatMap((line) => line.employees)) {
+    const patch = draft.lineEmployees[employee.id]
+    if (!patch) continue
+    const changed: LineEmployeeDraftPatch = {}
+    for (const key of ['pickupDetails', 'navigatorLink', 'comment', 'commentEn'] as const) {
+      if (patch[key] !== undefined && !sameText(patch[key], employee[key])) changed[key] = patch[key]
+    }
+    if (Object.keys(changed).length > 0) lineEmployees[employee.id] = changed
+  }
+
+  const rejectReason =
+    draft.rejectReason !== undefined && !sameText(draft.rejectReason, order.rejectReason)
+      ? draft.rejectReason
+      : undefined
+
+  return { rejectReason, lines, lineEmployees }
+}
+
 function isDraftDirty(draft: OrderDraft): boolean {
   return (
     draft.rejectReason !== undefined ||
@@ -206,6 +254,8 @@ function blankDraftOrder(currency: string, copy: OrdersCopy): OrderInfoModel {
     approvedAtUtc: null,
     currency,
     lines: [],
+    // Контакты у черновика взяться неоткуда — их приносит клиент вместе с заказом (ADR 032).
+    contacts: [],
     discountTotal: 0,
     total: 0,
   }
@@ -267,7 +317,11 @@ function OrderDetailView({
     () => (newDraftMode ? blankDraftOrder(order.currency, copy) : applyDraft(order, draft)),
     [order, draft, newDraftMode, copy],
   )
-  const dirty = !newDraftMode && isDraftDirty(draft)
+  /** Только реальные отличия от `order` — по ним считается dirty и их же коммитит Save. */
+  const changes = useMemo(() => pruneDraft(order, draft), [order, draft])
+  const dirty = !newDraftMode && isDraftDirty(changes)
+  // `pending` снимает гард: удаление уходит со страницы само, его черновик уже не нужен.
+  const guard = useUnsavedChangesGuard(dirty && !pending)
   /** Целевая строка попапа назначения — её подпись идёт в шапку, а её текущие исполнители
    * помечаются как «уже назначен». `null` при bulk-режиме («на все строки»). */
   const assignTargetLine =
@@ -321,10 +375,10 @@ function OrderDetailView({
    * was never part of the draft (checklist §2). */
   async function saveDraft() {
     const calls: Promise<unknown>[] = []
-    if (draft.rejectReason !== undefined) {
-      calls.push(setOrderStatus({ id: order.id, status: order.status, rejectReason: draft.rejectReason || null }))
+    if (changes.rejectReason !== undefined) {
+      calls.push(setOrderStatus({ id: order.id, status: order.status, rejectReason: changes.rejectReason || null }))
     }
-    for (const [lineIdText, patch] of Object.entries(draft.lines)) {
+    for (const [lineIdText, patch] of Object.entries(changes.lines)) {
       const lineId = Number(lineIdText)
       const base = order.lines.find((line) => line.id === lineId)
       if (!base) continue
@@ -345,7 +399,7 @@ function OrderDetailView({
     // Пустая строка → `null`: правило «пустое поле нигде не появляется» (ни в PDF, ни в письме)
     // живёт на сервере, и отправить `''` значило бы «поле заполнено пустотой».
     const assignedEmployees = order.lines.flatMap((line) => line.employees)
-    for (const [rowIdText, patch] of Object.entries(draft.lineEmployees)) {
+    for (const [rowIdText, patch] of Object.entries(changes.lineEmployees)) {
       const rowId = Number(rowIdText)
       const base = assignedEmployees.find((employee) => employee.id === rowId)
       if (!base) continue
@@ -519,7 +573,10 @@ function OrderDetailView({
         {copy.backToList} · <span className="font-semibold text-neutral-800">{copy.orderTitle(order.number)}</span>
       </nav>
 
-      <div className="flex flex-wrap items-center gap-3">
+      {/* Закреплён так же, как `controlZone` в `DataEntryScreenLayout` — Save должен оставаться под
+          рукой на длинном заказе, не возвращаясь наверх. Сам шаблон здесь не используется: заголовок
+          заказа живёт в `OrderHeader`, отдельный `<h1>` над тулбаром его бы задублировал. */}
+      <div className="sticky top-[60px] z-10 -mx-4 flex flex-wrap items-center gap-3 bg-neutral-50 px-4 py-2 sm:-mx-6 sm:px-6 md:top-0">
         <AdminToolbar
           onCancel={handleCancel}
           onSave={() => void run(copy.errorActions.save, saveDraft)}
@@ -592,7 +649,7 @@ function OrderDetailView({
           role="alert"
           className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
         >
-          <span aria-hidden="true">⚠️</span>
+          <AlertIcon size={16} className="mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>
       )}
@@ -601,7 +658,7 @@ function OrderDetailView({
           role="status"
           className="flex items-start gap-2 rounded-lg border border-neutral-300 bg-neutral-50 px-4 py-3 text-sm text-neutral-900"
         >
-          <span aria-hidden="true">✓</span>
+          <CheckIcon size={16} className="mt-0.5 shrink-0" />
           <span>{notice}</span>
         </div>
       )}
@@ -881,6 +938,8 @@ function OrderDetailView({
           </div>
         </div>
       )}
+
+      <UnsavedChangesModal open={guard.isBlocking} onCancel={guard.cancel} onConfirm={guard.confirm} />
     </div>
   )
 }

@@ -1,12 +1,26 @@
-import { Link, redirect, useLoaderData } from 'react-router'
+import { useState } from 'react'
+import { Link, redirect, useLoaderData, useNavigate } from 'react-router'
 import type { LoaderFunctionArgs } from 'react-router'
-import { DataEntryScreenLayout } from '@/shared/ui'
+import { AdminToolbar, DataEntryScreenLayout, UnsavedChangesModal } from '@/shared/ui'
+import { AlertIcon } from '@/shared/ui/icons'
+import { useUnsavedChangesGuard } from '@/shared/hooks'
 import { useCopy } from '@/shared/i18n/defineCopy'
 import { getStoredLocale } from '@/shared/lib/locale'
-import { AdminScreen, canView, ensurePermissionsReady } from '@/shared/auth'
-import { getRoles, getScreens } from '@/features/admin/api/adminRoles'
+import {
+  AdminScreen,
+  canManageAdmins as canManageAdminsSelf,
+  canView,
+  ensurePermissionsReady,
+  refreshPermissions,
+  useAuth,
+  useScreenPermission,
+} from '@/shared/auth'
+import { deleteRole, getRoles, getScreens } from '@/features/admin/api/adminRoles'
+import type { RoleInfoModel, ScreenDefinitionModel } from '@/features/admin/types/roles'
 import { RoleForm } from './components/RoleForm'
-import { rolesCopy } from './lib/rolesCopy'
+import { RoleDeleteModal } from './components/RoleDeleteModal'
+import { useRoleForm } from './hooks/useRoleForm'
+import { rolesCopy, rolesErrorMessage } from './lib/rolesCopy'
 
 /**
  * One role's card, and the create form.
@@ -42,21 +56,73 @@ export async function roleDetailLoader({ params }: LoaderFunctionArgs) {
 
 export function RoleDetailPage() {
   const { role, screens, existingNames } = useLoaderData<typeof roleDetailLoader>()
-  const copy = useCopy(rolesCopy)
+  // Keyed by id so navigating between two roles rebuilds the form state instead of carrying the
+  // previous role's edits over — the same reasoning as `UserDetailPage`/`TourEditPage`.
+  return <RoleDetailView key={role?.id ?? 'new'} role={role} screens={screens} existingNames={existingNames} />
+}
 
-  /**
-   * Template A — «Экран ввода данных» (`DataEntryScreenLayout`): one hero record, breadcrumbs →
-   * title/subtitle → control zone → message slot → body.
-   *
-   * No `controlZone`: this screen's Save/Cancel still live at the BOTTOM of `RoleForm`, next to the
-   * form state that owns them. Lifting them into an `AdminToolbar` means lifting `useRoleForm` into
-   * the page, which the approved template proposal itself calls a separate task ("у них своя кнопка
-   * сохранения внизу и нет тулбара… приведение их к шаблону A — отдельная задача"). The chrome above
-   * the body is what this pass aligns.
-   *
-   * The error/lag banners stay inside `RoleForm` for the same reason — they are the form's own
-   * state — rather than being threaded up into the layout's `message` slot.
-   */
+/**
+ * Template A — «Экран ввода данных» (`DataEntryScreenLayout`), the same shape as the order card:
+ * `useRoleForm` lives HERE, Отмена/Сохранить/Удалить sit in the pinned `AdminToolbar`, the
+ * error / "applied with a lag" banners go to the `message` slot, and `RoleForm` only renders the
+ * fields. Deleting is an immediate action behind `RoleDeleteModal`, never part of the draft.
+ */
+function RoleDetailView({
+  role,
+  screens,
+  existingNames,
+}: {
+  role: RoleInfoModel | null
+  screens: ScreenDefinitionModel[]
+  existingNames: string[]
+}) {
+  const copy = useCopy(rolesCopy)
+  const navigate = useNavigate()
+  const permission = useScreenPermission(AdminScreen.Roles)
+  const { user } = useAuth()
+  const isSuperAdmin = canManageAdminsSelf(user)
+
+  const form = useRoleForm({ role, screens, existingNames })
+  const readOnly = role === null ? !permission.canCreate : !permission.canUpdate
+
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deletePending, setDeletePending] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const busy = form.isSubmitting || deletePending
+  const guard = useUnsavedChangesGuard(form.isDirty && !busy && !readOnly)
+
+  // Same two reasons the list's row shows (`RolesTable#deleteBlockedReason`) plus the permission.
+  const deleteHint =
+    role === null
+      ? null
+      : !permission.canDelete
+        ? copy.noPermissionHint
+        : role.userCount > 0
+          ? copy.deleteInUseHint(role.userCount)
+          : null
+
+  async function confirmDelete() {
+    if (role === null || deletePending) return
+    setDeleteOpen(false)
+    setDeletePending(true)
+    setDeleteError(null)
+    try {
+      await deleteRole(role.id)
+      // Same as `RolesPage`: re-read the actor's own rights before the panel draws the next screen.
+      await refreshPermissions()
+      // No `setDeletePending(false)` on success: this screen is being replaced, and the guard must
+      // stay off for the navigation (the draft of a deleted role is meaningless).
+      navigate('/admin/roles')
+    } catch (err) {
+      setDeleteError(rolesErrorMessage(copy, err, copy.errorActions.deleteRole))
+      setDeletePending(false)
+    }
+  }
+
+  const error = deleteError ?? form.error
+  const title = role?.name ?? copy.newRoleTitle
+
   return (
     <DataEntryScreenLayout
       breadcrumbs={
@@ -65,16 +131,64 @@ export function RoleDetailPage() {
             {copy.title}
           </Link>
           <span aria-hidden="true"> · </span>
-          <span className="font-semibold text-neutral-800">{role?.name ?? copy.newRoleTitle}</span>
+          <span className="font-semibold text-neutral-800">{title}</span>
         </>
       }
       breadcrumbsLabel={copy.breadcrumbAria}
-      title={role?.name ?? copy.newRoleTitle}
+      title={title}
       subtitle={copy.subtitle}
+      controlZone={
+        <>
+          <AdminToolbar
+            onCancel={form.reset}
+            onSave={form.submit}
+            // The create form has nothing to delete yet — no button at all, not a dead one.
+            onDelete={role === null ? undefined : () => setDeleteOpen(true)}
+            cancelState={{ disabled: !form.isDirty || busy }}
+            saveState={{
+              disabled: !form.canSubmit || readOnly || deletePending,
+              pending: form.isSubmitting,
+              hint: readOnly ? copy.noPermissionHint : null,
+            }}
+            deleteState={{ disabled: busy || deleteHint !== null, pending: deletePending, hint: deleteHint }}
+          />
+          {form.isDirty && !readOnly && <span className="text-xs text-neutral-500">{copy.unsavedChanges}</span>}
+        </>
+      }
+      message={
+        (error || form.showLagHint) && (
+          <>
+            {error && (
+              <div
+                role="alert"
+                className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+              >
+                <AlertIcon size={16} className="mt-0.5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+            {form.showLagHint && !error && (
+              <p
+                role="status"
+                className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+              >
+                {copy.permissionLag}
+              </p>
+            )}
+          </>
+        )
+      }
     >
-      {/* Keyed by id so navigating between two roles rebuilds the form state instead of carrying
-          the previous role's edits over — the same reasoning as `UserDetailPage`/`TourEditPage`. */}
-      <RoleForm key={role?.id ?? 'new'} role={role} screens={screens} existingNames={existingNames} />
+      <RoleForm form={form} readOnly={readOnly} isSuperAdmin={isSuperAdmin} />
+
+      <RoleDeleteModal
+        role={deleteOpen ? role : null}
+        pending={deletePending}
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={() => void confirmDelete()}
+      />
+
+      <UnsavedChangesModal open={guard.isBlocking} onCancel={guard.cancel} onConfirm={guard.confirm} />
     </DataEntryScreenLayout>
   )
 }

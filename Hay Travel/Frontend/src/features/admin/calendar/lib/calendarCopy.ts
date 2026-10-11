@@ -49,6 +49,11 @@ const blockingsUnitRu = (count: number): string =>
 const blockingsUnitEn = (count: number): string =>
   `${count} ${pluralizeEn(count, ['closure', 'closures'])}`
 
+/* «N изменений» рядом с тулбаром — считает всё, что лежит в черновике страницы. */
+const changesUnitRu = (count: number): string =>
+  `${count} ${pluralizeRu(count, ['изменение', 'изменения', 'изменений'])}`
+const changesUnitEn = (count: number): string => `${count} ${pluralizeEn(count, ['change', 'changes'])}`
+
 /**
  * `12.08.2026` / `12/08/2026` — the format the panel uses everywhere a date is tabular.
  * `en-GB` (day-month-year) rather than `en-US`: the order the team already reads dates in.
@@ -94,6 +99,33 @@ export const calendarCopy = defineCopy(
     tabsLabel: 'Разделы календаря',
     tabCalendar: 'Календарь',
     tabRules: 'Блокировки',
+    /** Скринридер-текст синей точки на вкладке, где лежат несохранённые правки. */
+    tabUnsaved: 'есть несохранённые изменения',
+
+    /* ── Черновик страницы ──────────────────────────────────────────────────────────────────── */
+    changeCount: changesUnitRu,
+    /** Подсказка тултипа на выключенных кнопках тулбара (нет права). */
+    noPermissionHint: 'Недостаточно прав',
+    draftWillClose: 'будет закрыт',
+    draftWillOpen: 'будет открыт',
+    draftNew: 'новое',
+    draftWillDelete: 'удалится',
+    draftUndo: 'Вернуть',
+    draftDiscard: 'Убрать',
+    /** Часть группы в черновике — «новых: 3», «удалится: 2». */
+    draftNewCount: (count: number) => `новых: ${count}`,
+    draftDeleteCount: (count: number) => `удалится: ${count}`,
+    /** Клетка, на которую попадает новая/удаляемая блокировка из черновика — исход зависит от
+     * приоритетов правил, поэтому говорим только «затронут», а не «закрыт/открыт». */
+    draftCellTouched: 'затронут блокировками из черновика',
+    /** Подпись клетки: «будет закрыт: Севан, Гарни». */
+    draftCellWillClose: (what: string) => `будет закрыт: ${what}`,
+    draftCellWillOpen: (what: string) => `будет открыт: ${what}`,
+    draftCellWholeDay: 'весь день',
+    legendDraftClose: 'будет закрыт (черновик)',
+    legendDraftOpen: 'будет открыт (черновик)',
+    legendDraftRules: 'затронут блокировкой из черновика',
+    partialSaved: 'Часть изменений сохранена, остальные остались в черновике.',
 
     /* ── Dates ────────────────────────────────────────────────────────────────────────────── */
     /** Nominative — toolbar headings ("Август 2026"). */
@@ -124,7 +156,6 @@ export const calendarCopy = defineCopy(
     /* ── Toolbar ────────────────────────────────────────────────────────────────────────────── */
     prevMonth: 'Предыдущий месяц',
     nextMonth: 'Следующий месяц',
-    bulk: 'Массовые операции',
     monthLoading: 'Загружаем месяц',
 
     /* ── Grid ───────────────────────────────────────────────────────────────────────────────── */
@@ -162,23 +193,16 @@ export const calendarCopy = defineCopy(
     /* ── Day panel ──────────────────────────────────────────────────────────────────────────── */
     availabilityTitle: 'Доступность',
     availabilityHelpBody:
-      'Если ничего не выбрать — действие применится сразу к целому дню. Можно выбрать целый тип продукта (например, только трансферы) — тогда блокировка будет действовать и на продукты, которые вы заведёте позже. Можно выбрать конкретные продукты — тогда она затронет только их. Блокировка на отдельный продукт сильнее блокировки по типу: чтобы оставить один трансфер открытым при закрытых трансферах, сделайте на него исключение в «Массовых операциях» — действие «Открыть даты».',
+      'Галочки меняют черновик страницы — на сервер ничего не уходит, пока вы не нажмёте «Сохранить» вверху. Можно закрыть день целиком, целый тип продукта (например, только трансферы — тогда блокировка будет действовать и на продукты, которые вы заведёте позже) или конкретные продукты. Блокировка на отдельный продукт сильнее блокировки по типу: чтобы оставить один трансфер открытым при закрытых трансферах, добавьте на него исключение через «Добавить» — действие «Открыть даты».',
     ordersTitle: 'Заказы',
-    closeWholeDay: 'Закрыть весь день (все продукты)',
-    openWholeDay: 'Открыть весь день',
-    wholeDayClosedNote: 'День закрыт целиком.',
-    /* Тип продукта как область (решение 0.27) — своя пара секций рядом с продуктовыми. */
-    closedTypesTitle: 'Закрытые типы продуктов',
-    closeTypeTitle: 'Закрыть тип продукта',
-    closeTypeAction: 'Закрыть выбранные типы',
+    /* Тип продукта как область (решение 0.27) — своя секция рядом с продуктовой. */
+    wholeDayLabel: 'День закрыт целиком (все продукты)',
+    typesTitle: 'Типы продуктов',
+    productsTitle: 'Продукты',
     closedByWeeklyHint:
-      'День закрыт блокировкой по дню недели — кнопка «Открыть» не удалит эту блокировку, а создаст исключение на эту дату.',
-    closedToursTitle: 'Закрытые продукты этого дня',
-    openTour: 'Открыть',
-    closeTourTitle: 'Закрыть отдельный продукт',
+      'День закрыт блокировкой по дню недели — снятие галочки не удалит эту блокировку, а создаст исключение на эту дату.',
     closeTourSearch: 'Поиск по названию',
     closeTourNoResults: 'Продукты не найдены',
-    closeTourAction: 'Закрыть',
     dayAlreadyClosedHint:
       'День уже закрыт целиком — отдельная блокировка на продукт или тип ничего не изменит.',
     pastDayLockedHint: 'Прошедший день — задним числом закрывать или открывать нельзя.',
@@ -226,13 +250,9 @@ export const calendarCopy = defineCopy(
     bulkNoTours: 'Продукты не найдены.',
     bulkReasonTitle: 'Причина (необязательно)',
     bulkPreview: (count: number) => `Будет создано ${blockingsUnitRu(count)}`,
-    bulkApply: 'Применить',
-    bulkApplying: 'Применяем…',
-    bulkCancel: 'Отмена',
-    bulkConfirmTitle: 'Применить массовую операцию?',
-    bulkConfirmBody: (count: number) =>
-      `Будет создано ${blockingsUnitRu(count)}. Их можно будет удалить — целиком группой или по одной — на вкладке «Блокировки».`,
-    bulkConfirmAction: 'Применить',
+    /** Правила уходят в черновик страницы, а не на сервер — как «Добавить строку» в заказе. */
+    bulkApply: 'Добавить в черновик',
+    bulkClose: 'Закрыть',
 
     /* ── Bulk validation (returned by `compileBulkForm`) ────────────────────────────────────── */
     bulkErrorRangeRequired: 'Укажите обе границы диапазона.',
@@ -247,7 +267,7 @@ export const calendarCopy = defineCopy(
 
     /* ── Rules tab ──────────────────────────────────────────────────────────────────────────── */
     rulesEmpty: 'Блокировок пока нет.',
-    rulesEmptyHint: 'Создать их можно кнопкой «Массовые операции» на вкладке «Календарь».',
+    rulesEmptyHint: 'Создать их можно кнопкой «Добавить» вверху страницы.',
     rulesScope: 'Область',
     rulesType: 'Тип',
     rulesWhen: 'Когда',
@@ -277,13 +297,6 @@ export const calendarCopy = defineCopy(
     rulesGroupDatesCount: (count: number) => `${count} дат`,
     rulesGroupWeekdaysCount: (count: number) => `${count} дней недели`,
     rulesSelectAll: 'Выбрать все',
-    rulesSelectedCount: (count: number) => `Выбрано: ${blockingsUnitRu(count)}`,
-    rulesDeleteSelected: 'Удалить выбранное',
-    rulesDeleteTitle: (count: number) => `Удалить ${blockingsUnitRu(count)}?`,
-    rulesDeleteBody:
-      'Выбранные блокировки могут закрывать сразу много дней. После удаления эти дни снова станут доступны для брони.',
-    rulesDeleteConfirm: 'Удалить',
-    rulesDeleting: 'Удаляем…',
     dash: '—',
 
     /* ── Mutation failures (`calendarErrorMessage`) ─────────────────────────────────────────── */
@@ -313,6 +326,26 @@ export const calendarCopy = defineCopy(
     tabsLabel: 'Calendar sections',
     tabCalendar: 'Calendar',
     tabRules: 'Closures',
+    tabUnsaved: 'has unsaved changes',
+
+    changeCount: changesUnitEn,
+    noPermissionHint: 'Not enough permissions',
+    draftWillClose: 'will be closed',
+    draftWillOpen: 'will be opened',
+    draftNew: 'new',
+    draftWillDelete: 'will be deleted',
+    draftUndo: 'Restore',
+    draftDiscard: 'Remove',
+    draftNewCount: (count: number) => `new: ${count}`,
+    draftDeleteCount: (count: number) => `to delete: ${count}`,
+    draftCellTouched: 'affected by closures from the draft',
+    draftCellWillClose: (what: string) => `will be closed: ${what}`,
+    draftCellWillOpen: (what: string) => `will be opened: ${what}`,
+    draftCellWholeDay: 'the whole day',
+    legendDraftClose: 'will be closed (draft)',
+    legendDraftOpen: 'will be opened (draft)',
+    legendDraftRules: 'affected by a closure from the draft',
+    partialSaved: 'Some changes were saved, the rest stayed in the draft.',
 
     months: MONTHS_NOMINATIVE.en,
     monthsGenitive: MONTHS_GENITIVE.en,
@@ -336,7 +369,6 @@ export const calendarCopy = defineCopy(
 
     prevMonth: 'Previous month',
     nextMonth: 'Next month',
-    bulk: 'Bulk operations',
     monthLoading: 'Loading the month',
 
     gridLoadFailed: 'Could not load the month.',
@@ -365,22 +397,15 @@ export const calendarCopy = defineCopy(
 
     availabilityTitle: 'Availability',
     availabilityHelpBody:
-      'Pick nothing and the action applies to the whole day at once. Pick a whole product type (transfers only, say) and the closure also covers products you create later. Pick specific products and it affects only those. A closure on a single product beats one on its type: to keep one transfer open while transfers are closed, add an exception for it in “Bulk operations” — the “Open dates” action.',
+      'The checkboxes change the page draft — nothing is sent to the server until you press “Save” at the top. You can close the whole day, a whole product type (transfers only, say — the closure then also covers products you create later) or specific products. A closure on a single product beats one on its type: to keep one transfer open while transfers are closed, add an exception for it via “Add” — the “Open dates” action.',
     ordersTitle: 'Orders',
-    closeWholeDay: 'Close the whole day (all products)',
-    openWholeDay: 'Open the whole day',
-    wholeDayClosedNote: 'The whole day is closed.',
-    closedTypesTitle: 'Closed product types of this day',
-    closeTypeTitle: 'Close a product type',
-    closeTypeAction: 'Close the selected types',
+    wholeDayLabel: 'The whole day is closed (all products)',
+    typesTitle: 'Product types',
+    productsTitle: 'Products',
     closedByWeeklyHint:
-      'The day is closed by a weekday closure — “Open” does not delete that closure, it creates an exception for this date.',
-    closedToursTitle: 'Closed products of this day',
-    openTour: 'Open',
-    closeTourTitle: 'Close a single product',
+      'The day is closed by a weekday closure — unticking does not delete that closure, it creates an exception for this date.',
     closeTourSearch: 'Search by name',
     closeTourNoResults: 'No products found',
-    closeTourAction: 'Close',
     dayAlreadyClosedHint:
       'The whole day is already closed — a closure on a single product or type would change nothing.',
     pastDayLockedHint: 'A past day — it cannot be closed or opened retroactively.',
@@ -425,13 +450,8 @@ export const calendarCopy = defineCopy(
     bulkNoTours: 'No products found.',
     bulkReasonTitle: 'Reason (optional)',
     bulkPreview: (count: number) => `${blockingsUnitEn(count)} will be created`,
-    bulkApply: 'Apply',
-    bulkApplying: 'Applying…',
-    bulkCancel: 'Cancel',
-    bulkConfirmTitle: 'Apply the bulk operation?',
-    bulkConfirmBody: (count: number) =>
-      `${blockingsUnitEn(count)} will be created. You can delete them — the whole group at once or one by one — on the “Closures” tab.`,
-    bulkConfirmAction: 'Apply',
+    bulkApply: 'Add to draft',
+    bulkClose: 'Close',
 
     bulkErrorRangeRequired: 'Set both ends of the range.',
     bulkErrorRangeOrder: '“From” cannot be later than “To”.',
@@ -444,7 +464,7 @@ export const calendarCopy = defineCopy(
       `Too many closures: ${count} against a maximum of ${max}. Narrow the range or repeat by weekday instead.`,
 
     rulesEmpty: 'No closures yet.',
-    rulesEmptyHint: 'Create them with the “Bulk operations” button on the “Calendar” tab.',
+    rulesEmptyHint: 'Create them with the “Add” button at the top of the page.',
     rulesScope: 'Scope',
     rulesType: 'Kind',
     rulesWhen: 'When',
@@ -467,13 +487,6 @@ export const calendarCopy = defineCopy(
     rulesGroupDatesCount: (count: number) => `${count} dates`,
     rulesGroupWeekdaysCount: (count: number) => `${count} weekdays`,
     rulesSelectAll: 'Select all',
-    rulesSelectedCount: (count: number) => `Selected: ${blockingsUnitEn(count)}`,
-    rulesDeleteSelected: 'Delete selected',
-    rulesDeleteTitle: (count: number) => `Delete ${blockingsUnitEn(count)}?`,
-    rulesDeleteBody:
-      'The selected closures can cover many days at once. Once they are deleted, those days become bookable again.',
-    rulesDeleteConfirm: 'Delete',
-    rulesDeleting: 'Deleting…',
     dash: '—',
 
     errors: {

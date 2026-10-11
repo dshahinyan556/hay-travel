@@ -58,6 +58,32 @@ export function OrderHeader({ order, pending, onRejectReasonChange }: OrderHeade
         <OrderStatusBadge label={copy.statusLabels[order.status]} tone={statusBadgeTone[order.status]} />
       </div>
 
+      {/* Связь с клиентом. Стоит рядом с его именем, а не во вкладке ниже: это первое, что
+          нужно менеджеру, открывшему заказ, — и ровно та задача, ради которой контакты вообще
+          появились (клиент оформил заказ с российским номером, а в Армении купил местный).
+          Основной идёт первым — порядок задаёт сервер, здесь не сортируем.
+          У заказов, созданных до 2026-08-29, контактов нет: блока просто не будет, вместо него
+          остаётся почта аккаунта над ним. */}
+      {order.contacts.length > 0 && (
+        <div className="flex flex-wrap gap-x-5 gap-y-1.5 border-t border-neutral-200 pt-3">
+          {order.contacts.map((contact) => (
+            <div key={contact.id} className="text-sm">
+              <span className="font-semibold text-neutral-900">
+                {[contact.firstName, contact.lastName].filter(Boolean).join(' ')}
+              </span>
+              {contact.isPrimary && (
+                <span className="ml-1.5 rounded-full border border-neutral-300 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-neutral-600 uppercase">
+                  {copy.contactPrimary}
+                </span>
+              )}
+              <span className="ml-2 text-neutral-500">{copy.contactMethods[contact.type]}:</span>{' '}
+              {/* `select-all`: менеджер копирует номер целиком, а не выделяет его по символу. */}
+              <span className="tabular-nums select-all text-neutral-800">{contact.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {order.status === OrderStatus.Rejected && (
         <label className="text-xs text-neutral-500">
           {copy.rejectReasonLabel}

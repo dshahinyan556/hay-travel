@@ -27,6 +27,13 @@ namespace ATTours.Common.Infrastructure.EntityConfiguration
             builder.Property(x => x.CreatedByIp)
                 .HasMaxLength(64);
 
+            // Та же длина, что у остальных аудит-полей с User-Agent (UserToken,
+            // LoginHistory, ImpersonationEvent): BuildRequestContext режет строку ровно
+            // по 512. Не обязательное и без индекса — поле только для показа в списке
+            // устройств (spec 017 §1).
+            builder.Property(x => x.CreatedByUserAgent)
+                .HasMaxLength(512);
+
             builder.Property(x => x.ReplacedByTokenHash)
                 .HasMaxLength(128);
 

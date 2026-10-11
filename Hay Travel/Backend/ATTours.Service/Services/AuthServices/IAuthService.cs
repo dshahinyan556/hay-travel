@@ -25,12 +25,42 @@ namespace ATTours.BusinessServices.Services.AuthServices
         // сам такую проверку не делает, чтобы не тащить IWebHostEnvironment в Service-слой.
         Task<LoginOutcome> DevLoginAsync(string usernameOrEmail, RequestContextModel requestContext, CancellationToken cancellationToken = default);
 
-        // Ротация с reuse-detection: предъявленный уже отозванный токен отзывает все
-        // сессии пользователя.
+        // Ротация с reuse-detection и окном прощения гонки (ADR 033): предъявленный уже
+        // отозванный токен гасит ВСЕ сессии пользователя только если это настоящий reuse.
+        // Ротационная гонка внутри окна прощается догоняющей ротацией, а явно погашенный
+        // токен (logout/отзыв сессии/смена пароля) просто отклоняется, без гашения семьи.
         Task<RefreshOutcome> RefreshAsync(string? refreshToken, RequestContextModel requestContext, CancellationToken cancellationToken = default);
 
         // Идемпотентен: отсутствующий/уже отозванный токен — не ошибка.
         Task LogoutAsync(string? refreshToken, CancellationToken cancellationToken = default);
+
+        // Управление сессиями/устройствами (spec 017 §4). И чтение, и отзыв живут в
+        // AuthService, а не в отдельном Info-сервисе: запись по RefreshToken — его домен
+        // (ADR 005/028), и здесь же уже есть хеширование токена и geo-lookup.
+        //
+        // currentRefreshToken — plaintext из cookie вызывающего: по его хешу помечается
+        // IsCurrent и сохраняется текущая сессия при отзыве остальных. null допустим.
+        Task<List<SessionInfoModel>> GetMySessionsAsync(int userId, string? currentRefreshToken, CancellationToken cancellationToken = default);
+
+        // Отзыв одной своей сессии. Чужая (или несуществующая) строка — 404
+        // RelationalEntityNotFound; уже отозванная — no-op.
+        Task RevokeMySessionAsync(int userId, int sessionId, CancellationToken cancellationToken = default);
+
+        // «Выйти на других устройствах»: текущая сессия переживает отзыв (как при
+        // ChangePasswordAsync).
+        Task RevokeMyOtherSessionsAsync(int userId, string? currentRefreshToken, CancellationToken cancellationToken = default);
+
+        // Админские аналоги тех же операций (гейтятся правами экрана «Пользователи»).
+        // IsCurrent в списке всегда false: админ смотрит чужие сессии.
+        Task<List<SessionInfoModel>> GetUserSessionsAsync(int targetUserId, CancellationToken cancellationToken = default);
+
+        Task RevokeUserSessionAsync(int targetUserId, int sessionId, CancellationToken cancellationToken = default);
+
+        // Гасит ВСЕ сессии цели, включая её текущую: админ не залогинен как цель, сохранять
+        // здесь нечего. Кроме одной: actingUserId — сам вызывающий админ, чья СОБСТВЕННАЯ
+        // impersonation-сессия над этой же целью щадится (David, 2026-08-29), иначе кнопка
+        // сносит и рабочий сеанс того, кто её нажал.
+        Task RevokeAllUserSessionsAsync(int targetUserId, int actingUserId, CancellationToken cancellationToken = default);
 
         // «Войти как пользователь» (spec 014 §3, ADR 028/030). Односторонняя операция:
         // ВСЕ сессии вызывающего отзываются, его уже выданные access-токены мгновенно

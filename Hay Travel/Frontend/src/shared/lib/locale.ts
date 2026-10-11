@@ -8,6 +8,8 @@
  * Armenian (`hy`) was intentionally dropped — the product ships Russian + English only.
  */
 
+import type { LanguageCode } from '@/shared/types/language'
+
 export interface LocaleDescriptor {
   /** BCP 47 tag. Also the value for `<html lang>` and the backend `languageCode` mapping. */
   readonly code: string
@@ -54,8 +56,34 @@ export function getStoredLocale(): Locale {
 }
 
 export function setStoredLocale(locale: Locale): void {
-  window.localStorage.setItem(STORAGE_KEY, locale)
+  try {
+    window.localStorage.setItem(STORAGE_KEY, locale)
+  } catch {
+    // Приватный режим / заблокированное хранилище. Язык всё равно применится к этой вкладке через
+    // состояние `LocaleProvider`; пережить перезагрузку он не сможет, но бросать отсюда нельзя —
+    // на этой записи стоит и переключатель в шапке, и применение языка из аккаунта.
+  }
 }
 
-/** `LanguageCode` on the backend (`ATTours.Common/Enums/LanguageCode.cs`) — `Russian = 1`. */
-export const LANGUAGE_CODE_BY_LOCALE: Record<Locale, number> = { ru: 1, en: 2 }
+/** «Язык сменили в коде, а не через `setLocale`» — слушает `LocaleProvider`. Нужно, потому что
+ *  `storage` в своей же вкладке не срабатывает (тот же довод, что у `THEME_SYNC_EVENT`). */
+export const LOCALE_CHANGE_EVENT = 'hay-travel-locale-sync'
+
+/** Разбудить `LocaleProvider` после прямой записи `setStoredLocale`. Только из обработчика
+ *  события/эффекта — синхронно дёргает чужой `setState`. */
+export function notifyLocaleChanged(): void {
+  window.dispatchEvent(new Event(LOCALE_CHANGE_EVENT))
+}
+
+/**
+ * `LanguageCode` on the backend (`ATTours.Common/Enums/LanguageCode.cs`) — `Russian = 1`.
+ *
+ * Типизировано именно `LanguageCode`, а не `number`: этой картой язык интерфейса превращается в
+ * `preferredLanguage` аккаунта (он же язык писем), и `number` заставил бы каждое такое место
+ * дописывать `as LanguageCode`. Импорт только типовой — `locale.ts` остаётся leaf-модулем без
+ * рантайм-зависимостей.
+ */
+export const LANGUAGE_CODE_BY_LOCALE: Record<Locale, LanguageCode> = { ru: 1, en: 2 }
+
+/** Обратное преобразование — `preferredLanguage` с сервера в язык интерфейса. */
+export const LOCALE_BY_LANGUAGE_CODE: Record<LanguageCode, Locale> = { 1: 'ru', 2: 'en' }

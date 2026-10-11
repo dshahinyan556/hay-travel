@@ -25,11 +25,12 @@ export function MobileTabBar() {
 
   const tabItems = [
     { to: '/', label: t('nav.home'), end: true, Icon: HomeIcon },
-    { to: '/trips', label: t('nav.trips'), end: false, Icon: CompassIcon },
     // Пятая вкладка (батч 2026-08-29). Подписи с этого момента обрезаются многоточием: на 375px
     // пятая часть ряда — ~66px, и «Путешествия» целиком в неё не помещается. Подпись под иконкой
     // это подсказка, а не единственный носитель смысла, и обрезать её честнее, чем ломать ряд.
     { to: '/transfers', label: t('nav.transfersShort'), end: false, Icon: CarIcon },
+    // «Путешествия» — средняя, третья из пяти вкладок (решение Давида 2026-08-31).
+    { to: '/trips', label: t('nav.trips'), end: false, Icon: CompassIcon },
     { to: '/regions', label: t('nav.regionsShort'), end: false, Icon: MapIcon },
     // One tab, two destinations: the account screen is its own route now (`/account`), and `/auth`
     // bounces a signed-in visitor there anyway — pointing the tab straight at the right URL avoids

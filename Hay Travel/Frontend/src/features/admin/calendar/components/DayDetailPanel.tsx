@@ -11,6 +11,7 @@ import type {
   DayOfWeekCode,
 } from '@/shared/types/booking'
 import { calendarCopy, type CalendarCopy } from '../lib/calendarCopy'
+import type { DayDraftMarks } from '../lib/calendarDraft'
 import { tourTitleResolver, type CalendarOrderLine } from '../lib/calendarModel'
 import { DayClosureControls } from './DayClosureControls'
 import { DayOrdersList } from './DayOrdersList'
@@ -18,12 +19,15 @@ import { DayOrdersList } from './DayOrdersList'
 export interface DayDetailPanelProps {
   open: boolean
   dateISO: string | null
-  /** The server's row for this day; `null` for a tail day of a neighbouring month. */
+  /** The server's row for this day (SAVED state); `null` for a tail day of a neighbouring month. */
   day: CalendarDayModel | null
   /** Already narrowed to this day by the page. */
   orders: CalendarOrderLine[]
   tours: TourInfoModel[]
   rules: ClosureRuleInfoModel[]
+  /** Unsaved toggles of this day (`null` — none) and the day's draft reason. */
+  draftMarks: DayDraftMarks | null
+  reason: string
   pending: boolean
   /** Бэкдейтинг запрещён везде (B12, 2026-08-13) — прошедший день остаётся открываемым
    * (история заказов читается), но его availability-контролы заблокированы. */
@@ -33,9 +37,10 @@ export interface DayDetailPanelProps {
   /** Why the closure block is read-only when `canManage` is false. */
   readOnlyHint: string
   onClose: () => void
-  /** Цели закрытия/открытия — весь день, отдельные продукты, целые типы продукта (решение 0.27).
-   * См. `DayClosureControlsProps.onToggle`. */
-  onToggleClosure: (targets: ClosureRuleScope[], close: boolean, reason: string | null) => void
+  /** Writes one scope's wanted state (весь день / тип продукта / продукт, решение 0.27) into the
+   * page draft — see `DayClosureControlsProps.onToggle`. Nothing is sent from the panel. */
+  onToggleClosure: (scope: ClosureRuleScope, close: boolean, savedClosed: boolean) => void
+  onReasonChange: (reason: string) => void
 }
 
 /** "12 августа 2026, среда" / "12 August 2026, Wednesday" — genitive month, which is what a date
@@ -63,12 +68,15 @@ export function DayDetailPanel({
   orders,
   tours,
   rules,
+  draftMarks,
+  reason,
   pending,
   isPast,
   canManage,
   readOnlyHint,
   onClose,
   onToggleClosure,
+  onReasonChange,
 }: DayDetailPanelProps) {
   const copy = useCopy(calendarCopy)
   const { locale } = useLocale()
@@ -89,11 +97,14 @@ export function DayDetailPanel({
             day={day}
             tours={tours}
             rules={rules}
+            draftMarks={draftMarks}
+            reason={reason}
             pending={pending}
             isPast={isPast}
             canManage={canManage}
             readOnlyHint={readOnlyHint}
             onToggle={onToggleClosure}
+            onReasonChange={onReasonChange}
           />
 
           <section className="border-t border-neutral-200 pt-5">

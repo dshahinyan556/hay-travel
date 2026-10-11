@@ -3,6 +3,11 @@ export interface TabItem {
   label: string
   /** Small counter/status badge shown after the label, e.g. a day count. */
   badge?: string | number
+  /**
+   * Small blue dot after the label — "this tab holds unsaved edits" (catalog screen's page-wide
+   * draft, 2026-10-11). Pass the screen-reader wording as the value; omit/`undefined` = no dot.
+   */
+  unsavedDot?: string
 }
 
 export interface TabsProps {
@@ -44,6 +49,12 @@ export function Tabs({ tabs, activeId, onChange, label }: TabsProps) {
               }`}
             >
               {tab.label}
+              {tab.unsavedDot !== undefined && (
+                <>
+                  <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-700" />
+                  <span className="sr-only">({tab.unsavedDot})</span>
+                </>
+              )}
               {tab.badge !== undefined && (
                 <span
                   className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${

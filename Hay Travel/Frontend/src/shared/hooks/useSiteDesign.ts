@@ -5,6 +5,7 @@ import {
   cachePalette,
   DEFAULT_PALETTE,
   isPaletteId,
+  PALETTE_CHOICE_EVENT,
   readCachedPalette,
 } from '@/shared/lib/palette'
 import {
@@ -52,9 +53,13 @@ export function useSiteDesign(): NavStyle {
       if (defaultMode === 'dark' || defaultMode === 'light') cacheDefaultMode(defaultMode)
 
       // 2. Палитра. Неизвестный с сервера id деградирует в дефолт, а не оставляет сайт без цветов.
+      //    Кэшируется АДМИНСКИЙ пресет, а применяется результат `readCachedPalette()` — то есть
+      //    личный выбор залогиненного, если он есть. Применить здесь `palette` напрямую значило бы
+      //    перекрашивать человека в дефолт сайта на каждой загрузке, сразу после ответа
+      //    `GetPublic`, поверх уже отрисованной pre-paint скриптом личной палитры.
       const palette = isPaletteId(activePalette) ? activePalette : DEFAULT_PALETTE
-      applyPalette(palette)
       cachePalette(palette)
+      applyPalette(readCachedPalette())
 
       // 3. Перерисовать `meta[theme-color]` под новую палитру: сама ТЕМА могла не измениться,
       //    поэтому полагаться только на событие ниже нельзя — `useTheme` бы не перерендерился.
@@ -76,6 +81,24 @@ export function useSiteDesign(): NavStyle {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  /**
+   * Личный выбор палитры (раздел «Предпочтения» либо предпочтения, приехавшие с сервера при входе).
+   *
+   * Владелец `data-preset` на публичном сайте остаётся ровно один — этот хук; `persistPaletteChoice`
+   * только пишет в хранилище и стучится сюда событием, потому что `storage` в своей же вкладке не
+   * срабатывает. `applyTheme` вызывается следом по той же причине, что и в эффекте выше:
+   * `meta[theme-color]` берётся на пересечении «пресет × тема», сама тема при этом не менялась, и
+   * `useTheme` бы не перерисовался.
+   */
+  useEffect(() => {
+    function applyChoice() {
+      applyPalette(readCachedPalette())
+      applyTheme(readStoredTheme())
+    }
+    window.addEventListener(PALETTE_CHOICE_EVENT, applyChoice)
+    return () => window.removeEventListener(PALETTE_CHOICE_EVENT, applyChoice)
   }, [])
 
   return navStyle

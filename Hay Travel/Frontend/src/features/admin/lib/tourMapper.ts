@@ -338,6 +338,9 @@ export function createModelToForm(dto: TourCreateModel): TourFormState {
     transferPrices: readTransferPrices(wire.transferPrices),
     mainImageUrl: dto.mainImageUrl ?? '',
     isActive: dto.isActive,
+    // Скелет `InitTour` этого поля не несёт: новый продукт в «Избранное» не входит, пока админ
+    // не отметит галочку — тогда `useTourForm` вызывает `SetFeatured` сразу после создания.
+    isFeatured: false,
     requiresPrepayment: dto.requiresPrepayment,
     discountPercent: dto.discountPercent == null ? '' : String(dto.discountPercent),
     discountStartDate: dto.discountStartDate ?? '',
@@ -399,6 +402,7 @@ export function infoToForm(dto: TourInfoModel): TourFormState {
     transferPrices: readTransferPrices(dto.transferPrices),
     mainImageUrl: dto.mainImageUrl ?? '',
     isActive: dto.isActive,
+    isFeatured: dto.isFeatured,
     requiresPrepayment: dto.requiresPrepayment,
     discountPercent: dto.discountPercent == null ? '' : String(dto.discountPercent),
     discountStartDate: dto.discountStartDate ?? '',

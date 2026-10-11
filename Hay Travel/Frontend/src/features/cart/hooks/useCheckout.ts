@@ -4,6 +4,8 @@ import { getAuthState } from '@/shared/auth'
 import { ApiError } from '@/shared/lib/http'
 import { clearCart, type CartItem } from '@/shared/cart'
 import { toWireTime } from '@/shared/booking'
+import { orderContactErrorKey, rememberOrderContacts } from '@/shared/contacts'
+import { ContactLimits, type OrderContactInput } from '@/shared/types/contact'
 import { useLocale } from '@/shared/i18n/LocaleProvider'
 import {
   ORDER_HAS_INVALID_LINES,
@@ -27,6 +29,15 @@ import {
  * while the first is in flight) and an empty cart after success (there is nothing left to send).
  * Nothing is removed from the cart before the server confirms, and nothing is removed on failure —
  * because nothing was created.
+ *
+ * ── Контакты для связи (батч 2026-08-29) ─────────────────────────────────────────────────────
+ * Заказ больше не создаётся без контакта: `submit` принимает набор вторым аргументом и уезжает
+ * вместе с позициями в том же теле. Пустой набор до сети не доходит вовсе — кнопка гасится
+ * страницей, а этот отказ здесь дублируется как защита от гонки, а не как сообщение человеку.
+ *
+ * Успешно отправленный набор запоминается на устройстве (`rememberOrderContacts`): в следующий
+ * раз блок контактов предложит его первым. Именно здесь, а не в блоке выбора — «последний
+ * ИСПОЛЬЗОВАННЫЙ» знает только тот, кто видел ответ сервера.
  */
 
 export interface CheckoutResult {
@@ -47,14 +58,22 @@ export interface UseCheckout {
   lineErrors: ReadonlyMap<string, CheckoutLineFailureReason>
   /** Ошибка, не привязанная к строке: сеть, 5xx, 2028/2032, нераспознанное тело. Готовая копия. */
   formError: string | null
+  /**
+   * Отказ ПО КОНТАКТАМ (2060-2063), уже переведённый. Отдельно от `formError`, потому что
+   * показывается в другом месте — внутри блока контактов, рядом с тем, что надо исправить, а не
+   * под кнопкой отправки.
+   */
+  contactError: string | null
   result: CheckoutResult | null
   /** Анонимный посетитель нажал «Отправить» — показать блок входа. */
   authNotice: boolean
   /** Даты, отклонённые сервером в этой сессии, по `String(tourId)`. */
   serverClosed: ServerClosedDates
-  submit: (items: readonly CartItem[]) => Promise<void>
+  submit: (items: readonly CartItem[], contacts: readonly OrderContactInput[]) => Promise<void>
   /** Снять ошибку конкретной строки (вызывается из onChangeDate/onChangeGuests). */
   clearLineError: (itemId: string) => void
+  /** Снять отказ по контактам — вызывается при любой правке набора контактов. */
+  clearContactError: () => void
 }
 
 const NO_LINE_ERRORS: ReadonlyMap<string, CheckoutLineFailureReason> = new Map()
@@ -65,6 +84,7 @@ export function useCheckout(): UseCheckout {
   const [running, setRunning] = useState(false)
   const [lineErrors, setLineErrors] = useState(NO_LINE_ERRORS)
   const [formError, setFormError] = useState<string | null>(null)
+  const [contactError, setContactError] = useState<string | null>(null)
   const [result, setResult] = useState<CheckoutResult | null>(null)
   const [authNotice, setAuthNotice] = useState(false)
   const [serverClosed, setServerClosed] = useState<ServerClosedDates>({})
@@ -82,10 +102,15 @@ export function useCheckout(): UseCheckout {
     })
   }, [])
 
+  const clearContactError = useCallback(() => setContactError(null), [])
+
   const submit = useCallback(
-    async (items: readonly CartItem[]) => {
+    async (items: readonly CartItem[], contacts: readonly OrderContactInput[]) => {
       if (inFlight.current) return
       if (items.length === 0) return
+      /* Защита от гонки, а не сообщение человеку: без контакта кнопка отправки погашена
+         страницей, и объяснение он уже видит рядом с самим блоком контактов. */
+      if (contacts.length === 0) return
 
       const { status } = getAuthState()
       // `'idle' | 'loading'` means the session is still resolving — that is "unknown", not
@@ -105,11 +130,16 @@ export function useCheckout(): UseCheckout {
       inFlight.current = true
       setRunning(true)
       setFormError(null)
+      setContactError(null)
       setAuthNotice(false)
       setLineErrors(NO_LINE_ERRORS)
 
       try {
         const order = await createOrder({
+          /* Контакты уезжают ровно тем набором, который собрал блок выбора: порядок и флаг
+             «основной» сервер проверяет, а не досчитывает (2062) — кому звонить первым решает
+             клиент, а не порядок полей формы. */
+          contacts: [...contacts],
           lines: submitted.map((item) => ({
             tourId: item.tourId,
             tourDate: item.tourDate,
@@ -142,6 +172,9 @@ export function useCheckout(): UseCheckout {
         })
         // The order exists in full — the cart has nothing left to hold.
         clearCart()
+        /* Набор становится «последним использованным» только здесь: до ответа сервера по нему
+           никто ни с кем не связывался, и запоминать брошенный на полпути ввод не за чем. */
+        rememberOrderContacts(contacts)
         setResult({ orderNumber: order.number, lineCount: submitted.length })
       } catch (err) {
         if (isSessionFailure(err)) {
@@ -149,6 +182,15 @@ export function useCheckout(): UseCheckout {
           // the sign-in block, comes back, and the cart is still here.
           setAuthNotice(true)
           setFormError(checkoutFormMessage(err, t))
+          return
+        }
+
+        /* Отказ по КОНТАКТАМ разбирается раньше пер-строчного: коды 2060-2063 приходят плоско,
+           массива `lines` в таком теле нет вовсе, и разбирать его значило бы получить пустой
+           список и написать «не удалось отправить» вместо «основной контакт должен быть один». */
+        const contactKey = orderContactErrorKey(err)
+        if (contactKey !== null) {
+          setContactError(t(contactKey, { max: ContactLimits.maxOrderContacts }))
           return
         }
 
@@ -226,5 +268,16 @@ export function useCheckout(): UseCheckout {
     [t],
   )
 
-  return { running, lineErrors, formError, result, authNotice, serverClosed, submit, clearLineError }
+  return {
+    running,
+    lineErrors,
+    formError,
+    contactError,
+    result,
+    authNotice,
+    serverClosed,
+    submit,
+    clearLineError,
+    clearContactError,
+  }
 }

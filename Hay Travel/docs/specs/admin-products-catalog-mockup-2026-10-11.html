@@ -1,0 +1,462 @@
+<title>Продукты и Справочники — макет</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400..800&display=swap">
+<style>
+/* Layout: mockup sheet — each screen sits in a browser-like frame on a neutral desk; desktop frame + phone frame side by side, notes under each. Tokens mirror the Hay Travel admin (neutral scale, black primary). */
+:root{
+  --desk:#eceae6; --page:#fafafa; --card:#ffffff; --line:#e5e5e5; --line-strong:#d4d4d4;
+  --ink:#0a0a0a; --ink-2:#404040; --ink-3:#737373; --ink-4:#a3a3a3;
+  --primary:#0a0a0a; --on-primary:#ffffff; --hover:#f5f5f5; --chip:#f0f0f0;
+  --ok:#166534; --ok-bg:#ecfdf3; --warn:#92400e; --warn-bg:#fff7e6; --err:#b42318; --err-bg:#fef3f2;
+  --dirty:#1d4ed8; --dirty-bg:#eef4ff; --note:#fffbe6; --note-line:#efd98a;
+  --font:'Manrope',ui-sans-serif,system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --desk:#111110; --page:#171717; --card:#1f1f1f; --line:#2e2e2e; --line-strong:#3d3d3d;
+  --ink:#f5f5f5; --ink-2:#d4d4d4; --ink-3:#a3a3a3; --ink-4:#6b6b6b;
+  --primary:#f5f5f5; --on-primary:#0a0a0a; --hover:#262626; --chip:#2a2a2a;
+  --ok:#86efac; --ok-bg:#12261a; --warn:#fcd34d; --warn-bg:#2a2112; --err:#fca5a5; --err-bg:#2c1515;
+  --dirty:#93b4ff; --dirty-bg:#18233b; --note:#26230f; --note-line:#5c5220; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --desk:#111110; --page:#171717; --card:#1f1f1f; --line:#2e2e2e; --line-strong:#3d3d3d;
+  --ink:#f5f5f5; --ink-2:#d4d4d4; --ink-3:#a3a3a3; --ink-4:#6b6b6b;
+  --primary:#f5f5f5; --on-primary:#0a0a0a; --hover:#262626; --chip:#2a2a2a;
+  --ok:#86efac; --ok-bg:#12261a; --warn:#fcd34d; --warn-bg:#2a2112; --err:#fca5a5; --err-bg:#2c1515;
+  --dirty:#93b4ff; --dirty-bg:#18233b; --note:#26230f; --note-line:#5c5220; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--desk);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45;padding-inline:16px;padding-block:28px 60px}
+.sheet{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:40px}
+svg.i{width:17px;height:17px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+svg.i.sm{width:14px;height:14px}
+h1.doc{font-size:26px;font-weight:800;letter-spacing:-.02em;margin:0;text-wrap:balance}
+.lead{color:var(--ink-3);max-width:70ch;margin:6px 0 0}
+.sec-h{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 14px}
+.sec-h h2{font-size:20px;font-weight:800;margin:0;letter-spacing:-.01em}
+.sec-h span{color:var(--ink-3);font-size:13px}
+.row2{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;align-items:start}
+@media (max-width:1100px){.row2{grid-template-columns:minmax(0,1fr)}}
+/* frames */
+.frame{background:var(--page);border:1px solid var(--line-strong);border-radius:14px;overflow:hidden;min-width:0}
+.frame-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--card);font-size:12px;color:var(--ink-3)}
+.dots{display:flex;gap:5px}.dots i{width:9px;height:9px;border-radius:50%;background:var(--line-strong);display:block}
+.frame-body{padding:22px 24px 26px;display:flex;flex-direction:column;gap:16px;overflow-x:auto}
+.phone{border-radius:28px;border:1px solid var(--line-strong);background:var(--page);overflow:hidden;max-width:340px;width:100%;justify-self:center}
+.phone .frame-body{padding:14px 14px 20px;gap:12px}
+.phone-top{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid var(--line);background:var(--card);font-weight:700;font-size:13px}
+/* page parts (admin conventions) */
+.crumbs{font-size:12px;color:var(--ink-3)}
+.ptitle{font-size:20px;font-weight:800;letter-spacing:-.015em;margin:0}
+.psub{font-size:14px;color:var(--ink-3);margin:2px 0 0}
+.cz{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.cz.sticky{position:relative;padding:8px 0;border-bottom:1px dashed var(--line-strong)}
+.pin{position:absolute;right:0;top:-10px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-4);background:var(--page);padding:0 4px}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:36px;padding:0 16px;border-radius:999px;font:600 13px var(--font);white-space:nowrap;cursor:pointer;border:1px solid var(--line-strong);background:var(--card);color:var(--ink)}
+.btn:hover{background:var(--hover)}
+.btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.btn.primary{background:var(--primary);color:var(--on-primary);border-color:transparent}
+.btn.ghost{background:transparent;color:var(--ink-3);border-color:var(--line)}
+.btn.destr{color:var(--ink-2);border-color:var(--ink-4)}
+.btn[disabled]{opacity:.42;pointer-events:none}
+.btn.icon{width:44px;padding:0}
+.btn.sm{height:30px;padding:0 11px;font-size:12px}
+.divider{width:1px;height:22px;background:var(--line);margin:0 4px}
+.dirty-pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--dirty);background:var(--dirty-bg);border-radius:999px;padding:4px 10px}
+.dirty-pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip{min-height:36px;display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 14px;font:500 13px var(--font);background:var(--card);color:var(--ink-2);border:1px solid var(--line);cursor:pointer}
+.chip b{font-variant-numeric:tabular-nums;font-weight:600}
+.chip[aria-pressed="true"]{background:var(--primary);color:var(--on-primary);border-color:transparent}
+.filters{display:grid;grid-template-columns:minmax(0,1fr) 170px 170px;gap:10px}
+@media (max-width:700px){.filters{grid-template-columns:1fr}}
+.field{display:flex;align-items:center;gap:8px;height:40px;border:1px solid var(--line-strong);border-radius:10px;background:var(--card);padding:0 12px;color:var(--ink-3);font-size:13px;min-width:0}
+.field .grow{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.count{font-size:12px;color:var(--ink-3)}
+/* product rows — OrderRow pattern */
+.plist{display:flex;flex-direction:column;gap:10px;margin:0;padding:0;list-style:none}
+.prow{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:14px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-decoration:none;color:inherit}
+.prow:hover{background:var(--hover)}
+.thumb{width:64px;height:48px;border-radius:8px;background:linear-gradient(135deg,#c9c3b8,#8d8679);position:relative;overflow:hidden}
+.thumb.b{background:linear-gradient(135deg,#a9b7c4,#5c6f80)}.thumb.c{background:linear-gradient(135deg,#c7b59a,#7d6343)}.thumb.d{background:linear-gradient(135deg,#b8c2b0,#647358)}
+.thumb.none{background:var(--chip);display:grid;place-items:center;color:var(--ink-4)}
+.ptitle-r{font-weight:700;color:var(--ink);overflow-wrap:anywhere}
+.pmeta{font-size:12px;color:var(--ink-3);margin-top:2px;display:flex;flex-wrap:wrap;gap:4px 10px}
+.pright{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.badges{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;white-space:nowrap}
+.badge.pub{background:var(--ok-bg);color:var(--ok)}
+.badge.hid{background:var(--chip);color:var(--ink-3)}
+.badge.fav{background:var(--warn-bg);color:var(--warn)}
+.badge.type{background:transparent;border:1px solid var(--line-strong);color:var(--ink-2)}
+.price{font-weight:700;font-variant-numeric:tabular-nums;font-size:14px}
+.handle{color:var(--ink-4);cursor:grab;display:grid;place-items:center;width:28px;height:36px;border-radius:6px}
+.handle:hover{background:var(--hover);color:var(--ink-2)}
+.cb{width:18px;height:18px;border:1.5px solid var(--ink-4);border-radius:5px;display:inline-grid;place-items:center;background:var(--card);flex:none}
+.cb.on{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+.cb.on::after{content:"";width:9px;height:5px;border:2px solid currentColor;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)}
+.frow{display:grid;grid-template-columns:28px 64px minmax(0,1fr) auto auto;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 12px}
+.frow.moved{border-color:var(--dirty);box-shadow:inset 3px 0 0 var(--dirty)}
+.frow.gone{opacity:.55}.frow.gone .ptitle-r{text-decoration:line-through}
+.arow{display:grid;grid-template-columns:22px 64px minmax(0,1fr) auto;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.arow.sel{border-color:var(--ink-3)}
+.slot{font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+/* catalog grid */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{padding:10px 14px;font:600 14px var(--font);color:var(--ink-3);border:0;border-bottom:2px solid transparent;background:none;cursor:pointer;white-space:nowrap;margin-bottom:-1px;display:inline-flex;align-items:center;gap:6px}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+.tab .n{font-size:10px;font-weight:700;border-radius:999px;padding:1px 6px;background:var(--chip);color:var(--ink-3)}
+.tab .d{width:6px;height:6px;border-radius:50%;background:var(--dirty)}
+.gridwrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+table.g{border-collapse:collapse;width:100%;min-width:860px;font-size:13px}
+.g th{background:var(--page);text-align:left;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+.g td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+.g tr:last-child td{border-bottom:0}
+.g tr.sel td{background:var(--hover)}
+.g tr.chg td:first-child{box-shadow:inset 3px 0 0 var(--dirty)}
+.g tr.new td:first-child{box-shadow:inset 3px 0 0 var(--ok)}
+.g tr.del td{background:var(--err-bg)}
+.g tr.del .cell{text-decoration:line-through;color:var(--ink-4)}
+.cell{height:32px;display:flex;align-items:center;border:1px solid transparent;border-radius:7px;padding:0 8px;color:var(--ink);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g td:hover .cell:not(.ro){border-color:var(--line-strong)}
+.cell.edit{border-color:var(--ink);background:var(--card);box-shadow:0 0 0 3px color-mix(in srgb,var(--ink) 12%,transparent)}
+.cell.changed{background:var(--dirty-bg)}
+.cell.bad{border-color:var(--err);background:var(--err-bg)}
+.cell.num{justify-content:flex-end;font-variant-numeric:tabular-nums}
+.cell.ro{color:var(--ink-3)}
+.cell .ph{color:var(--ink-4)}
+.caret{margin-left:auto;color:var(--ink-4)}
+.errtxt{font-size:11px;color:var(--err);padding:2px 8px 0}
+.tag{font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;white-space:nowrap}
+.tag.new{background:var(--ok-bg);color:var(--ok)}.tag.chg{background:var(--dirty-bg);color:var(--dirty)}.tag.del{background:var(--err-bg);color:var(--err)}
+.undo{font:600 12px var(--font);color:var(--ink-2);background:none;border:0;text-decoration:underline;cursor:pointer;padding:0}
+.detail td{background:var(--page)!important;padding:14px 16px 16px}
+.detail-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.detail-grid label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:600;color:var(--ink-2)}
+.inp{height:36px;border:1px solid var(--line-strong);border-radius:9px;background:var(--card);display:flex;align-items:center;padding:0 10px;font-weight:500;color:var(--ink);font-size:13px}
+.photos{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.photos .thumb{width:72px;height:54px}
+.addph{width:72px;height:54px;border:1.5px dashed var(--line-strong);border-radius:8px;display:grid;place-items:center;color:var(--ink-3)}
+.banner{display:flex;gap:10px;align-items:flex-start;border-radius:10px;padding:11px 14px;font-size:13px}
+.banner.err{background:var(--err-bg);color:var(--err);border:1px solid color-mix(in srgb,var(--err) 30%,transparent)}
+.footnote{font-size:12px;color:var(--ink-3)}
+/* mobile catalog cards */
+.mcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.mcard.chg{box-shadow:inset 3px 0 0 var(--dirty)}
+.mcard .top{display:flex;align-items:center;gap:10px}
+.mcard .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mcard label{font-size:11px;font-weight:600;color:var(--ink-3);display:flex;flex-direction:column;gap:4px}
+.mtool{display:flex;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px}
+.mtool .btn.primary{flex:1}
+/* notes */
+.notes{background:var(--note);border:1px solid var(--note-line);border-radius:12px;padding:14px 18px;font-size:13px;color:var(--ink-2)}
+.notes h3{margin:0 0 8px;font-size:13px;font-weight:800;color:var(--ink);letter-spacing:.02em}
+.notes ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
+.notes b{color:var(--ink)}
+.compare{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:800px){.compare{grid-template-columns:1fr}}
+.cmp{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.cmp h4{margin:0 0 8px;font-size:12px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em}
+.cmp .was{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
+.oldbtn{font-family:system-ui;font-size:15px;color:var(--ink-3);border:1px solid var(--line);border-radius:8px;padding:2px 8px}
+.arrow{color:var(--ink-4)}
+.views{display:flex;gap:8px;flex-wrap:wrap}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:no-preference){.btn,.chip,.prow{transition:background-color .15s}}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6M9 6V4h6v2"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2.5 2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></symbol>
+  <symbol id="i-restore" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+</svg>
+
+<div class="sheet">
+  <header>
+    <h1 class="doc">Продукты и Справочники: новый макет</h1>
+    <p class="lead">Оба экрана приведены к шаблонам админки. Продукты устроены как список заказов: строка открывает карточку продукта, кнопок в строках больше нет. Справочники стали редактируемой таблицей: правки копятся в черновике и сохраняются кнопкой «Сохранить» в тулбаре сверху. Миниатюры серые, это заглушки на месте реальных фото.</p>
+  </header>
+
+  <!-- ============ PRODUCTS ============ -->
+  <section>
+    <div class="sec-h"><h2>1. Продукты</h2><span>/admin/products · шаблон D, как «Заказы»</span></div>
+    <div class="views" role="group" aria-label="Вид экрана Продукты" style="margin-bottom:12px">
+      <button class="chip" aria-pressed="true" data-pv="active">Вид: Активные</button>
+      <button class="chip" aria-pressed="false" data-pv="featured">Вид: Избранные</button>
+      <button class="chip" aria-pressed="false" data-pv="archived">Вид: Архив</button>
+    </div>
+
+    <div class="row2">
+      <div class="frame">
+        <div class="frame-bar"><span class="dots"><i></i><i></i><i></i></span>haytravel · /admin/products</div>
+        <div class="frame-body">
+          <div>
+            <p class="ptitle">Продукты</p>
+            <p class="psub">Туры, экскурсии и трансферы. Нажмите на строку, чтобы открыть карточку продукта.</p>
+          </div>
+
+          <div class="cz">
+            <button class="chip" aria-pressed="true" data-pv="active">Активные <b>24</b></button>
+            <button class="chip" aria-pressed="false" data-pv="featured">Избранные <b>6</b></button>
+            <button class="chip" aria-pressed="false" data-pv="archived">Архив <b>3</b></button>
+            <button class="btn primary" style="margin-left:auto"><svg class="i"><use href="#i-plus"/></svg>Создать продукт</button>
+          </div>
+
+          <!-- ACTIVE -->
+          <div data-view="active" style="display:flex;flex-direction:column;gap:12px">
+            <div class="filters">
+              <div class="field"><svg class="i"><use href="#i-search"/></svg><span class="grow">Поиск по названию…</span></div>
+              <div class="field"><span class="grow" style="color:var(--ink)">Все типы</span><svg class="i sm"><use href="#i-chev"/></svg></div>
+              <div class="field"><span class="grow" style="color:var(--ink)">Любая публикация</span><svg class="i sm"><use href="#i-chev"/></svg></div>
+            </div>
+            <p class="count">24 продукта</p>
+            <ul class="plist">
+              <li><a class="prow" href="#p"><span class="thumb"></span>
+                <span style="min-width:0"><span class="ptitle-r">Гарни и Гегард</span>
+                  <span class="pmeta"><span>Экскурсия · 1 день</span><span>старт 09:00, 13:00</span><span>инд. + групповой</span></span></span>
+                <span class="pright"><span class="badges"><span class="badge fav"><svg class="i sm"><use href="#i-star"/></svg>Избранное</span><span class="badge pub">Опубликован</span></span><span class="price">от 38 000 ֏</span></span></a></li>
+              <li><a class="prow" href="#p"><span class="thumb b"></span>
+                <span style="min-width:0"><span class="ptitle-r">Севан и Дилижан</span>
+                  <span class="pmeta"><span>Экскурсия · 1 день</span><span>старт 08:30</span><span>индивидуальный</span></span></span>
+                <span class="pright"><span class="badges"><span class="badge pub">Опубликован</span></span><span class="price">от 42 000 ֏</span></span></a></li>
+              <li><a class="prow" href="#p"><span class="thumb c"></span>
+                <span style="min-width:0"><span class="ptitle-r">Большое кольцо Армении</span>
+                  <span class="pmeta"><span>Тур · 5 дней</span><span>старт 09:00</span><span>групповой</span></span></span>
+                <span class="pright"><span class="badges"><span class="badge fav"><svg class="i sm"><use href="#i-star"/></svg>Избранное</span><span class="badge hid">Скрыт</span></span><span class="price">25 000 ֏ / чел.</span></span></a></li>
+              <li><a class="prow" href="#p"><span class="thumb none"><svg class="i"><use href="#i-image"/></svg></span>
+                <span style="min-width:0"><span class="ptitle-r">Аэропорт Звартноц → Ереван</span>
+                  <span class="pmeta"><span>Трансфер</span><span>3 класса авто</span></span></span>
+                <span class="pright"><span class="badges"><span class="badge pub">Опубликован</span></span><span class="price">от 8 000 ֏</span></span></a></li>
+            </ul>
+          </div>
+
+          <!-- FEATURED -->
+          <div data-view="featured" hidden style="display:flex;flex-direction:column;gap:12px">
+            <div class="cz sticky"><span class="pin">закреплён при скролле</span>
+              <div class="toolbar">
+                <button class="btn ghost"><svg class="i"><use href="#i-close"/></svg>Отмена</button>
+                <button class="btn primary"><svg class="i"><use href="#i-save"/></svg>Сохранить</button>
+              </div>
+              <span class="dirty-pill">2 изменения</span>
+            </div>
+            <p class="count">Порядок, в котором продукты стоят в блоке «Избранное» на главной · <b style="color:var(--ink)">6 из 9</b></p>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div class="frow moved"><span class="handle" title="Перетащить"><svg class="i"><use href="#i-grip"/></svg></span><span class="thumb c"></span>
+                <span style="min-width:0"><span class="ptitle-r">Большое кольцо Армении</span><span class="pmeta"><span>Тур · 5 дней</span></span></span>
+                <span class="tag chg">перемещён</span><button class="btn icon sm ghost" title="Убрать из избранного" aria-label="Убрать из избранного"><svg class="i sm"><use href="#i-close"/></svg></button></div>
+              <div class="frow"><span class="handle"><svg class="i"><use href="#i-grip"/></svg></span><span class="thumb"></span>
+                <span style="min-width:0"><span class="ptitle-r">Гарни и Гегард</span><span class="pmeta"><span>Экскурсия · 1 день</span></span></span>
+                <span></span><button class="btn icon sm ghost" aria-label="Убрать из избранного"><svg class="i sm"><use href="#i-close"/></svg></button></div>
+              <div class="frow gone"><span class="handle"><svg class="i"><use href="#i-grip"/></svg></span><span class="thumb d"></span>
+                <span style="min-width:0"><span class="ptitle-r">Хор Вирап и Арени</span><span class="pmeta"><span>Экскурсия · 1 день</span></span></span>
+                <span class="tag del">уберётся</span><button class="undo">Вернуть</button></div>
+              <div class="frow"><span class="handle"><svg class="i"><use href="#i-grip"/></svg></span><span class="thumb b"></span>
+                <span style="min-width:0"><span class="ptitle-r">Татев: канатная дорога</span><span class="pmeta"><span>Экскурсия · 1 день</span></span></span>
+                <span></span><button class="btn icon sm ghost" aria-label="Убрать из избранного"><svg class="i sm"><use href="#i-close"/></svg></button></div>
+            </div>
+          </div>
+
+          <!-- ARCHIVE -->
+          <div data-view="archived" hidden style="display:flex;flex-direction:column;gap:12px">
+            <div class="cz">
+              <div class="toolbar">
+                <button class="btn"><svg class="i"><use href="#i-restore"/></svg>Восстановить</button>
+                <span class="divider"></span>
+                <button class="btn destr"><svg class="i"><use href="#i-trash"/></svg>Удалить навсегда</button>
+              </div>
+              <span class="count">Выбрано: 1</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div class="arow sel"><span class="cb on"></span><span class="thumb d"></span>
+                <span style="min-width:0"><span class="ptitle-r">Ереван ночью</span><span class="pmeta"><span>Экскурсия · 1 день</span><span>в архиве с 12.09.2026</span></span></span><span class="badge type">Экскурсия</span></div>
+              <div class="arow"><span class="cb"></span><span class="thumb"></span>
+                <span style="min-width:0"><span class="ptitle-r">Винный тур в Арени</span><span class="pmeta"><span>Тур · 2 дня</span><span>в архиве с 03.08.2026</span></span></span><span class="badge type">Тур</span></div>
+              <div class="arow"><span class="cb"></span><span class="thumb none"><svg class="i"><use href="#i-image"/></svg></span>
+                <span style="min-width:0"><span class="ptitle-r">Гюмри → Ереван</span><span class="pmeta"><span>Трансфер</span><span>в архиве с 21.07.2026</span></span></span><span class="badge type">Трансфер</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="phone">
+        <div class="phone-top"><svg class="i"><use href="#i-menu"/></svg><span>Hay Travel · Админка</span><span style="width:17px"></span></div>
+        <div class="frame-body">
+          <div><p class="ptitle" style="font-size:18px">Продукты</p></div>
+          <div class="cz" style="gap:6px;flex-wrap:nowrap;overflow-x:auto">
+            <span class="chip" aria-pressed="true" style="flex:none">Активные <b>24</b></span>
+            <span class="chip" aria-pressed="false" style="flex:none">Избранные <b>6</b></span>
+            <span class="chip" aria-pressed="false" style="flex:none">Архив <b>3</b></span>
+          </div>
+          <button class="btn primary" style="width:100%;height:44px"><svg class="i"><use href="#i-plus"/></svg>Создать продукт</button>
+          <div class="field"><svg class="i"><use href="#i-search"/></svg><span class="grow">Поиск…</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="field"><span class="grow" style="color:var(--ink)">Все типы</span><svg class="i sm"><use href="#i-chev"/></svg></div>
+            <div class="field"><span class="grow" style="color:var(--ink)">Публикация</span><svg class="i sm"><use href="#i-chev"/></svg></div>
+          </div>
+          <div class="mcard" style="gap:10px">
+            <div class="top"><span class="thumb"></span><div style="min-width:0"><div class="ptitle-r">Гарни и Гегард</div><div class="pmeta">Экскурсия · 1 день</div></div></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span class="badges" style="justify-content:flex-start"><span class="badge fav"><svg class="i sm"><use href="#i-star"/></svg>Избранное</span><span class="badge pub">Опубликован</span></span><span class="price">от 38 000 ֏</span></div>
+          </div>
+          <div class="mcard" style="gap:10px">
+            <div class="top"><span class="thumb c"></span><div style="min-width:0"><div class="ptitle-r">Большое кольцо Армении</div><div class="pmeta">Тур · 5 дней</div></div></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span class="badges" style="justify-content:flex-start"><span class="badge hid">Скрыт</span></span><span class="price">25 000 ֏ / чел.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes" style="margin-top:16px">
+      <h3>Что меняется на «Продуктах»</h3>
+      <ul>
+        <li>Строка устроена как строка заказа: фото, название, тип, длительность, время старта, формат, бейджи статуса, цена. <b>Кнопок в строке нет</b>, клик открывает карточку продукта.</li>
+        <li>Вид переключается фильтр-чипами с количеством, как статусы на «Заказах»: <b>Активные / Избранные / Архив</b>. Справа одна кнопка «Создать продукт», в чёрно-белом стиле тулбара.</li>
+        <li>Тумблер «Опубликован» уходит из строки. Публикация уже есть галочкой в карточке продукта и сохраняется общей кнопкой Save. «В архив» уже есть в тулбаре карточки.</li>
+        <li>Сердечко ♥/♡ заменено. В карточку продукта добавляется галочка «Показывать в избранном» (черновик + Save), в списке остаётся только бейдж со звездой.</li>
+        <li>Вид «Избранные»: порядок меняется перетаскиванием вместо стрелок ▲▼. Перестановки и удаления копятся в черновике, сверху закреплённый тулбар Отмена/Сохранить.</li>
+        <li>Вид «Архив»: строки выбираются галочками. «Восстановить» и «Удалить навсегда» действуют на выбранные строки. Удаление спрашивает подтверждение. Это разовые действия, как «Одобрить» в заказе, черновика здесь нет.</li>
+        <li>Эмодзи 🔍 ♥ ▲▼ заменены SVG-иконками из общего набора админки (поиск, звезда, ручка перетаскивания, крестик, восстановление, корзина).</li>
+      </ul>
+    </div>
+    <div class="compare" style="margin-top:12px">
+      <div class="cmp"><h4>Избранное</h4><div class="was"><span class="oldbtn">♡</span><span class="oldbtn">♥</span><span class="arrow">→</span><span class="badge fav"><svg class="i sm"><use href="#i-star"/></svg>Избранное</span></div></div>
+      <div class="cmp"><h4>Порядок</h4><div class="was"><span class="oldbtn">▲</span><span class="oldbtn">▼</span><span class="arrow">→</span><span class="handle" style="border:1px solid var(--line)"><svg class="i"><use href="#i-grip"/></svg></span></div></div>
+      <div class="cmp"><h4>Поиск</h4><div class="was"><span class="oldbtn">🔍</span><span class="arrow">→</span><span class="field" style="height:32px"><svg class="i sm"><use href="#i-search"/></svg>Поиск…</span></div></div>
+    </div>
+  </section>
+
+  <!-- ============ CATALOG ============ -->
+  <section>
+    <div class="sec-h"><h2>2. Справочники</h2><span>/admin/catalog · редактируемая таблица, черновик + тулбар сверху</span></div>
+    <div class="views" role="group" aria-label="Вкладка справочника" style="margin-bottom:12px">
+      <button class="chip" aria-pressed="true" data-cv="vc">Вкладка: Классы авто</button>
+      <button class="chip" aria-pressed="false" data-cv="pl">Вкладка: Точки маршрута</button>
+    </div>
+
+    <div class="row2">
+      <div class="frame">
+        <div class="frame-bar"><span class="dots"><i></i><i></i><i></i></span>haytravel · /admin/catalog</div>
+        <div class="frame-body">
+          <div>
+            <p class="ptitle">Справочники</p>
+            <p class="psub">Общие точки маршрута, доп. расходы, заметки и теги для туров, а также классы авто для трансферов.</p>
+          </div>
+
+          <div class="cz sticky"><span class="pin">закреплён при скролле</span>
+            <div class="toolbar">
+              <button class="btn ghost"><svg class="i"><use href="#i-close"/></svg>Отмена</button>
+              <button class="btn primary"><svg class="i"><use href="#i-save"/></svg>Сохранить</button>
+              <button class="btn"><svg class="i"><use href="#i-plus"/></svg>Добавить</button>
+              <span class="divider"></span>
+              <button class="btn destr"><svg class="i"><use href="#i-trash"/></svg>Удалить</button>
+            </div>
+            <span class="dirty-pill">3 изменения</span>
+            <div class="field" style="margin-left:auto;width:240px;height:36px"><svg class="i"><use href="#i-search"/></svg><span class="grow">Поиск по названию…</span></div>
+          </div>
+
+          <div class="banner err"><svg class="i"><use href="#i-alert"/></svg><span>Не сохранено: у новой строки не заполнено «Название EN». Остальные правки ждут в черновике.</span></div>
+
+          <div class="tabs" role="tablist">
+            <button class="tab" role="tab" aria-selected="false" data-cv="pl">Точки маршрута <span class="n">42</span></button>
+            <button class="tab" role="tab" aria-selected="false">Доп. расходы <span class="n">9</span></button>
+            <button class="tab" role="tab" aria-selected="false">Заметки <span class="n">17</span></button>
+            <button class="tab" role="tab" aria-selected="false">Регионы <span class="n">11</span></button>
+            <button class="tab" role="tab" aria-selected="false">Теги <span class="n">6</span></button>
+            <button class="tab" role="tab" aria-selected="true" data-cv="vc">Классы авто <span class="d" title="Есть несохранённые правки"></span><span class="n">5</span></button>
+          </div>
+
+          <!-- VEHICLE CLASSES -->
+          <div data-cview="vc" class="gridwrap">
+            <table class="g">
+              <thead><tr><th style="width:36px"><span class="cb"></span></th><th style="width:34px"></th><th>Название RU</th><th>Название EN</th><th style="width:130px;text-align:right">Мест</th><th style="width:130px;text-align:right">Багаж, ед.</th><th style="width:90px">Активен</th><th style="width:110px"></th></tr></thead>
+              <tbody>
+                <tr><td><span class="cb"></span></td><td><span class="handle"><svg class="i"><use href="#i-grip"/></svg></span></td><td><div class="cell">Седан</div></td><td><div class="cell">Sedan</div></td><td><div class="cell num">3</div></td><td><div class="cell num">9</div></td><td><span class="cb on"></span></td><td></td></tr>
+                <tr class="chg sel"><td><span class="cb"></span></td><td><span class="handle"><svg class="i"><use href="#i-grip"/></svg></span></td><td><div class="cell">Минивэн</div></td><td><div class="cell">Minivan</div></td><td><div class="cell num edit changed">7</div></td><td><div class="cell num">20</div></td><td><span class="cb on"></span></td><td><span class="tag chg">изменено</span></td></tr>
+                <tr><td><span class="cb"></span></td><td><span class="handle"><svg class="i"><use href="#i-grip"/></svg></span></td><td><div class="cell">Микроавтобус</div></td><td><div class="cell">Minibus</div></td><td><div class="cell num">17</div></td><td><div class="cell num">45</div></td><td><span class="cb on"></span></td><td></td></tr>
+                <tr class="del"><td><span class="cb on"></span></td><td><span class="handle"><svg class="i"><use href="#i-grip"/></svg></span></td><td><div class="cell">Кабриолет</div></td><td><div class="cell">Convertible</div></td><td><div class="cell num">3</div></td><td><div class="cell num">3</div></td><td><span class="cb"></span></td><td><span style="display:flex;gap:8px;align-items:center"><span class="tag del">удалится</span><button class="undo">Вернуть</button></span></td></tr>
+                <tr class="new"><td><span class="cb"></span></td><td><span class="handle"><svg class="i"><use href="#i-grip"/></svg></span></td><td><div class="cell">Бизнес-седан</div></td><td><div class="cell bad"><span class="ph">Обязательно</span></div><div class="errtxt">Обязательное поле.</div></td><td><div class="cell num">3</div></td><td><div class="cell num">6</div></td><td><span class="cb on"></span></td><td><span class="tag new">новая</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- PLACES -->
+          <div data-cview="pl" hidden class="gridwrap">
+            <table class="g">
+              <thead><tr><th style="width:36px"><span class="cb"></span></th><th style="width:34px"></th><th>Название RU</th><th>Название EN</th><th>Слаг</th><th style="width:170px">Регион</th><th style="width:70px">Фото</th><th style="width:40px"></th></tr></thead>
+              <tbody>
+                <tr><td><span class="cb"></span></td><td><span class="handle"><svg class="i"><use href="#i-grip"/></svg></span></td><td><div class="cell">Храм Гарни</div></td><td><div class="cell">Garni Temple</div></td><td><div class="cell ro">garni-temple</div></td><td><div class="cell">Котайк<svg class="i sm caret"><use href="#i-chev"/></svg></div></td><td><span class="slot">4</span></td><td><svg class="i sm" style="color:var(--ink-4)"><use href="#i-chev-r"/></svg></td></tr>
+                <tr class="chg sel"><td><span class="cb"></span></td><td><span class="handle"><svg class="i"><use href="#i-grip"/></svg></span></td><td><div class="cell">Монастырь Гегард</div></td><td><div class="cell changed">Geghard Monastery</div></td><td><div class="cell ro">geghard</div></td><td><div class="cell">Котайк<svg class="i sm caret"><use href="#i-chev"/></svg></div></td><td><span class="slot">3</span></td><td><svg class="i sm"><use href="#i-chev"/></svg></td></tr>
+                <tr class="detail"><td colspan="8">
+                  <div class="detail-grid">
+                    <label>Широта<span class="inp">40.1401</span></label>
+                    <label>Долгота<span class="inp">44.8180</span></label>
+                    <label style="grid-column:span 2">Обложка — URL<span class="inp" style="color:var(--ink-3)">/uploads/places/geghard-cover.jpg</span></label>
+                  </div>
+                  <div class="photos"><span class="thumb"></span><span class="thumb c"></span><span class="thumb b"></span><span class="addph"><svg class="i"><use href="#i-plus"/></svg></span></div>
+                </td></tr>
+                <tr><td><span class="cb"></span></td><td><span class="handle"><svg class="i"><use href="#i-grip"/></svg></span></td><td><div class="cell">Озеро Севан</div></td><td><div class="cell">Lake Sevan</div></td><td><div class="cell ro">sevan</div></td><td><div class="cell">Гегаркуник<svg class="i sm caret"><use href="#i-chev"/></svg></div></td><td><span class="slot">6</span></td><td><svg class="i sm" style="color:var(--ink-4)"><use href="#i-chev-r"/></svg></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="footnote">Перетащите строку за ручку слева, чтобы изменить порядок. Пока идёт поиск, перетаскивание выключено.</p>
+        </div>
+      </div>
+
+      <div class="phone">
+        <div class="phone-top"><svg class="i"><use href="#i-menu"/></svg><span>Hay Travel · Админка</span><span style="width:17px"></span></div>
+        <div class="frame-body">
+          <div><p class="ptitle" style="font-size:18px">Справочники</p></div>
+          <div class="mtool">
+            <button class="btn icon ghost" aria-label="Отмена"><svg class="i"><use href="#i-close"/></svg></button>
+            <button class="btn primary"><svg class="i"><use href="#i-save"/></svg>Сохранить</button>
+            <button class="btn icon" aria-label="Добавить"><svg class="i"><use href="#i-plus"/></svg></button>
+            <button class="btn icon destr" aria-label="Удалить"><svg class="i"><use href="#i-trash"/></svg></button>
+          </div>
+          <span class="dirty-pill" style="align-self:flex-start">3 изменения</span>
+          <div class="tabs"><span class="tab">Точки</span><span class="tab">Расходы</span><span class="tab" aria-selected="true">Классы авто</span></div>
+          <div class="mcard"><div class="top"><span class="cb"></span><span class="handle"><svg class="i"><use href="#i-grip"/></svg></span><b>Седан</b><span style="margin-left:auto" class="cb on"></span></div>
+            <div class="two"><label>Название EN<span class="inp">Sedan</span></label><label>Мест / багаж<span class="inp">3 · 9</span></label></div></div>
+          <div class="mcard chg"><div class="top"><span class="cb"></span><span class="handle"><svg class="i"><use href="#i-grip"/></svg></span><b>Минивэн</b><span class="tag chg" style="margin-left:auto">изменено</span></div>
+            <div class="two"><label>Мест<span class="inp" style="border-color:var(--ink)">7</span></label><label>Багаж, ед.<span class="inp">20</span></label></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes" style="margin-top:16px">
+      <h3>Что меняется в «Справочниках»</h3>
+      <ul>
+        <li>Боковая панель с кнопкой Save внизу <b>убирается</b>. Каждая вкладка становится таблицей: поле правится прямо в ячейке по клику.</li>
+        <li>Сверху один закреплённый тулбар, как в заказе: <b>Отмена / Сохранить / Добавить / Удалить</b>. «Добавить» вставляет пустую строку с меткой «новая». «Удалить» помечает выбранные строки «удалится», убрать пометку можно кнопкой «Вернуть». На сервер всё уходит только по «Сохранить».</li>
+        <li>Счётчик «N изменений» и точка на вкладке показывают несохранённые правки. При уходе со страницы с правками откроется окно «Есть несохранённые изменения».</li>
+        <li>Длинные поля не помещаются в ячейку: у точки маршрута это координаты, обложка и фото. Они открываются строкой-деталью под выбранной строкой (стрелка справа). Регионы: название не редактируется, тизер RU/EN правится в ячейке.</li>
+        <li>Ошибки валидации подсвечиваются в самой ячейке, общий текст ошибки стоит под тулбаром. Если не прошла хоть одна строка, остальные правки остаются в черновике и не теряются.</li>
+        <li><b>Правило черновика (исправление бага):</b> изменение засчитывается, только если значение отличается от сохранённого. Клик по полю, выбор того же значения, двойное переключение галочки, ввод и стирание текста дают «0 изменений», и Save неактивен. Так же чиню на всех экранах с черновиком.</li>
+      </ul>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  function setProducts(v){
+    document.querySelectorAll('[data-pv]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.pv===v))});
+    document.querySelectorAll('[data-view]').forEach(function(s){s.hidden=s.dataset.view!==v});
+  }
+  function setCatalog(v){
+    document.querySelectorAll('.views [data-cv]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.cv===v))});
+    document.querySelectorAll('.tab[data-cv]').forEach(function(b){b.setAttribute('aria-selected',String(b.dataset.cv===v))});
+    document.querySelectorAll('[data-cview]').forEach(function(s){s.hidden=s.dataset.cview!==v});
+  }
+  document.querySelectorAll('[data-pv]').forEach(function(b){b.addEventListener('click',function(){setProducts(b.dataset.pv)})});
+  document.querySelectorAll('[data-cv]').forEach(function(b){b.addEventListener('click',function(){setCatalog(b.dataset.cv)})});
+  document.querySelectorAll('a[href="#p"]').forEach(function(a){a.addEventListener('click',function(e){e.preventDefault()})});
+})();
+</script>

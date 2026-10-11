@@ -80,12 +80,26 @@ namespace ATTours.BusinessServices.Services.InfoServices
 
         public async Task<List<NotificationChannel>> GetChannelsAsync(EmailActionKey? key = null)
         {
-            var query = Context.Set<NotificationChannel>().AsNoTracking();
+            IQueryable<NotificationChannel> query = Context.Set<NotificationChannel>().AsNoTracking().Include(x => x.Template);
 
             if (key is not null)
                 query = query.Where(channel => channel.EventKey == key);
 
             return await query.ToListAsync(cancellationToken);
+        }
+
+        // Шаблон, назначенный событию+платформе на отправке (обе платформы теперь одинаково —
+        // раньше у Telegram шаблона не было вовсе). Нет строки канала или TemplateId не
+        // назначен -> null, вызывающий код (OrderNotificationService) уже умеет это трактовать
+        // как «тихо не шлём».
+        public async Task<NotificationTemplate> GetTemplateAsync(EmailActionKey key, NotificationPlatform platform)
+        {
+            return await Context.Set<NotificationChannel>()
+                                .AsNoTracking()
+                                .Include(x => x.Template)
+                                .Where(x => x.EventKey == key && x.Platform == platform)
+                                .Select(x => x.Template)
+                                .FirstOrDefaultAsync(cancellationToken);
         }
 
         // Нет строки канала — считаем выключенным: письмо, которого админ не включал,
@@ -113,10 +127,6 @@ namespace ATTours.BusinessServices.Services.InfoServices
                 ? await GetAllRecipientsAsync()
                 : await GetRecipientsByEventAsync(key.Value);
 
-            // Тот же контекст, свой using не нужен: владелец соединения — этот сервис.
-            var templateInfo = new EmailTemplateInfo(Context, cancellationToken);
-            var templates = await templateInfo.GetAllAsync();
-
             var views = new List<NotificationEventView>();
 
             foreach (var actionKey in keys)
@@ -132,10 +142,9 @@ namespace ATTours.BusinessServices.Services.InfoServices
                         Platform = platform,
                         IsEnabled = channel?.IsEnabled ?? false,
                         IsImplemented = ImplementedPlatforms.Contains(platform),
-                        // Шаблон есть только у Email: у Telegram письма нет вовсе.
-                        Template = platform == NotificationPlatform.Email
-                            ? templates.FirstOrDefault(template => template.ActionKey == actionKey)
-                            : null,
+                        TemplateId = channel?.TemplateId,
+                        TemplateName = channel?.Template?.Name,
+                        TemplateSubject = channel?.Template?.Subject,
                         Recipients = [.. recipients.Where(recipient => recipient.EventKey == actionKey
                                                                        && recipient.Platform == platform)]
                     });

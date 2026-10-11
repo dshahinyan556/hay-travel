@@ -8,6 +8,7 @@ import {
   type TelegramLinkCodeModel,
   type TelegramLinkStatusModel,
 } from '../api/telegram'
+import { useTelegramLinkWatch } from '../hooks/useTelegramLinkWatch'
 import { accountErrorMessageKey } from '../lib/accountErrors'
 
 interface TelegramLinkFormProps {
@@ -29,9 +30,13 @@ const CAN_COPY = typeof navigator !== 'undefined' && Boolean(navigator.clipboard
  * Linking the account to `@HayTravelNotificationsBot` (ADR 031 / spec 015).
  *
  * The handshake finishes in Telegram, not here: we mint a one-time code, hand over the deep link,
- * and the bot's webhook binds the chat server-side. So the status on this screen only refreshes on
- * the next visit — deliberately no polling and no socket for a once-per-account action (the copy
- * says so out loud rather than leaving the visitor watching a row that never changes).
+ * and the bot's webhook binds the chat server-side.
+ *
+ * Раньше из этого следовало, что статус оживает только на следующем заходе, и это было записано
+ * здесь как осознанное ограничение. Оно им не оказалось: подключаешь бота, возвращаешься на сайт,
+ * а страница показывает «не подключено», пока не нажмёшь F5 (замечание Давида, 2026-08-29).
+ * Теперь досмотром занимается `useTelegramLinkWatch` — проверка при возврате во вкладку плюс
+ * короткий опрос, пока код выдан и вкладка на экране.
  *
  * Issuing a code is a POST that INVALIDATES the previous one, so it is bound to an explicit button
  * press and never to an effect — mounting this section must not quietly break a code the visitor
@@ -46,6 +51,34 @@ export function TelegramLinkForm({ status, onChanged }: TelegramLinkFormProps) {
   const [copied, setCopied] = useState(false)
   const [disconnected, setDisconnected] = useState(false)
 
+  /** Человек ушёл к боту (нажал кнопку или свернул вкладку с кодом на руках). Экран обязан
+   *  встретить его ответом, а не той же формой, которую он оставил. */
+  const [waiting, setWaiting] = useState(false)
+  /** Вернулся, а привязки нет. Отдельно от `waiting`: молчание в ответ на ожидание читается
+   *  как «сайт не заметил, что я подключился». */
+  const [notYet, setNotYet] = useState(false)
+  /** Привязалось прямо сейчас, у нас на глазах — а не «было привязано, когда открыл страницу». */
+  const [justLinked, setJustLinked] = useState(false)
+
+  /* Досмотр привязки. `enabled` — пока не привязано (в том числе когда статус вообще не
+     загрузился: там тоже показывается сценарий подключения). `polling` — только после выдачи
+     кода: до неё привязываться нечему, и опрос был бы пустым. */
+  useTelegramLinkWatch({
+    enabled: !status?.isLinked,
+    polling: link !== null,
+    onLinked: (linked) => {
+      setJustLinked(true)
+      setWaiting(false)
+      setNotYet(false)
+      onChanged(linked)
+    },
+    onLeft: () => {
+      setWaiting(true)
+      setNotYet(false)
+    },
+    onStillNotLinked: () => setNotYet(true),
+  })
+
   async function handleIssueCode() {
     if (pending) return
 
@@ -54,6 +87,9 @@ export function TelegramLinkForm({ status, onChanged }: TelegramLinkFormProps) {
     try {
       const issued = await issueTelegramLinkCode()
       setLink(issued)
+      /* Новый код — новая попытка: и ожидание, и «пока не видим» относились к прошлому коду. */
+      setWaiting(false)
+      setNotYet(false)
       // The previous code is dead now — a stale "Скопировано" next to a different string would be
       // a lie about what is on the clipboard.
       setCopied(false)
@@ -98,6 +134,9 @@ export function TelegramLinkForm({ status, onChanged }: TelegramLinkFormProps) {
     return (
       <div className="flex flex-col gap-3.5">
         {error && <AuthError message={error} />}
+        {/* Только когда привязка случилась в этой сессии: на обычном заходе «Telegram подключён»
+            поверх строки «Подключён» было бы объявлением очевидного. */}
+        {justLinked && <AuthNotice message={t('account.telegramJustLinked')} />}
 
         <p className="flex items-center gap-2 text-sm text-ink">
           <TelegramIcon size={17} className="shrink-0 text-gold-ink" />
@@ -125,8 +164,6 @@ export function TelegramLinkForm({ status, onChanged }: TelegramLinkFormProps) {
     <div className="flex flex-col gap-3.5">
       {error && <AuthError message={error} />}
       {disconnected && <AuthNotice message={t('account.telegramDisconnected')} />}
-
-      <p className="text-sm text-ink-dim">{t('account.telegramIntro')}</p>
 
       {link && (
         <div className="flex flex-col gap-3 rounded-xl bg-panel px-3.5 py-3 ring-1 ring-edge-strong">
@@ -164,12 +201,38 @@ export function TelegramLinkForm({ status, onChanged }: TelegramLinkFormProps) {
             href={link.deepLinkUrl}
             target="_blank"
             rel="noopener noreferrer"
+            /* Переход в мессенджер — это и есть начало ожидания. Ставим состояние по клику, не
+               дожидаясь `visibilitychange`: на десктопе Telegram открывается отдельным окном, и
+               вкладка сайта может вообще не скрыться. */
+            onClick={() => {
+              setWaiting(true)
+              setNotYet(false)
+            }}
             className="inline-flex w-full items-center justify-center gap-2.5 rounded-full bg-gold-fill px-5 py-3 text-sm font-medium text-gold-on transition-colors hover:bg-gold-fill-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-panel focus-visible:outline-none"
           >
             <TelegramIcon size={17} />
             {t('account.telegramOpenInApp')}
           </a>
-          <p className="text-sm text-ink-dim">{t('account.telegramCodeHint')}</p>
+
+          {waiting ? (
+            <div className="flex flex-col gap-2 rounded-xl bg-panel px-3.5 py-3 ring-1 ring-edge-strong">
+              <p className="flex items-center gap-2.5 text-sm text-ink">
+                {/* `aria-hidden`: точка — это индикатор, а не содержание. Само сообщение уже
+                    прочитано скринридером как текст. */}
+                <span
+                  aria-hidden
+                  className="size-2 shrink-0 animate-pulse rounded-full bg-gold-ink motion-reduce:animate-none"
+                />
+                {t('account.telegramWaiting')}
+              </p>
+              <p className="text-sm text-ink-dim">
+                {notYet ? t('account.telegramNotYet') : t('account.telegramWaitingHint')}
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-ink-dim">{t('account.telegramCodeHint')}</p>
+          )}
+
           <p className="text-sm text-ink-dim">{t('account.telegramRefreshHint')}</p>
         </>
       )}

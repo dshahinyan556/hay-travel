@@ -41,5 +41,9 @@ namespace ATTours.Common.Entities
         public string Currency { get; set; }
 
         public HashSet<OrderLine> Lines { get; set; } = [];
+
+        // Контакты для связи по этому заказу — 1..3, ровно один основной (батч 2026-08-29).
+        // Снимок значений на момент создания, справочник профиля им не владеет (ADR 032).
+        public HashSet<OrderContact> Contacts { get; set; } = [];
     }
 }

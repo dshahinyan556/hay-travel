@@ -20,9 +20,22 @@ export type RichTextTool =
   | 'blockquote'
   | 'link'
   | 'color'
+  /** Заливка текста (background-color), отдельно от `color` (Notification Templates,
+   * 2026-08-31) — своя палитра-пикер, своя CSS-марка. */
+  | 'highlight'
   | 'fontSize'
+  /** Web-safe список из курируемого Select (Notification Templates, 2026-08-31) — не
+   * произвольный ввод, чтобы шрифт реально дожил до email-клиента. */
+  | 'fontFamily'
   | 'align'
   | 'image'
+  /** Таблица (Notification Templates, 2026-08-31) — toolbar-кнопка со сеткой выбора
+   * строк/столбцов, как в Word/Docs. */
+  | 'table'
+  /** Преформатированный текст/код (Notification Templates, 2026-08-31) — раньше был
+   * отключён из-за бага санитайзера (`<pre>`/`<code>` не в allow-list, вырезались ВМЕСТЕ с
+   * содержимым); allow-list починен, можно включать. */
+  | 'code'
   | 'undo'
 
 export interface RichTextPlaceholder {
@@ -69,13 +82,20 @@ export interface RichTextEditorProps {
 }
 
 export const RICH_TEXT_TOOLSETS = {
-  /** Email template bodies. The fullest set the sanitizer allow-list permits — Давид confirmed
-   * 2026-08-22 that headings, alignment and images are all needed. */
-  email: [
-    'bold', 'italic', 'underline', 'link',
-    'heading', 'fontSize', 'color', 'align',
-    'bulletList', 'orderedList', 'image', 'undo',
+  /** Notification Templates (2026-08-31), `channel === Email` — the fullest set the Email
+   * sanitizer allow-list permits: everything `telegramLimited` has, plus font family/size,
+   * colour + highlight, table, headings up to H6. Replaces the old narrower `email` preset. */
+  full: [
+    'bold', 'italic', 'underline', 'strike', 'code', 'link',
+    'heading', 'blockquote', 'fontFamily', 'fontSize', 'color', 'highlight', 'align',
+    'bulletList', 'orderedList', 'table', 'image', 'undo',
   ],
+  /** Notification Templates (2026-08-31), `channel === Telegram` — ONLY what Telegram Bot
+   * API's `parse_mode=HTML` actually renders (b/i/u/s/code/pre/a — see
+   * `HtmlContentPolicy.TelegramEntry` on the backend, the two lists must stay in sync by hand).
+   * No table/image/fonts/colour/headings/align — Telegram has no concept of any of them, and
+   * the sanitizer would strip them on save anyway; showing the button would be a lie. */
+  telegramLimited: ['bold', 'italic', 'underline', 'strike', 'code', 'link', 'undo'],
   /** Tour/day descriptions (phase 2). No `color`/`fontSize` on purpose: the public site's
    * typography is set by the design system, not by content (ADR 023). */
   description: ['bold', 'italic', 'underline', 'link', 'heading', 'bulletList', 'orderedList', 'blockquote', 'align', 'image', 'undo'],

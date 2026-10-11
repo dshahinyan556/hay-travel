@@ -59,7 +59,33 @@ export function getGroupSeats(tourId: number, from: string, to: string): Promise
  *  - `SessionExpiredError` when the session could not be renewed.
  *
  * `features/cart/lib/checkoutErrors.ts` owns the reading of all of that.
+ *
+ * С 2026-08-29 тело несёт ещё и `contacts` — с кем связаться по заказу (1..3, ровно один
+ * основной). Отказы по ним ПЛОСКИЕ (2060-2063, не в массиве `lines`) и читаются
+ * `shared/contacts`'s `orderContactErrorKey`: правило одно на корзину и на конструктор трансфера.
  */
+/**
+ * `GET api/Order/GetMine` — заказы и заявки ТЕКУЩЕГО пользователя, для раздела «Мои заказы»
+ * в личном кабинете.
+ *
+ * Обёртка появилась вместе с экраном (до него её сознательно не заводили — см. комментарий в
+ * `features/admin/api/adminOrders.ts`). Живёт здесь, а не в админском модуле: это действие самого
+ * посетителя, ровно как `createOrder`, и `features/auth` не может импортировать `features/admin`.
+ *
+ * Параметра `userId` нет по конструкции: владельца сервер берёт из токена, поэтому чужие заказы
+ * этим эндпоинтом не достать.
+ *
+ * Порядок задаёт СЕРВЕР — новые сверху (`OrderByDescending(CreatedAtUtc)`); фронт не пересортировывает.
+ *
+ * `languageCode` — на каком языке вернуть названия продуктов (`LANGUAGE_CODE_BY_LOCALE`).
+ * Явный параметр, а не чтение `getStoredLocale()` внутри: вызывающий — компонент, который уже
+ * знает локаль из `useLocale()` и обязан перезапросить список при её смене; спрятанное чтение
+ * хранилища сделало бы эту зависимость невидимой для `useEffect`.
+ */
+export function getMyOrders(languageCode: number): Promise<OrderInfoModel[]> {
+  return authFetch<OrderInfoModel[]>(`api/Order/GetMine?languageCode=${languageCode}`)
+}
+
 export function createOrder(model: OrderCreateModel): Promise<OrderInfoModel> {
   return authFetch<OrderInfoModel>('api/Order/Create', {
     method: 'POST',

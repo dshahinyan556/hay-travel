@@ -22,8 +22,11 @@ namespace ATTours.BusinessServices.Notifications
         // false у Telegram: канал настраивается, но отправки пока нет.
         public bool IsImplemented { get; set; }
 
-        // null у Telegram — шаблона письма у него нет вовсе.
-        public EmailTemplate? Template { get; set; }
+        // Ссылка на шаблон из библиотеки Notification Templates (2026-08-31) — у обеих
+        // платформ теперь одинаково, раньше был null у Telegram.
+        public int? TemplateId { get; set; }
+        public string TemplateName { get; set; }
+        public string TemplateSubject { get; set; }
 
         public List<NotificationRecipient> Recipients { get; set; } = [];
     }
